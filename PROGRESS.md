@@ -1,0 +1,134 @@
+# Implement holati — bu fayldan boshlang
+
+Oxirgi yangilanish: **2026-08-25**
+
+> Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
+> Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
+
+---
+
+## Qayerdamiz
+
+Plan **01a — Backend poydevori**, 7 ta task'dan 2 tasi tugadi.
+
+| Task | Holat | Izoh |
+|---|---|---|
+| 1 — Solution skeleti | ✅ commit `ccb1d89` | 5 loyiha, `/api/v1/health` |
+| 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
+| 3 — PostgreSQL sxemasi | 🟡 kod tayyor, **baza yaratilmagan** | Step 1-6 ✅, **Step 7-8 qoldi** |
+| 4 — `SettingsService` | ⚪ | |
+| 5 — Qurilma ro'yxati + JWT | ⚪ | |
+| 6 — JWT endpoint'lari | ⚪ | |
+| 7 — Serilog + audit log | ⚪ | |
+
+`dotnet test` hozir: **10 test, hammasi o'tadi** (1 health + 9 RecordId).
+
+---
+
+## 🔴 KEYINGI QADAM — Task 3, Step 7
+
+Baza hali yo'q. `pg_hba.conf` da hamma narsa `scram-sha-256`, ya'ni
+parolsiz kirish yo'q va agent superuser parolini bilmaydi.
+
+**Foydalanuvchi o'z terminalida bir marta ishga tushiradi:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\db-bootstrap.ps1
+```
+
+Skript: postgres parolini so'raydi (faqat o'sha terminalda),
+`customsync` roliga tasodifiy parol generatsiya qiladi, rol+bazani
+yaratadi, `appsettings.Development.json` ga connection string yozadi
+(`.gitignore` da), migratsiyani qo'llaydi va `\dt` chiqaradi.
+
+**Kutilgan natija:** 10 ta jadval — `devices`, `records`, `media_blobs`,
+`record_media`, `key_wraps`, `server_settings`, `enrollment_codes`,
+`audit_log`, `sync_counter`, `__EFMigrationsHistory`.
+
+Shundan keyin Task 4 dan davom etiladi.
+
+---
+
+## Hujjatlarni o'qish tartibi (yangi sessiya)
+
+Nusxa yo'q — hammasi `C:\TBuild\tdesktop\docs\` da yagona nusxada.
+
+```
+1. sync-protocol/STATUS.md          -- kim nimani bajardi
+2. sync-protocol/CHANGELOG.md       -- protokolda nima o'zgardi
+3. superpowers/specs/2026-07-29-multi-device-sync-backend-design.md
+     -> §0 REVIZIYA dan boshlang, u asosiy matndan USTUN
+4. superpowers/plans/2026-07-29-multi-device-sync-00-index.md
+     -> K1-K7 qoidalari
+5. superpowers/plans/2026-07-29-multi-device-sync-01a-backend-foundation.md
+     -> boshidagi "REVIZIYA 2026-08-25" blokini albatta o'qing
+```
+
+---
+
+## Muhit — tekshirilgan faktlar
+
+| Nima | Holat |
+|---|---|
+| .NET SDK | 8.0.405 **va** 10.0.400 o'rnatilgan → `global.json` 8.0.x ga qadaydi |
+| PostgreSQL | **17.2** ishlab turibdi (plan 16 deydi — sxemada 16-ga xos narsa yo'q, muammo emas) |
+| `dotnet-ef` | global tool 9.0.1 — EF Core 8 loyihasida ishlaydi, tekshirildi |
+| `test-vectors.json` | `C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json` |
+| pg auth | `scram-sha-256` — parolsiz kirish yo'q |
+
+Test vektorlari boshqa joyda bo'lsa:
+`set CUSTOMSYNC_TEST_VECTORS=<to'liq yo'l>`
+
+---
+
+## Plandan chetlashishlar (sabab bilan)
+
+Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
+
+1. **`global.json` qo'shildi** (SDK 8.0.405, `rollForward: latestFeature`).
+   Mashinada 10.0 SDK ham bor; usiz `dotnet new` net10.0 ga ketardi.
+
+2. **`Microsoft.EntityFrameworkCore.Design` 8.0.11 ga qadaldi.**
+   `8.0.*` 8.0.30 ni olardi, Npgsql provider esa EF Core 8.0.11 ga
+   bog'liq → MSB3277 versiya to'qnashuvi. Endi build 0 warning.
+
+3. **`Microsoft.AspNetCore.Mvc.Testing` `8.0.*`** — versiyasiz
+   `dotnet add package` 10.0.11 ni olib, net8.0 bilan mos kelmasdi.
+
+4. **`RecordKind` da 8 ta kind, planda 6 ta.** `media_index` va
+   `tombstone` spec §0.6 dan — revizya plan matnidan ustun.
+
+5. **`RecordIdTests` `test-vectors.json` ni o'qiydi.** Plan buni
+   so'ramagan, lekin `sync-protocol/README.md` "birinchi ish —
+   vektorlarni qayta hosil qilish" deydi. Fayl nusxalanmagan; topilmasa
+   test **yiqiladi** (jimgina o'tib ketmaydi).
+
+6. **`appsettings.Development.json` gitignore'da**, parol
+   `db-bootstrap.ps1` tomonidan generatsiya qilinadi.
+   `appsettings.json` da `CHANGE_ME` placeholder qoladi.
+
+---
+
+## Buzilmaydigan qoidalar (K1-K7 + protokol)
+
+Batafsil: `00-index.md` va `sync-protocol/README.md`.
+
+- **K1** — sozlanadigan HAR qiymat `server_settings` jadvalida.
+  Kodda literal: sync interval, batch/sahifa hajmi, retention, disk
+  chegarasi, rate limit, timeout, feature toggle — **taqiqlangan**.
+- **K3** — offset pagination taqiqlangan, faqat keyset + `seq` snapshot.
+- **K4** — yozish idempotent (`record_id` PRIMARY KEY).
+- **K6** — TDD: avval yiqiladigan test, keyin minimal implementatsiya.
+- **K7** — commit: imperativ sarlavha, tanada **nima uchun**.
+  `Co-Authored-By` **yo'q**. Branch `Oybek`. `upstream` ga push yo'q.
+- `sha256` — **ochiq matn** ustidan, shifrlashdan OLDIN (§0.5).
+- Retention tombstone **yaratmaydi** (§0.3).
+- Manfiy `msg_id` — ishora saqlanadi (§0.6).
+
+---
+
+## Sessiya oxirida
+
+1. Bu faylni yangilang.
+2. Protokolga tegdingizmi → `tdesktop/docs/sync-protocol/CHANGELOG.md`.
+3. `tdesktop/docs/sync-protocol/STATUS.md` da `customsync-server` qatori.

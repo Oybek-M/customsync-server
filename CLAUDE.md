@@ -3,6 +3,9 @@
 ## Ishni boshlashdan oldin SHU TARTIBDA o'qing
 
 ```
+0. PROGRESS.md  (shu papkada)
+   -> implement qayerda to'xtaganini va keyingi aniq qadamni beradi
+
 1. C:\TBuild\tdesktop\docs\sync-protocol\STATUS.md
    → kim nimani bajardi, keyingi qadam nima
 

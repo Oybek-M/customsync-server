@@ -2,7 +2,8 @@
 
 Multi-device sync backend — CustomMod ekotizimining server qismi.
 
-**Holat:** ⚪ implement boshlanmagan. Spec va planlar tayyor.
+**Holat:** 🟡 implement boshlandi — plan 01a, 7 task'dan 2 tasi tugadi.
+Aniq holat va keyingi qadam: [`PROGRESS.md`](PROGRESS.md).
 
 ---
 

@@ -482,3 +482,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Lokal ishlab chiqish sozlamalari -- DB paroli shu yerda, gitga TUSHMAYDI.
+src/CustomSync.Api/appsettings.Development.json
