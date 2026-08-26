@@ -21,7 +21,16 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
 | 6 — JWT endpoint'lari | ⚪ | |
 | 7 — Serilog + audit log | ⚪ | |
 
-`dotnet test` hozir: **14 test, hammasi o'tadi**.
+`dotnet test` hozir: **17 test, hammasi o'tadi**.
+
+🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
+commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
+kind uchun `account_hash=""` (akkauntlar bo'ylab birlashadi),
+qolgan barcha kind haqiqiy hash oladi. `test-vectors.json` qayta
+generatsiya qilindi, `RecordId.Compute` 5 argument oladi endi
+(`accountHash` qo'shildi). Yangi migratsiya `AddAccountHash`
+qo'llandi. Task 5 dan boshlaganda `RecordId.Compute` chaqiruvlari
+shu yangi signaturani kutadi.
 
 ---
 
