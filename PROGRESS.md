@@ -15,7 +15,7 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
 |---|---|---|
 | 1 — Solution skeleti | ✅ commit `ccb1d89` | 5 loyiha, `/api/v1/health` |
 | 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
-| 3 — PostgreSQL sxemasi | ✅ commit `7378d99` | baza yaratildi, migratsiya qo'llandi, 10 jadval |
+| 3 — PostgreSQL sxemasi | ✅ commit `6acd969` | 10 jadval, ustunlar snake_case |
 | 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
 | 5 — Qurilma ro'yxati + JWT | ⚪ | |
 | 6 — JWT endpoint'lari | ⚪ | |
@@ -28,9 +28,29 @@ commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
 kind uchun `account_hash=""` (akkauntlar bo'ylab birlashadi),
 qolgan barcha kind haqiqiy hash oladi. `test-vectors.json` qayta
 generatsiya qilindi, `RecordId.Compute` 5 argument oladi endi
-(`accountHash` qo'shildi). Yangi migratsiya `AddAccountHash`
-qo'llandi. Task 5 dan boshlaganda `RecordId.Compute` chaqiruvlari
-shu yangi signaturani kutadi.
+(`accountHash` qo'shildi). Task 5 dan boshlaganda `RecordId.Compute`
+chaqiruvlari shu yangi signaturani kutadi.
+
+🔴 **2026-08-26: ustunlar `snake_case` (commit `6acd969`).**
+`EFCore.NamingConventions` + `.UseSnakeCaseNamingConvention()`.
+Sabab: plan 01b sync hot-path'ni **raw `NpgsqlCommand`** bilan
+yozadi; EF standarti bilan har so'rovda `"PeerHash"` deb qo'shtirnoq
+kerak bo'lardi va bitta unutilgani runtime xato berardi.
+
+⚠️ **Migratsiyalar birlashtirildi.** Ikki eski migratsiya
+(`InitialSchema` + `AddAccountHash`) o'chirildi, o'rniga bitta yangi
+`20260826114427_InitialSchema`. Hech narsa deploy qilinmagani va
+bazada faqat qayta hosil bo'ladigan seed ma'lumot bo'lgani uchun
+xavfsiz edi. **Bundan keyin migratsiyalarni birlashtirmang** —
+birinchi deploydan keyin bu yo'l yopiladi.
+
+Yangi `DbContext` qurilgan HAR joyda `.UseSnakeCaseNamingConvention()`
+bo'lishi shart (`Program.cs` va `DatabaseFixture.cs` — ikkalasi mos
+bo'lmasa testlar boshqa sxemaga qarshi ishlaydi).
+
+**`SettingsService.Defaults` → `CreateDefaults()` metodi.** Static
+ro'yxat `UpdatedAt` ni klass yuklanganda muzlatib qo'yardi va bir xil
+entity instance'larini har `DbContext`ga berardi.
 
 ---
 
