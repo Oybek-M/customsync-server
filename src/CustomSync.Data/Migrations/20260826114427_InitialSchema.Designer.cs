@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace CustomSync.Data.Migrations
 {
     [DbContext(typeof(SyncDbContext))]
-    [Migration("20260826113207_AddAccountHash")]
-    partial class AddAccountHash
+    [Migration("20260826114427_InitialSchema")]
+    partial class InitialSchema
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -29,26 +29,33 @@ namespace CustomSync.Data.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("action");
 
                     b.Property<DateTime>("At")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("detail");
 
                     b.Property<string>("DeviceId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("device_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("pk_audit_log");
 
-                    b.HasIndex("At");
+                    b.HasIndex("At")
+                        .HasDatabaseName("ix_audit_log_at");
 
                     b.ToTable("audit_log", (string)null);
                 });
@@ -56,33 +63,42 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.DeviceEntity", b =>
                 {
                     b.Property<string>("DeviceId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("device_id");
 
                     b.Property<DateTime>("EnrolledAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("enrolled_at");
 
                     b.Property<long>("LastCursor")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_cursor");
 
                     b.Property<DateTime?>("LastSeenAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("name");
 
                     b.Property<string>("Platform")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("platform");
 
                     b.Property<string>("RefreshHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("refresh_hash");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
 
-                    b.HasKey("DeviceId");
+                    b.HasKey("DeviceId")
+                        .HasName("pk_devices");
 
                     b.ToTable("devices", (string)null);
                 });
@@ -90,21 +106,27 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.EnrollmentCodeEntity", b =>
                 {
                     b.Property<string>("CodeHash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("code_hash");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
 
                     b.Property<DateTime?>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
 
                     b.Property<string>("UsedBy")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("used_by");
 
-                    b.HasKey("CodeHash");
+                    b.HasKey("CodeHash")
+                        .HasName("pk_enrollment_codes");
 
                     b.ToTable("enrollment_codes", (string)null);
                 });
@@ -112,38 +134,48 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.KeyWrapEntity", b =>
                 {
                     b.Property<string>("WrapId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("wrap_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<int>("Iterations")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("iterations");
 
                     b.Property<string>("Label")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("label");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
 
                     b.Property<byte[]>("Nonce")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
 
                     b.Property<byte[]>("Salt")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("salt");
 
                     b.Property<string>("WrapType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("wrap_type");
 
                     b.Property<byte[]>("WrappedKey")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("wrapped_key");
 
-                    b.HasKey("WrapId");
+                    b.HasKey("WrapId")
+                        .HasName("pk_key_wraps");
 
                     b.ToTable("key_wraps", (string)null);
                 });
@@ -151,23 +183,29 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.MediaBlobEntity", b =>
                 {
                     b.Property<string>("Hash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("hash");
 
                     b.Property<byte[]>("Nonce")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
 
                     b.Property<long>("Size")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("size");
 
                     b.Property<string>("StoragePath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("storage_path");
 
                     b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("uploaded_at");
 
-                    b.HasKey("Hash");
+                    b.HasKey("Hash")
+                        .HasName("pk_media_blobs");
 
                     b.ToTable("media_blobs", (string)null);
                 });
@@ -175,54 +213,69 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.RecordEntity", b =>
                 {
                     b.Property<string>("RecordId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("record_id");
 
                     b.Property<string>("AccountHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("account_hash");
 
                     b.Property<string>("DeviceId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("device_id");
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
 
                     b.Property<long>("MsgId")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("msg_id");
 
                     b.Property<byte[]>("Nonce")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
 
                     b.Property<long>("ObservedAt")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("observed_at");
 
                     b.Property<long>("OccurredAt")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("occurred_at");
 
                     b.Property<byte[]>("Payload")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("payload");
 
                     b.Property<int>("PayloadSize")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("payload_size");
 
                     b.Property<string>("PeerHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("peer_hash");
 
                     b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
 
                     b.Property<long>("Seq")
-                        .HasColumnType("bigint");
+                        .HasColumnType("bigint")
+                        .HasColumnName("seq");
 
-                    b.HasKey("RecordId");
+                    b.HasKey("RecordId")
+                        .HasName("pk_records");
 
                     b.HasIndex("Seq")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasDatabaseName("ix_records_seq");
 
                     b.HasIndex("OccurredAt", "Seq")
                         .HasDatabaseName("idx_records_occur");
@@ -242,12 +295,15 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.RecordMediaEntity", b =>
                 {
                     b.Property<string>("RecordId")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("record_id");
 
                     b.Property<string>("Hash")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("hash");
 
-                    b.HasKey("RecordId", "Hash");
+                    b.HasKey("RecordId", "Hash")
+                        .HasName("pk_record_media");
 
                     b.ToTable("record_media", (string)null);
                 });
@@ -255,28 +311,35 @@ namespace CustomSync.Data.Migrations
             modelBuilder.Entity("CustomSync.Data.Entities.ServerSettingEntity", b =>
                 {
                     b.Property<string>("Key")
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("key");
 
                     b.Property<string>("Category")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("category");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("description");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("value");
 
                     b.Property<string>("ValueType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("text")
+                        .HasColumnName("value_type");
 
-                    b.HasKey("Key");
+                    b.HasKey("Key")
+                        .HasName("pk_server_settings");
 
                     b.ToTable("server_settings", (string)null);
                 });

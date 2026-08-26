@@ -28,8 +28,16 @@ public class SettingsService(SyncDbContext db)
     /// <summary>
     /// Standart qiymatlar. Yangi sozlama qo'shish = shu ro'yxatga bitta
     /// satr qo'shish; migratsiya kerak emas.
+    ///
+    /// Bu METOD, static ro'yxat emas. Ikki sabab:
+    /// 1. `UpdatedAt` chaqiruv paytida hisoblanadi -- static ro'yxatda u
+    ///    klass birinchi yuklangan lahzada muzlab qolardi va seed
+    ///    qilingan vaqt haqida yolg'on gapirardi.
+    /// 2. Har chaqiruv YANGI instance qaytaradi -- bitta static entity
+    ///    obyektini bir nechta DbContext'ga biriktirish EF'da tavsiya
+    ///    etilmaydi va bir joyda mutatsiya qilinsa hamma bazaga tarqardi.
     /// </summary>
-    public static readonly IReadOnlyList<ServerSettingEntity> Defaults =
+    public static IReadOnlyList<ServerSettingEntity> CreateDefaults() =>
     [
         New("sync.push_batch_size",       "500",  "int",      "sync",    "Bitta push so'rovidagi maksimal yozuvlar soni"),
         New("sync.push_max_bytes",        "5242880", "int",   "sync",    "Bitta push so'rovining maksimal hajmi (bayt)"),
@@ -77,7 +85,7 @@ public class SettingsService(SyncDbContext db)
             .Select(s => s.Key)
             .ToListAsync(ct);
 
-        var missing = Defaults.Where(d => !existing.Contains(d.Key)).ToList();
+        var missing = CreateDefaults().Where(d => !existing.Contains(d.Key)).ToList();
         if (missing.Count > 0)
         {
             db.ServerSettings.AddRange(missing);

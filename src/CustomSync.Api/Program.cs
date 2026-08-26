@@ -5,8 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// snake_case: plan 01b sync hot-path'ni raw NpgsqlCommand bilan yozadi,
+// EF'ning standart PascalCase ustunlari esa har bir raw so'rovda
+// qo'shtirnoq talab qilardi ("PeerHash"). Bitta unutilgan qo'shtirnoq —
+// runtime xato.
 builder.Services.AddDbContext<SyncDbContext>(o =>
-    o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+    o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"))
+     .UseSnakeCaseNamingConvention());
 builder.Services.AddScoped<SettingsService>();
 
 var app = builder.Build();
