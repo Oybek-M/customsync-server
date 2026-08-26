@@ -38,10 +38,33 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 
 # --- 2. `customsync` uchun tasodifiy parol ---------------------------------
 # Alnum-only: connection string'da qochirish (escaping) muammosi bo'lmasin.
+#
+# RandomNumberGenerator::Create() ATAYLAB ishlatiladi: ::Fill() faqat
+# .NET Core'da bor, Windows PowerShell 5.1 esa .NET Framework 4.x da
+# ishlaydi. ::Create() ikkalasida ham mavjud.
 $alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-$bytes    = [byte[]]::new(32)
-[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-$rolePassword = -join ($bytes | ForEach-Object { $alphabet[$_ % $alphabet.Length] })
+$length   = 32
+
+# 256 alphabet uzunligiga bo'linmaydi, shuning uchun oxirgi to'liq
+# blokdan katta baytlar rad etiladi -- aks holda birinchi harflar
+# boshqalaridan ko'proq chiqardi.
+$limit = [byte](256 - (256 % $alphabet.Length))
+
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $chars  = New-Object System.Collections.Generic.List[char]
+    $buffer = New-Object byte[] 64
+    while ($chars.Count -lt $length) {
+        $rng.GetBytes($buffer)
+        foreach ($b in $buffer) {
+            if ($chars.Count -ge $length) { break }
+            if ($b -lt $limit) { $chars.Add($alphabet[$b % $alphabet.Length]) }
+        }
+    }
+}
+finally { $rng.Dispose() }
+
+$rolePassword = -join $chars
 
 # --- 3. Rol va bazani yaratish (idempotent) --------------------------------
 # Parol SQL'ga literal sifatida kiradi -- alnum bo'lgani uchun xavfsiz.
@@ -71,7 +94,13 @@ try {
              -c "CREATE DATABASE $Database OWNER $Role"
         if ($LASTEXITCODE -ne 0) { throw "Baza yaratishda xato (exit $LASTEXITCODE)." }
     } else {
-        Write-Host "-> baza '$Database' allaqachon mavjud, o'tkazib yuborildi."
+        # Baza boshqa egada bo'lsa, PG15+ da `public` sxemaga yozib
+        # bo'lmaydi va migratsiya "permission denied for schema public"
+        # bilan yiqilardi. Egalikni to'g'irlab qo'yamiz.
+        Write-Host "-> baza '$Database' mavjud, egaligi tekshirilmoqda..."
+        psql -U $SuperUser -h $DbHost -p $Port -d postgres -v ON_ERROR_STOP=1 -q `
+             -c "ALTER DATABASE $Database OWNER TO $Role"
+        if ($LASTEXITCODE -ne 0) { throw "Baza egaligini o'zgartirishda xato (exit $LASTEXITCODE)." }
     }
 }
 finally {
@@ -90,7 +119,7 @@ $devSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $devSettingsPath -Enc
 Write-Host "-> yozildi: $devSettingsPath (gitignore'da)"
 
 # --- 5. Migratsiyani qo'llash ---------------------------------------------
-Write-Host '-> migratsiya qo`llanmoqda...'
+Write-Host '-> migratsiya qollanmoqda...'
 Push-Location $repo
 try {
     dotnet ef database update --project src/CustomSync.Data --startup-project src/CustomSync.Api
