@@ -17,11 +17,11 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
 | 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
 | 3 — PostgreSQL sxemasi | ✅ commit `6acd969` | 10 jadval, ustunlar snake_case |
 | 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
-| 5 — Qurilma ro'yxati + JWT | ⚪ | |
+| 5 — Qurilma ro'yxati + JWT | ✅ commit `b9e93c0` | DeviceService va testlar yakunlandi (JWT qismi Task 6 da) |
 | 6 — JWT endpoint'lari | ⚪ | |
 | 7 — Serilog + audit log | ⚪ | |
 
-`dotnet test` hozir: **17 test, hammasi o'tadi**.
+`dotnet test` hozir: **21 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -54,9 +54,9 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 5: Qurilma ro'yxatdan o'tkazish va JWT
+## 🔴 KEYINGI QADAM — Task 6: JWT chiqarish va endpoint'lar
 
-Plan 01a, Task 5. Muhit tayyor, to'siq yo'q.
+Plan 01a, Task 6. Muhit tayyor, to'siq yo'q.
 
 ---
 
