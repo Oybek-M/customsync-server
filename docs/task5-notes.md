@@ -12,6 +12,26 @@ o'tkazish va JWT`.
 
 ---
 
+## 0. Step 1 dagi paketni ALBATTA versiya bilan qo'shing
+
+Plan shunday yozgan:
+
+```bash
+dotnet add src/CustomSync.Api package Microsoft.AspNetCore.Authentication.JwtBearer
+```
+
+Versiyasiz `dotnet add package` **10.x** ni oladi va u `net8.0` bilan
+mos kelmaydi — `NU1202` xatosi. To'g'risi:
+
+```bash
+dotnet add src/CustomSync.Api package Microsoft.AspNetCore.Authentication.JwtBearer --version 8.0.*
+```
+
+Bu loyihada allaqachon ikki marta uchragan (`Mvc.Testing`,
+`EFCore.Design`) — `PROGRESS.md` "Plandan chetlashishlar" 2 va 3-band.
+
+---
+
 ## 1. 🔴 `Expired_code_is_rejected` testi yiqilishi kutilmoqda
 
 `ExpireAllCodesAsync()` `ExecuteUpdateAsync` ishlatadi — u SQL'ni
