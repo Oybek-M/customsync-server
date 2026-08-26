@@ -4,9 +4,36 @@ You are implementing one task of a multi-device sync backend. This
 document is the contract for your work. Read all of it before you touch
 a file.
 
+**This is work to execute, not a document to review.** Do not analyse,
+summarise, score or rate this file. The only output that counts is
+committed source code in the repository named below.
+
 **Written in English on purpose.** The plans and the code comments are
 in Uzbek; these *instructions* are in English so nothing here is
 misread. Your output must still follow the Uzbek conventions below.
+
+---
+
+## 0. Before you write anything
+
+From the repository root, run:
+
+```
+dotnet test
+```
+
+Expected right now: **10 passed, 0 failed.** Report that number before
+you continue.
+
+This is a capability check as much as a baseline. If you cannot run the
+command, or cannot read its output, **stop and say so plainly.** Never
+write code you are unable to verify — this task is test-driven (rule K6
+below), so an unverified "done" is worse than an honest "I cannot run
+tests here": it costs a reviewer far more to discover the gap later than
+it costs you to admit it now.
+
+If the number is anything other than 10, stop and report that as well.
+Something has changed underneath this brief and it may be stale.
 
 ---
 
@@ -194,6 +221,8 @@ calls. Just make sure the full suite still passes.
 
 All of these, verified by actually running the commands:
 
+- [ ] You ran the §0 baseline and saw 10 passing tests **before** you
+      started writing.
 - [ ] `dotnet build` — 0 errors, **0 warnings**. The tree is currently
       warning-free; keep it that way.
 - [ ] `dotnet test` — **14 tests pass, 0 fail.** (10 exist today; this
