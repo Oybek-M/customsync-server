@@ -30,6 +30,8 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.HasIndex(x => x.Seq).IsUnique();
             e.HasIndex(x => new { x.PeerHash, x.OccurredAt, x.Seq })
              .HasDatabaseName("idx_records_peer");
+            e.HasIndex(x => new { x.AccountHash, x.OccurredAt, x.Seq })
+             .HasDatabaseName("idx_records_account");
             e.HasIndex(x => new { x.Kind, x.OccurredAt, x.Seq })
              .HasDatabaseName("idx_records_kind");
             e.HasIndex(x => new { x.OccurredAt, x.Seq })

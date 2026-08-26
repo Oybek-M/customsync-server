@@ -13,6 +13,10 @@ public class RecordEntity
     public long     Seq         { get; set; }
 
     public string   Kind        { get; set; } = null!;
+
+    /// <summary>Spec §0.12. "" faqat Kind == "activity" uchun.</summary>
+    public string   AccountHash { get; set; } = null!;
+
     public string   PeerHash    { get; set; } = null!;
 
     /// <summary>Manfiy bo'lishi mumkin (spec §0.6) — BIGINT muammosiz.</summary>

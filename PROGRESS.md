@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-08-25**
+Oxirgi yangilanish: **2026-08-26**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -9,38 +9,48 @@ Oxirgi yangilanish: **2026-08-25**
 
 ## Qayerdamiz
 
-Plan **01a — Backend poydevori**, 7 ta task'dan 2 tasi tugadi.
+Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
 
 | Task | Holat | Izoh |
 |---|---|---|
 | 1 — Solution skeleti | ✅ commit `ccb1d89` | 5 loyiha, `/api/v1/health` |
 | 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
-| 3 — PostgreSQL sxemasi | ✅ | baza yaratildi, migratsiya qo'llandi, 10 jadval |
-| 4 — `SettingsService` | ⚪ | |
+| 3 — PostgreSQL sxemasi | ✅ commit `7378d99` | baza yaratildi, migratsiya qo'llandi, 10 jadval |
+| 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
 | 5 — Qurilma ro'yxati + JWT | ⚪ | |
 | 6 — JWT endpoint'lari | ⚪ | |
 | 7 — Serilog + audit log | ⚪ | |
 
-`dotnet test` hozir: **10 test, hammasi o'tadi** (1 health + 9 RecordId).
+`dotnet test` hozir: **14 test, hammasi o'tadi**.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 4: `SettingsService`
+## 🔴 KEYINGI QADAM — Task 5: Qurilma ro'yxatdan o'tkazish va JWT
 
-Plan 01a, Task 4. Muhit tayyor, to'siq yo'q — to'g'ridan-to'g'ri
-plandagi Step 1 dan boshlanadi.
+Plan 01a, Task 5. Muhit tayyor, to'siq yo'q.
 
-⚠️ Task 4 revizyada **4 ta yangi kalit** oldi (plan matnida yo'q,
-spec §0.3 va §0.9 dan):
+---
 
-| Kalit | Standart | Nima uchun |
-|---|---|---|
-| `retention.activity_days` | 90 | Mijozda 30, serverda UZUNROQ |
-| `retention.<kind>_days` | 0 = cheksiz | Kind bo'yicha alohida |
-| `storage.quota_total_mb` | 0 = cheksiz | |
-| `storage.quota_per_device_mb` | 0 = cheksiz | |
+## Task 4 dan qolgan ikkita muhim eslatma
 
-🔴 Serverdagi retention **hech qachon tombstone yaratmaydi**.
+**1. `SettingsService.Cache` connection string bo'yicha ajratilgan,
+plan matnida bitta flat static dictionary edi.** Bitta test jarayonida
+bir nechta baza bo'lishi mumkin (har test klassi o'z vaqtinchalik
+bazasini oladi) — flat static kesh ularni bulg'ab qo'yardi, ayniqsa
+`Program.cs` Step 6 dan keyin `HealthTests` ham o'z (haqiqiy dev)
+bazasiga `EnsureDefaultsAsync` chaqira boshlagach. Keyingi tasklarda
+`SettingsService` ga tegilganda shu naqshni saqlang: `Cache` — instance
+property, `db.Database.GetConnectionString()` bo'yicha `CachesByDatabase`
+dan olinadi.
+
+**2. `SettingsServiceTests` da `IClassFixture<DatabaseFixture>` bitta
+bazani butun klassga baham qiladi (metodga emas!).** Plan izohi "Har
+test alohida baza" deydi, lekin kod bloki (`IClassFixture`) buni
+bermaydi — bu plan matnidagi ziddiyat, kod ustun deb hisoblandi.
+Bazani mutatsiya qiladigan har qanday yangi test oxirida qiymatni
+asl holiga qaytarishi shart, aks holda boshqa testlar tartibga qarab
+buziladi (`Set_then_get_returns_new_value_without_restart` da
+`try/finally` bilan namuna bor).
 
 ---
 
@@ -120,6 +130,21 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 6. **`appsettings.Development.json` gitignore'da**, parol
    `db-bootstrap.ps1` tomonidan generatsiya qilinadi.
    `appsettings.json` da `CHANGE_ME` placeholder qoladi.
+
+7. **`SettingsService.Defaults` da 10 ta qo'shimcha kalit** (8 ta
+   `retention.<kind>_days` + 2 ta `storage.quota_*`) — spec §0.3/§0.9
+   dan, planning `Defaults` ro'yxatida yo'q edi.
+
+8. **`SettingsService.Cache` connection string bo'yicha ajratilgan**
+   (yuqoridagi "Task 4 dan qolgan eslatma 1" ga qarang). Plan matnida
+   bitta flat static dictionary edi — bu ishlamas edi, chunki
+   `Program.cs` Step 6 dan keyin turli baza (dev + har test klassining
+   vaqtinchalik bazasi) bitta jarayonda birga yashaydi.
+
+9. **`DatabaseFixture` da `Password=CHANGE_ME` o'rniga resolver.**
+   Plandagi literal parol ishlamaydi; haqiqiysi
+   `appsettings.Development.json` dan o'qiladi (5-band bilan bir xil
+   sabab).
 
 ---
 

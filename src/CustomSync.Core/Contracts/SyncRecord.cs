@@ -8,6 +8,14 @@ public sealed record SyncRecord
 {
     public required string RecordId    { get; init; }
     public required string Kind        { get; init; }
+
+    /// <summary>
+    /// Spec §0.12. `""` (bo'sh satr) faqat `Kind == "activity"` uchun --
+    /// last-seen bypass akkauntlar bo'ylab birlashadi. Boshqa hamma
+    /// kind haqiqiy account_hash oladi.
+    /// </summary>
+    public required string AccountHash { get; init; }
+
     public required string PeerHash    { get; init; }
 
     /// <summary>
