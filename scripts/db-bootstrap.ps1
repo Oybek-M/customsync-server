@@ -68,13 +68,16 @@ $rolePassword = -join $chars
 
 # --- 3. Rol va bazani yaratish (idempotent) --------------------------------
 # Parol SQL'ga literal sifatida kiradi -- alnum bo'lgani uchun xavfsiz.
+# CREATEDB kerak: test fixture (plan 01a Task 4) har test klassi uchun
+# alohida baza yaratadi va tashlaydi. Usiz testlar "permission denied to
+# create database" bilan yiqiladi.
 $sql = @"
 DO `$`$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$Role') THEN
-    CREATE ROLE $Role LOGIN PASSWORD '$rolePassword';
+    CREATE ROLE $Role LOGIN CREATEDB PASSWORD '$rolePassword';
   ELSE
-    ALTER ROLE $Role WITH LOGIN PASSWORD '$rolePassword';
+    ALTER ROLE $Role WITH LOGIN CREATEDB PASSWORD '$rolePassword';
   END IF;
 END
 `$`$;
