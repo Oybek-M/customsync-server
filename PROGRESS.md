@@ -15,7 +15,7 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 2 tasi tugadi.
 |---|---|---|
 | 1 — Solution skeleti | ✅ commit `ccb1d89` | 5 loyiha, `/api/v1/health` |
 | 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
-| 3 — PostgreSQL sxemasi | 🟡 kod tayyor, **baza yaratilmagan** | Step 1-6 ✅, **Step 7-8 qoldi** |
+| 3 — PostgreSQL sxemasi | ✅ | baza yaratildi, migratsiya qo'llandi, 10 jadval |
 | 4 — `SettingsService` | ⚪ | |
 | 5 — Qurilma ro'yxati + JWT | ⚪ | |
 | 6 — JWT endpoint'lari | ⚪ | |
@@ -25,27 +25,41 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 2 tasi tugadi.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 3, Step 7
+## 🔴 KEYINGI QADAM — Task 4: `SettingsService`
 
-Baza hali yo'q. `pg_hba.conf` da hamma narsa `scram-sha-256`, ya'ni
-parolsiz kirish yo'q va agent superuser parolini bilmaydi.
+Plan 01a, Task 4. Muhit tayyor, to'siq yo'q — to'g'ridan-to'g'ri
+plandagi Step 1 dan boshlanadi.
 
-**Foydalanuvchi o'z terminalida bir marta ishga tushiradi:**
+⚠️ Task 4 revizyada **4 ta yangi kalit** oldi (plan matnida yo'q,
+spec §0.3 va §0.9 dan):
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\db-bootstrap.ps1
-```
+| Kalit | Standart | Nima uchun |
+|---|---|---|
+| `retention.activity_days` | 90 | Mijozda 30, serverda UZUNROQ |
+| `retention.<kind>_days` | 0 = cheksiz | Kind bo'yicha alohida |
+| `storage.quota_total_mb` | 0 = cheksiz | |
+| `storage.quota_per_device_mb` | 0 = cheksiz | |
 
-Skript: postgres parolini so'raydi (faqat o'sha terminalda),
-`customsync` roliga tasodifiy parol generatsiya qiladi, rol+bazani
-yaratadi, `appsettings.Development.json` ga connection string yozadi
-(`.gitignore` da), migratsiyani qo'llaydi va `\dt` chiqaradi.
+🔴 Serverdagi retention **hech qachon tombstone yaratmaydi**.
 
-**Kutilgan natija:** 10 ta jadval — `devices`, `records`, `media_blobs`,
-`record_media`, `key_wraps`, `server_settings`, `enrollment_codes`,
-`audit_log`, `sync_counter`, `__EFMigrationsHistory`.
+---
 
-Shundan keyin Task 4 dan davom etiladi.
+## Baza — tayyor (2026-08-25)
+
+`scripts\db-bootstrap.ps1` ishga tushirildi, migratsiya qo'llandi.
+10 ta jadval, hammasi `customsync` egaligida:
+`devices`, `records`, `media_blobs`, `record_media`, `key_wraps`,
+`server_settings`, `enrollment_codes`, `audit_log`, `sync_counter`,
+`__EFMigrationsHistory`.
+
+Connection string `src\CustomSync.Api\appsettings.Development.json`
+da (gitignore'da). `dotnet ef` `ASPNETCORE_ENVIRONMENT` ni o'zi
+`Development` ga qo'yadi, shuning uchun u shu fayldan o'qiydi —
+`appsettings.json` dagi `CHANGE_ME` ishlatilmaydi.
+
+Skriptni **qayta** ishga tushirish rolga YANGI tasodifiy parol qo'yadi
+va sozlama faylini qayta yozadi. Lokalda zararsiz (ikkalasi birga
+yangilanadi), lekin deploy qilingan muhitga qarshi ishlatmang.
 
 ---
 
