@@ -101,6 +101,11 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         return new EnrolledDevice(device.DeviceId, rotated, device.Name, device.Platform);
     }
 
+    /// <summary>
+    /// Qurilmani bekor qilish.
+    /// Eslatma: Bekor qilingan qurilma yangi token ololmaydi (refresh qila olmaydi),
+    /// biroq uning faol JWT tokeni muddati tugamaguncha (jwt_lifetime_minutes) amal qilaveradi.
+    /// </summary>
     public async Task RevokeAsync(string deviceId, CancellationToken ct = default)
     {
         var device = await db.Devices.FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);

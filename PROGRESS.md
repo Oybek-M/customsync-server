@@ -9,7 +9,7 @@ Oxirgi yangilanish: **2026-08-26**
 
 ## Qayerdamiz
 
-Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
+Plan **01a — Backend poydevori**, 7 ta task'dan 5 tasi tugadi.
 
 | Task | Holat | Izoh |
 |---|---|---|
@@ -18,10 +18,10 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 4 tasi tugadi.
 | 3 — PostgreSQL sxemasi | ✅ commit `6acd969` | 10 jadval, ustunlar snake_case |
 | 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
 | 5 — Qurilma ro'yxati | ✅ commit `00d110c` + `74f9f54` | 6 test; atomar redeem va deviceId tuzatildi. JWT qismi Task 6 da |
-| 6 — JWT endpoint'lari | ⚪ | |
+| 6 — JWT endpoint'lari | ✅ commit `7daa10a` | JWT issuer, auth middlewares va device/settings endpoints (4 ta integratsion testlar) |
 | 7 — Serilog + audit log | ⚪ | |
 
-`dotnet test` hozir: **23 test, hammasi o'tadi**.
+`dotnet test` hozir: **27 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -54,19 +54,9 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 6: JWT chiqarish va endpoint'lar
+## 🔴 KEYINGI QADAM — Task 7: Serilog va audit log
 
-Plan 01a, Task 6.
-
-⚠️ **`Microsoft.AspNetCore.Authentication.JwtBearer` hali qo'shilmagan.**
-Plan uni Task 5 Step 1 da so'ragan, lekin Task 5 da ishlatilmagani
-uchun qo'shilmadi. Task 6 da qo'shiladi — **albatta `--version 8.0.*`
-bilan**, aks holda 10.x olinadi va `net8.0` bilan mos kelmaydi (bu
-loyihada uch marta uchragan xato).
-
-⚠️ Task 5 da `RedeemAsync` **tranzaksiya + shartli `ExecuteUpdateAsync`**
-bilan atomar qilingan. Task 6 endpoint'lari uni o'ragan yangi
-tranzaksiya ochmasin — ichma-ich tranzaksiya Npgsql'da xato beradi.
+Plan 01a, Task 7. Muhit tayyor, to'siq yo'q.
 
 ---
 
