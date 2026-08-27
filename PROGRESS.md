@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **41 test, hammasi o'tadi**.
+`dotnet test` hozir: **47 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,9 +55,19 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b (backend sync yadrosi)
+## 🔴 KEYINGI QADAM — plan 01b, Task 2 (push/pull endpoint'lari)
 
-Plan 01a to'liq tugadi. 01b — eng katta plan (76KB, 9 task).
+01b Task 1 tugadi (commit `f476520` + `725174f`): `SyncService`
+push/pull, `seq` qulflangan hisoblagich qatoridan olinadi.
+
+⚠️ Task 2 uchun:
+- `SyncService.PushAsync` allaqachon `record_id` mosligini tekshiradi
+  va mos kelmasa rad etadi — endpoint bu tekshiruvni takrorlamasin.
+- `tombstone` ishlovi Task 2 da qo'shiladi (revizya, spec §0.3):
+  `payload.target_record_id` bo'yicha asl qator o'chiriladi, tombstone
+  saqlanadi. Asl qator topilmasa ham saqlanadi — idempotent.
+- Sahifa hajmi `server_settings` dan (`sync.pull_batch_size`),
+  kodda literal bo'lmasin (K1).
 
 ### Auth modeli — 01b uchun bilish shart
 
