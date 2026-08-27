@@ -22,7 +22,7 @@ public static class DeviceEndpoints
             if (enrolled is null)
                 return Results.BadRequest(new { error = "invalid_or_used_code" });
 
-            var (token, expiresAt) = await jwt.IssueAsync(enrolled.DeviceId);
+            var (token, expiresAt) = await jwt.IssueAsync(enrolled.DeviceId, enrolled.Role);
             return Results.Ok(new
             {
                 deviceId     = enrolled.DeviceId,
@@ -40,7 +40,7 @@ public static class DeviceEndpoints
             if (refreshed is null)
                 return Results.Unauthorized();
 
-            var (token, expiresAt) = await jwt.IssueAsync(refreshed.DeviceId);
+            var (token, expiresAt) = await jwt.IssueAsync(refreshed.DeviceId, refreshed.Role);
             return Results.Ok(new
             {
                 refreshToken = refreshed.RefreshToken,
@@ -51,15 +51,19 @@ public static class DeviceEndpoints
 
         group.MapGet("/", async (DeviceService devices) =>
             Results.Ok(await devices.ListAsync()))
-            .RequireAuthorization();
+            .RequireAuthorization("admin");
 
         group.MapPost("/codes", async (DeviceService devices) =>
             Results.Ok(new { code = await devices.CreateEnrollmentCodeAsync() }))
-            .RequireAuthorization();
+            .RequireAuthorization("admin");
 
         group.MapDelete("/{deviceId}", async (
             string deviceId, DeviceService devices, ClaimsPrincipal user) =>
         {
+            var callerId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+            var isAdmin  = user.IsInRole("admin");
+            if (!isAdmin && callerId != deviceId) return Results.Forbid();
+
             await devices.RevokeAsync(deviceId);
             return Results.NoContent();
         }).RequireAuthorization();

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using CustomSync.Api.Auth;
 using CustomSync.Api.Endpoints;
@@ -19,6 +20,7 @@ builder.Services.AddDbContext<SyncDbContext>(o =>
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
+builder.Services.AddSingleton<DeviceRevocationCache>();
 
 var signingKey = builder.Configuration["Jwt:SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
@@ -40,8 +42,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+        o.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = ctx =>
+            {
+                var cache = ctx.HttpContext.RequestServices
+                    .GetRequiredService<DeviceRevocationCache>();
+                var deviceId = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+
+                if (deviceId is null || cache.IsRevoked(deviceId))
+                    ctx.Fail("device_revoked");
+
+                return Task.CompletedTask;
+            }
+        };
     });
-builder.Services.AddAuthorization();
+
+builder.Services.AddAuthorization(o =>
+    o.AddPolicy("admin", p => p.RequireRole("admin")));
 
 var app = builder.Build();
 
@@ -51,13 +69,22 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await scope.ServiceProvider.GetRequiredService<SettingsService>()
         .EnsureDefaultsAsync();
+
+    // Bekor qilingan qurilmalarni in-memory keshga yuklash
+    var revokedCache = scope.ServiceProvider.GetRequiredService<DeviceRevocationCache>();
+    var revokedIds = await db.Devices
+        .Where(d => d.RevokedAt != null)
+        .Select(d => d.DeviceId)
+        .ToListAsync();
+    revokedCache.Load(revokedIds);
 }
 
 if (args.Contains("--create-enrollment-code"))
 {
     using var bootstrapScope = app.Services.CreateScope();
     var devices = bootstrapScope.ServiceProvider.GetRequiredService<DeviceService>();
-    Console.WriteLine($"Enrollment code: {await devices.CreateEnrollmentCodeAsync()}");
+    var role = args.Contains("--admin") ? "admin" : "device";
+    Console.WriteLine($"Enrollment code: {await devices.CreateEnrollmentCodeAsync(role)}");
     return;
 }
 

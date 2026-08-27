@@ -10,4 +10,5 @@ public class DeviceEntity
     public long      LastCursor   { get; set; }
     public DateTime? RevokedAt    { get; set; }
     public string    RefreshHash  { get; set; } = null!;
+    public string    Role         { get; set; } = "device";
 }

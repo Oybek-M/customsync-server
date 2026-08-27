@@ -8,7 +8,7 @@ public static class SettingsEndpoints
 
     public static void MapSettingsEndpoints(this WebApplication app)
     {
-        var group = app.MapGroup("/api/v1/settings").RequireAuthorization();
+        var group = app.MapGroup("/api/v1/settings").RequireAuthorization("admin");
 
         group.MapGet("/", async (SettingsService settings) =>
             Results.Ok(await settings.ListAsync()));

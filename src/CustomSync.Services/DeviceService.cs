@@ -7,24 +7,25 @@ using Microsoft.EntityFrameworkCore;
 namespace CustomSync.Services;
 
 public sealed record EnrolledDevice(
-    string DeviceId, string RefreshToken, string Name, string Platform);
+    string DeviceId, string RefreshToken, string Name, string Platform, string Role);
 
-public class DeviceService(SyncDbContext db, SettingsService settings)
+public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRevocationCache cache)
 {
     /// <summary>
     /// Bir martalik ro'yxatdan o'tkazish kodi. Web app'da ko'rsatiladi,
     /// qurilmaga qo'lda kiritiladi. Bazada faqat hash saqlanadi.
     /// </summary>
-    public async Task<string> CreateEnrollmentCodeAsync(CancellationToken ct = default)
+    public async Task<string> CreateEnrollmentCodeAsync(string role = "device", CancellationToken ct = default)
     {
         var code = Base32(RandomNumberGenerator.GetBytes(10)); // 50 bit
         var minutes = await settings.GetIntAsync("auth.enroll_code_minutes", ct);
 
         db.EnrollmentCodes.Add(new EnrollmentCodeEntity
         {
-            CodeHash  = Sha256Hex(code),
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(minutes)
+            CodeHash   = Sha256Hex(code),
+            CreatedAt  = DateTime.UtcNow,
+            ExpiresAt  = DateTime.UtcNow.AddMinutes(minutes),
+            GrantsRole = role
         });
         await db.SaveChangesAsync(ct);
         return code;
@@ -37,10 +38,7 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         var now  = DateTime.UtcNow;
 
         // Platform nomi faqat o'qishga qulaylik uchun -- u qisqartiriladi,
-        // lekin GUID KESILMAYDI. Ilgari butun satr 24 belgiga kesilardi va
-        // uzun platform nomida GUID'dan atigi 8 ta hex belgi (32 bit)
-        // qolardi. deviceId -- PRIMARY KEY, va to'qnashuv tekshiruvi yo'q,
-        // shuning uchun entropiyani qisqartirishga asos yo'q edi.
+        // lekin GUID KESILMAYDI.
         var platformPrefix = platform.Length > 15 ? platform[..15] : platform;
         var deviceId       = $"{platformPrefix}-{Guid.NewGuid():N}";
         var refreshToken   = Base32(RandomNumberGenerator.GetBytes(32));
@@ -48,12 +46,19 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         // Kodni ATOMAR "band qilish". Shart SQL'ning o'zida bo'lgani uchun
         // ikki so'rov bir vaqtda kelsa, ikkinchisi qator qulfini kutadi va
         // keyin `used_at IS NULL` shartiga tushmay 0 qator qaytaradi.
-        //
-        // Avvalgi shakl (o'qish -> tekshirish -> yozish) buni bermasdi:
-        // ikkala so'rov ham tekshiruvdan o'tib, ikkalasi ham qurilma
-        // ro'yxatdan o'tkazardi -- bir martalik kodning butun maqsadi
-        // yo'qqa chiqardi. Ketma-ket test buni ushlamaydi.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Kod qaysi rolni berishini aniqlab olish
+        var grantsRole = await db.EnrollmentCodes
+            .Where(c => c.CodeHash == hash && c.UsedAt == null && c.ExpiresAt >= now)
+            .Select(c => c.GrantsRole)
+            .FirstOrDefaultAsync(ct);
+
+        if (grantsRole is null)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
 
         var claimed = await db.EnrollmentCodes
             .Where(c => c.CodeHash == hash && c.UsedAt == null && c.ExpiresAt >= now)
@@ -74,12 +79,13 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
             Platform    = platform,
             EnrolledAt  = now,
             LastCursor  = 0,
-            RefreshHash = Sha256Hex(refreshToken)
+            RefreshHash = Sha256Hex(refreshToken),
+            Role        = grantsRole
         });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
-        return new EnrolledDevice(deviceId, refreshToken, name, platform);
+        return new EnrolledDevice(deviceId, refreshToken, name, platform, grantsRole);
     }
 
     /// <summary>
@@ -98,7 +104,7 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         device.LastSeenAt  = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        return new EnrolledDevice(device.DeviceId, rotated, device.Name, device.Platform);
+        return new EnrolledDevice(device.DeviceId, rotated, device.Name, device.Platform, device.Role);
     }
 
     /// <summary>
@@ -112,6 +118,9 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         if (device is null) return;
         device.RevokedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+
+        // Keshga ham darhol qo'shiladi
+        cache.Add(deviceId);
     }
 
     public async Task<bool> IsActiveAsync(string deviceId, CancellationToken ct = default)

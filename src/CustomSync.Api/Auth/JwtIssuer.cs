@@ -9,7 +9,7 @@ namespace CustomSync.Api.Auth;
 public class JwtIssuer(IConfiguration config, SettingsService settings)
 {
     public async Task<(string Token, DateTime ExpiresAt)> IssueAsync(
-        string deviceId, CancellationToken ct = default)
+        string deviceId, string role, CancellationToken ct = default)
     {
         var minutes  = await settings.GetIntAsync("auth.jwt_lifetime_minutes", ct);
         var expires  = DateTime.UtcNow.AddMinutes(minutes);
@@ -19,7 +19,10 @@ public class JwtIssuer(IConfiguration config, SettingsService settings)
         var token = new JwtSecurityToken(
             issuer:             config["Jwt:Issuer"],
             audience:           config["Jwt:Audience"],
-            claims:             [new Claim(ClaimTypes.NameIdentifier, deviceId)],
+            claims:             [
+                new Claim(ClaimTypes.NameIdentifier, deviceId),
+                new Claim(ClaimTypes.Role, role)
+            ],
             expires:            expires,
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 

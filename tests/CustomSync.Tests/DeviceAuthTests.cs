@@ -14,7 +14,7 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
     {
         var settings = new SettingsService(db);
         await settings.EnsureDefaultsAsync();
-        return new DeviceService(db, settings);
+        return new DeviceService(db, settings, new DeviceRevocationCache());
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
         async Task<EnrolledDevice?> Attempt(string name)
         {
             await using var db = _fixture.CreateContext();
-            var service = new DeviceService(db, new SettingsService(db));
+            var service = new DeviceService(db, new SettingsService(db), new DeviceRevocationCache());
             return await service.RedeemAsync(code, name, "desktop-win");
         }
 
@@ -100,7 +100,7 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
         // Fixture bazasi shu klassdagi barcha testlarga umumiy, shuning
         // uchun faqat SHU testning qurilmalari sanaladi.
         await using var check = _fixture.CreateContext();
-        var devices = await new DeviceService(check, new SettingsService(check)).ListAsync();
+        var devices = await new DeviceService(check, new SettingsService(check), new DeviceRevocationCache()).ListAsync();
         Assert.Single(devices.Where(d => d.Name is "birinchi" or "ikkinchi"));
     }
 

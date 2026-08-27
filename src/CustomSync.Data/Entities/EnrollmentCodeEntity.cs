@@ -7,4 +7,5 @@ public class EnrollmentCodeEntity
     public DateTime  ExpiresAt { get; set; }
     public DateTime? UsedAt    { get; set; }
     public string?   UsedBy    { get; set; }
+    public string    GrantsRole { get; set; } = "device";
 }

@@ -45,7 +45,7 @@ public class SettingsService(SyncDbContext db)
         New("sync.client_poll_seconds",   "30",   "int",      "sync",    "Klientlar necha soniyada bir pull qilishi"),
         New("api.default_page_size",      "50",   "int",      "api",     "Ro'yxatlar uchun standart sahifa hajmi"),
         New("api.max_page_size",          "200",  "int",      "api",     "So'ralishi mumkin bo'lgan maksimal sahifa hajmi"),
-        New("auth.jwt_lifetime_minutes",  "60",   "int",      "auth",    "JWT amal qilish muddati"),
+        New("auth.jwt_lifetime_minutes",  "15",   "int",      "auth",    "JWT amal qilish muddati"),
         New("auth.enroll_code_minutes",   "10",   "int",      "auth",    "Ro'yxatdan o'tkazish kodining amal qilish muddati"),
         New("auth.wrap_rate_per_hour",    "5",    "int",      "auth",    "Kalit o'ramini yuklab olish urinishlari (soatiga, IP bo'yicha)"),
         New("media.max_upload_bytes",     "52428800", "int",  "media",   "Bitta media faylning maksimal hajmi"),
