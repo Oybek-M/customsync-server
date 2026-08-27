@@ -34,45 +34,50 @@ public class DeviceService(SyncDbContext db, SettingsService settings)
         string code, string name, string platform, CancellationToken ct = default)
     {
         var hash = Sha256Hex(code);
-        
-        // EF tracker muammosini chetlab o'tish uchun AsNoTracking() ishlatamiz.
-        // ExpireAllCodesAsync ExecuteUpdate yuborganidan keyin ham tracker xotirada eski qiymatni saqlab qolmaydi.
-        var entry = await db.EnrollmentCodes
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.CodeHash == hash, ct);
+        var now  = DateTime.UtcNow;
 
-        if (entry is null || entry.UsedAt is not null || entry.ExpiresAt < DateTime.UtcNow)
-            return null;
-
-        // Platform nomi juda uzun bo'lsa GUID qismi kesilib ketmasligi uchun 15 belgidan cheklanadi.
-        // Natijada GUID qismining kamida 8 ta belgisi saqlanib, to'qnashuv ehtimoli yo'qotiladi.
+        // Platform nomi faqat o'qishga qulaylik uchun -- u qisqartiriladi,
+        // lekin GUID KESILMAYDI. Ilgari butun satr 24 belgiga kesilardi va
+        // uzun platform nomida GUID'dan atigi 8 ta hex belgi (32 bit)
+        // qolardi. deviceId -- PRIMARY KEY, va to'qnashuv tekshiruvi yo'q,
+        // shuning uchun entropiyani qisqartirishga asos yo'q edi.
         var platformPrefix = platform.Length > 15 ? platform[..15] : platform;
-        var deviceId    = $"{platformPrefix}-{Guid.NewGuid():N}"[..24];
-        var refreshToken = Base32(RandomNumberGenerator.GetBytes(32));
+        var deviceId       = $"{platformPrefix}-{Guid.NewGuid():N}";
+        var refreshToken   = Base32(RandomNumberGenerator.GetBytes(32));
+
+        // Kodni ATOMAR "band qilish". Shart SQL'ning o'zida bo'lgani uchun
+        // ikki so'rov bir vaqtda kelsa, ikkinchisi qator qulfini kutadi va
+        // keyin `used_at IS NULL` shartiga tushmay 0 qator qaytaradi.
+        //
+        // Avvalgi shakl (o'qish -> tekshirish -> yozish) buni bermasdi:
+        // ikkala so'rov ham tekshiruvdan o'tib, ikkalasi ham qurilma
+        // ro'yxatdan o'tkazardi -- bir martalik kodning butun maqsadi
+        // yo'qqa chiqardi. Ketma-ket test buni ushlamaydi.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        var claimed = await db.EnrollmentCodes
+            .Where(c => c.CodeHash == hash && c.UsedAt == null && c.ExpiresAt >= now)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.UsedAt, now)
+                .SetProperty(c => c.UsedBy, deviceId), ct);
+
+        if (claimed == 0)
+        {
+            await tx.RollbackAsync(ct);
+            return null;
+        }
 
         db.Devices.Add(new DeviceEntity
         {
             DeviceId    = deviceId,
             Name        = name,
             Platform    = platform,
-            EnrolledAt  = DateTime.UtcNow,
+            EnrolledAt  = now,
             LastCursor  = 0,
             RefreshHash = Sha256Hex(refreshToken)
         });
-
-        // Agar xotirada xuddi shu kalit bilan boshqa ob'ekt tracked bo'lsa, uni detach qilamiz
-        var tracked = db.ChangeTracker.Entries<EnrollmentCodeEntity>()
-            .FirstOrDefault(e => e.Entity.CodeHash == hash);
-        if (tracked is not null)
-        {
-            tracked.State = EntityState.Detached;
-        }
-
-        // O'zgartirishlarni yozish uchun entity tracker'ga bog'lanadi va maydonlar o'zgartiriladi
-        db.EnrollmentCodes.Attach(entry);
-        entry.UsedAt = DateTime.UtcNow;
-        entry.UsedBy = deviceId;
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
 
         return new EnrolledDevice(deviceId, refreshToken, name, platform);
     }
