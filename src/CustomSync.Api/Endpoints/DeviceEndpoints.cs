@@ -16,7 +16,7 @@ public static class DeviceEndpoints
 
         // Ochiq: qurilma hali tokenga ega emas. Kodning o'zi maxfiy.
         group.MapPost("/enroll", async (
-            RedeemRequest request, DeviceService devices, JwtIssuer jwt) =>
+            RedeemRequest request, DeviceService devices, JwtIssuer jwt, AuditService audit) =>
         {
             var enrolled = await devices.RedeemAsync(
                 request.Code, request.Name, request.Platform);
@@ -24,6 +24,14 @@ public static class DeviceEndpoints
                 return Results.BadRequest(new { error = "invalid_or_used_code" });
 
             var (token, expiresAt) = await jwt.IssueAsync(enrolled.DeviceId, enrolled.Role);
+
+            // Audit: enroll amaliyoti TUGAGANDAN KEYIN yoziladi.
+            // Actor yo'q (hali tokeni bo'lmagan qurilma o'zi enroll bo'lyapti).
+            await audit.WriteAsync(
+                "device.enrolled",
+                targetDeviceId: enrolled.DeviceId,
+                detail: new { enrolled.Name, enrolled.Platform });
+
             return Results.Ok(new
             {
                 deviceId     = enrolled.DeviceId,
@@ -72,13 +80,23 @@ public static class DeviceEndpoints
         }).RequireAuthorization("admin");
 
         group.MapDelete("/{deviceId}", async (
-            string deviceId, DeviceService devices, ClaimsPrincipal user) =>
+            string deviceId, DeviceService devices, ClaimsPrincipal user, AuditService audit) =>
         {
             var callerId = user.FindFirstValue(ClaimTypes.NameIdentifier);
             var isAdmin  = user.IsInRole("admin");
             if (!isAdmin && callerId != deviceId) return Results.Forbid();
 
             await devices.RevokeAsync(deviceId);
+
+            // Audit: revoke amaliyoti TUGAGANDAN KEYIN yoziladi.
+            // Actor (kim revoke qildi) ham qayd etiladi: admin boshqa
+            // qurilmani bekor qilgan bo'lishi mumkin — "kim qildi" savoliga
+            // javob berish uchun actor'ni saqlash majburiy.
+            await audit.WriteAsync(
+                "device.revoked",
+                targetDeviceId: deviceId,
+                actorDeviceId: callerId);
+
             return Results.NoContent();
         }).RequireAuthorization();
     }

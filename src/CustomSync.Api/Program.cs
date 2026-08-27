@@ -7,8 +7,30 @@ using CustomSync.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+
+// Serilog'ni DI konteyner va baza mavjud bo'lishidan OLDIN,
+// eng birinchi qadamda ishga tushiramiz. Bu "bootstrap" bosqich:
+// connection string kabi fayl loglarining saqlash muddati ham
+// (retainedFileCountLimit, rollingInterval) dastur ishga tushganda
+// kerak bo'ladi — shuning uchun ular server_settings'da emas,
+// appsettings.json da turadi (xuddi connection string singari).
+var tmpConfig = new ConfigurationBuilder()
+    .AddJsonFile("appsettings.json")
+    .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true)
+    .Build();
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File(
+        tmpConfig["Serilog:File:Path"] ?? "logs/customsync-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: int.TryParse(
+            tmpConfig["Serilog:File:RetainedFileCountLimit"], out var n) ? n : 14)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 
 // snake_case: plan 01b sync hot-path'ni raw NpgsqlCommand bilan yozadi,
 // EF'ning standart PascalCase ustunlari esa har bir raw so'rovda
@@ -20,6 +42,7 @@ builder.Services.AddDbContext<SyncDbContext>(o =>
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
+builder.Services.AddScoped<AuditService>();
 builder.Services.AddSingleton<DeviceRevocationCache>();
 
 var signingKey = builder.Configuration["Jwt:SigningKey"];
@@ -88,6 +111,7 @@ if (args.Contains("--create-enrollment-code"))
     return;
 }
 
+app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
 
