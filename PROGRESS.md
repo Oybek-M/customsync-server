@@ -54,9 +54,26 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 7: Serilog va audit log
+## 🔴 KEYINGI QADAM — Task 6b: avtorizatsiya rollari
 
-Plan 01a, Task 7. Muhit tayyor, to'siq yo'q.
+**Planda yo'q, qo'shimcha task.** Batafsil:
+[`docs/task6b-authorization.md`](docs/task6b-authorization.md).
+
+Task 6 dan keyin har qanday qurilma boshqa qurilmalarni bekor qila
+oladi va server sozlamalarini o'zgartira oladi. Qaror (2026-08-26):
+JWT `role` claim'i (`device`/`admin`) + qurilmaning o'z-o'ziga
+ruxsati. Statik admin kaliti QO'SHILMAYDI — bootstrap CLI uning
+o'rnini bosadi.
+
+Bekor qilingan token **darhol** rad etiladi — xotiradagi
+`DeviceRevocationCache` orqali, sync hot-path'ga qo'shimcha DB
+so'rovisiz.
+
+🔴 **01b dan OLDIN bajariladi** — 01b sync endpoint'larini quradi va
+ular yassi auth ustiga qurilsa, keyin rol qo'shish butun qatlamni
+qayta ochishni talab qiladi.
+
+Keyin: Task 7 (Serilog + audit log).
 
 ---
 
