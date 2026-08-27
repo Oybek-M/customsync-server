@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-08-26**
+Oxirgi yangilanish: **2026-08-27**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -9,7 +9,7 @@ Oxirgi yangilanish: **2026-08-26**
 
 ## Qayerdamiz
 
-Plan **01a — Backend poydevori**, 7 ta task'dan 5 tasi tugadi.
+Plan **01a — Backend poydevori**, 7 ta task'dan 6 tasi tugadi (+ rejadan tashqari 6b). Faqat Task 7 qoldi.
 
 | Task | Holat | Izoh |
 |---|---|---|
