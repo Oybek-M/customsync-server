@@ -106,4 +106,53 @@ public class AuthorizationTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await client.DeleteAsync($"/api/v1/devices/nonexistent");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
+
+    /// <summary>
+    /// Admin web app orqali ikkinchi admin qurilma qo'sha olishi kerak --
+    /// aks holda yagona admin qurilma yo'qolsa, serverga SSH kirishdan
+    /// boshqa yo'l qolmaydi.
+    /// </summary>
+    [Fact]
+    public async Task Admin_can_create_an_admin_enrollment_code()
+    {
+        var (client, _, _) = await EnrolDeviceAsync("admin");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/devices/codes", new { role = "admin" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Kod haqiqatan admin rolini berishini tekshiramiz: uni
+        // ishlatib ko'ramiz va chiqqan qurilmaning roli admin bo'lsin.
+        var body = await response.Content.ReadFromJsonAsync<CodeBody>();
+        Assert.NotNull(body?.Code);
+
+        using var scope = _factory.Services.CreateScope();
+        var devices = scope.ServiceProvider.GetRequiredService<DeviceService>();
+        var enrolled = await devices.RedeemAsync(
+            body!.Code, $"admin-dev-{Guid.NewGuid():N}", "test-platform");
+
+        Assert.Equal("admin", enrolled?.Role);
+    }
+
+    /// <summary>
+    /// Rol -- oq ro'yxatdan tashqarida bo'lsa rad etilsin. Tekshiruvsiz
+    /// har qanday satr bazaga tushib ketardi va keyin `RequireRole`
+    /// hech qachon mos kelmaydigan "rol"li qurilma paydo bo'lardi.
+    /// </summary>
+    [Theory]
+    [InlineData("superadmin")]
+    [InlineData("Admin")]
+    [InlineData("")]
+    public async Task Unknown_roles_are_rejected(string role)
+    {
+        var (client, _, _) = await EnrolDeviceAsync("admin");
+
+        var response = await client.PostAsJsonAsync(
+            "/api/v1/devices/codes", new { role });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    private sealed record CodeBody(string Code);
 }

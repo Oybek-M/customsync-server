@@ -12,11 +12,27 @@ public sealed record EnrolledDevice(
 public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRevocationCache cache)
 {
     /// <summary>
+    /// Ruxsat etilgan rollar. Oq ro'yxat, qora emas: noma'lum satr
+    /// bazaga tushsa, `RequireRole` unga hech qachon mos kelmaydi va
+    /// qurilma jimgina hech narsa qila olmaydigan holatga tushardi --
+    /// sabab esa faqat DB'ga qarabgina topilardi.
+    /// </summary>
+    public const string RoleDevice = "device";
+    public const string RoleAdmin  = "admin";
+
+    public static bool IsValidRole(string role) =>
+        role is RoleDevice or RoleAdmin;
+
+    /// <summary>
     /// Bir martalik ro'yxatdan o'tkazish kodi. Web app'da ko'rsatiladi,
     /// qurilmaga qo'lda kiritiladi. Bazada faqat hash saqlanadi.
     /// </summary>
-    public async Task<string> CreateEnrollmentCodeAsync(string role = "device", CancellationToken ct = default)
+    public async Task<string> CreateEnrollmentCodeAsync(
+        string role = RoleDevice, CancellationToken ct = default)
     {
+        if (!IsValidRole(role))
+            throw new ArgumentException($"Noma'lum rol: {role}", nameof(role));
+
         var code = Base32(RandomNumberGenerator.GetBytes(10)); // 50 bit
         var minutes = await settings.GetIntAsync("auth.enroll_code_minutes", ct);
 

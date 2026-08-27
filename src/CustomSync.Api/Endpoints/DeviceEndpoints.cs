@@ -8,6 +8,7 @@ public static class DeviceEndpoints
 {
     public record RedeemRequest(string Code, string Name, string Platform);
     public record RefreshRequest(string DeviceId, string RefreshToken);
+    public record CreateCodeRequest(string? Role);
 
     public static void MapDeviceEndpoints(this WebApplication app)
     {
@@ -53,9 +54,22 @@ public static class DeviceEndpoints
             Results.Ok(await devices.ListAsync()))
             .RequireAuthorization("admin");
 
-        group.MapPost("/codes", async (DeviceService devices) =>
-            Results.Ok(new { code = await devices.CreateEnrollmentCodeAsync() }))
-            .RequireAuthorization("admin");
+        // Rol ixtiyoriy: berilmasa oddiy qurilma kodi chiqadi. Admin
+        // kodini web app'dan ham chiqarish mumkin -- aks holda yagona
+        // admin qurilma yo'qolganda SSH'dan boshqa yo'l qolmasdi.
+        group.MapPost("/codes", async (
+            CreateCodeRequest? request, DeviceService devices) =>
+        {
+            // Maydon umuman berilmasa -- standart. Ataylab bo'sh satr
+            // yuborilsa -- bu klient xatosi, jimgina standartga
+            // tushirilmaydi (noma'lum sozlama kaliti ham shunday
+            // qattiq rad etiladi).
+            var role = request?.Role ?? DeviceService.RoleDevice;
+            if (!DeviceService.IsValidRole(role))
+                return Results.BadRequest(new { error = "unknown_role", role });
+
+            return Results.Ok(new { code = await devices.CreateEnrollmentCodeAsync(role) });
+        }).RequireAuthorization("admin");
 
         group.MapDelete("/{deviceId}", async (
             string deviceId, DeviceService devices, ClaimsPrincipal user) =>
