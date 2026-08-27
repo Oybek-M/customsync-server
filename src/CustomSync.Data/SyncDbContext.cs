@@ -73,6 +73,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.ToTable("audit_log");
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.At);
+            e.HasIndex(x => x.ActorDeviceId).HasDatabaseName("idx_audit_actor");
         });
     }
 }

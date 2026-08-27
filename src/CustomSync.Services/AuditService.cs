@@ -27,38 +27,13 @@ public class AuditService(SyncDbContext db)
         object? detail = null,
         CancellationToken ct = default)
     {
-        // Actor'ni detail ichiga qo'shamiz. AuditLogEntity'da alohida
-        // ustun yo'q, shuning uchun detail'ga map qilamiz.
-        object finalDetail;
-        if (actorDeviceId is not null)
-        {
-            // Agar detail ham berilgan bo'lsa, ikkalasini birlashtirish uchun
-            // dictionary yasaymiz
-            var dict = new Dictionary<string, object?> { ["actor"] = actorDeviceId };
-            if (detail is not null)
-            {
-                // detail obyektining xususiyatlarini dict'ga qo'shish
-                var detailJson = JsonSerializer.Serialize(detail);
-                var detailDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(detailJson);
-                if (detailDict is not null)
-                    foreach (var kv in detailDict)
-                        dict[kv.Key] = kv.Value;
-            }
-            finalDetail = dict;
-        }
-        else
-        {
-            finalDetail = detail!;
-        }
-
         db.AuditLogs.Add(new AuditLogEntity
         {
             At       = DateTime.UtcNow,
-            DeviceId = targetDeviceId,
-            Action   = action,
-            Detail   = (detail is not null || actorDeviceId is not null)
-                ? JsonSerializer.Serialize(finalDetail)
-                : null
+            DeviceId      = targetDeviceId,
+            ActorDeviceId = actorDeviceId,
+            Action        = action,
+            Detail        = detail is null ? null : JsonSerializer.Serialize(detail)
         });
         await db.SaveChangesAsync(ct);
     }

@@ -124,9 +124,14 @@ public class AuditTests : IClassFixture<WebApplicationFactory<Program>>
             r.Action == "settings.changed" &&
             r.Detail != null &&
             r.Detail.Contains("sync.push_batch_size") &&
-            r.Detail.Contains(adminDeviceId)).ToList();
+            r.ActorDeviceId == adminDeviceId).ToList();
 
         Assert.NotEmpty(changed);
+
+        // Actor alohida USTUNDA bo'lishi kerak, JSON ichida emas --
+        // web app (plan 03) "falon qurilma nima qilgan?" so'rovini
+        // indeks bilan bajara olishi uchun.
+        Assert.All(changed, r => Assert.Equal(adminDeviceId, r.ActorDeviceId));
     }
 
     // ----------------------------------------------------------------
