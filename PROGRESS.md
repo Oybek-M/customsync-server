@@ -18,7 +18,7 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 5 tasi tugadi.
 | 3 — PostgreSQL sxemasi | ✅ commit `6acd969` | 10 jadval, ustunlar snake_case |
 | 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
 | 5 — Qurilma ro'yxati | ✅ commit `00d110c` + `74f9f54` | 6 test; atomar redeem va deviceId tuzatildi. JWT qismi Task 6 da |
-| 6 — JWT endpoint'lari | ✅ commit `7daa10a` | JWT issuer, auth middlewares va device/settings endpoints (4 ta integratsion testlar) |
+| 6 — JWT endpoint'lari | ✅ commit `e709bee` | JWT issuer, auth middlewares va device/settings endpoints (4 ta integratsion testlar) |
 | 7 — Serilog + audit log | ⚪ | |
 
 `dotnet test` hozir: **27 test, hammasi o'tadi**.
