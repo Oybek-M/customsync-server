@@ -19,9 +19,10 @@ Plan **01a — Backend poydevori**, 7 ta task'dan 5 tasi tugadi.
 | 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
 | 5 — Qurilma ro'yxati | ✅ commit `00d110c` + `74f9f54` | 6 test; atomar redeem va deviceId tuzatildi. JWT qismi Task 6 da |
 | 6 — JWT endpoint'lari | ✅ commit `e709bee` | JWT issuer, auth middlewares va device/settings endpoints (4 ta integratsion testlar) |
+| 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ⚪ | |
 
-`dotnet test` hozir: **27 test, hammasi o'tadi**.
+`dotnet test` hozir: **37 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -54,26 +55,22 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — Task 6b: avtorizatsiya rollari
+## 🔴 KEYINGI QADAM — plan 01b (backend sync yadrosi)
 
-**Planda yo'q, qo'shimcha task.** Batafsil:
-[`docs/task6b-authorization.md`](docs/task6b-authorization.md).
+Task 6b tugadi, ya'ni 01b ni yassi auth ustiga qurish xavfi yo'q.
+Task 7 (Serilog + audit log) 01b dan keyin ham qilinishi mumkin.
 
-Task 6 dan keyin har qanday qurilma boshqa qurilmalarni bekor qila
-oladi va server sozlamalarini o'zgartira oladi. Qaror (2026-08-26):
-JWT `role` claim'i (`device`/`admin`) + qurilmaning o'z-o'ziga
-ruxsati. Statik admin kaliti QO'SHILMAYDI — bootstrap CLI uning
-o'rnini bosadi.
+### Auth modeli — 01b uchun bilish shart
 
-Bekor qilingan token **darhol** rad etiladi — xotiradagi
-`DeviceRevocationCache` orqali, sync hot-path'ga qo'shimcha DB
-so'rovisiz.
-
-🔴 **01b dan OLDIN bajariladi** — 01b sync endpoint'larini quradi va
-ular yassi auth ustiga qurilsa, keyin rol qo'shish butun qatlamni
-qayta ochishni talab qiladi.
-
-Keyin: Task 7 (Serilog + audit log).
+- JWT'da `role` claim'i: `device` yoki `admin`. Oq ro'yxat
+  `DeviceService.IsValidRole` da — boshqa satr qabul qilinmaydi.
+- Sync endpoint'lari (push/pull/media) **`device` roli uchun ochiq**
+  bo'lishi kerak — ular admin siyosatiga bog'lanmasin.
+- **Bekor qilish `DeviceRevocationCache` orqali `OnTokenValidated` da
+  tekshiriladi — xotirada, `O(1)`.** 01b da har so'rovda qurilma
+  faolligini DB'dan tekshirmang, kesh buni allaqachon qiladi.
+- Ma'lum cheklov: kesh bitta jarayonga tegishli. Ko'p instansiyali
+  deploy'da `LISTEN/NOTIFY` kerak (plan 04/06).
 
 ---
 
