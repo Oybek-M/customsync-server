@@ -29,6 +29,15 @@ public sealed record SyncRecord
     public required string DeviceId    { get; init; }
     public required byte[] Nonce       { get; init; }
     public required byte[] Payload     { get; init; }
+
+    /// <summary>
+    /// Spec §0.13. Faqat Kind == "tombstone" uchun to'ldiriladi —
+    /// o'chirilishi kerak bo'lgan yozuvning record_id'si.
+    /// Payload shifrlangan bo'lgani uchun server uni o'qiy olmaydi,
+    /// shuning uchun target ochiq matn sifatida alohida uzatiladi.
+    /// </summary>
+    public string? TargetRecordId { get; init; }
+
     public IReadOnlyList<MediaRef> Media { get; init; } = Array.Empty<MediaRef>();
 }
 

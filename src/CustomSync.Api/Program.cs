@@ -43,7 +43,9 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
 builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<SyncService>();
 builder.Services.AddSingleton<DeviceRevocationCache>();
+builder.Services.AddSingleton<CustomSync.Api.Realtime.NotifyHub>();
 
 var signingKey = builder.Configuration["Jwt:SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
@@ -118,6 +120,7 @@ app.UseAuthorization();
 app.MapHealthEndpoints();
 app.MapDeviceEndpoints();
 app.MapSettingsEndpoints();
+app.MapSyncEndpoints();
 
 app.Run();
 

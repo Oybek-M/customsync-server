@@ -29,4 +29,11 @@ public class RecordEntity
     public byte[]   Payload     { get; set; } = null!;
     public int      PayloadSize { get; set; }
     public DateTime ReceivedAt  { get; set; }
+
+    /// <summary>
+    /// Spec §0.13. Faqat Kind == "tombstone" uchun to'ldiriladi.
+    /// Payload shifrlangan bo'lgani uchun server target'ni o'sha yerdan
+    /// o'qiy olmaydi — target ochiq matn sifatida alohida saqlanadi.
+    /// </summary>
+    public string?  TargetRecordId { get; set; }
 }

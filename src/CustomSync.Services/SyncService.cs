@@ -34,23 +34,36 @@ public class SyncService(SyncDbContext db)
         )
         INSERT INTO records (
             record_id, seq, kind, account_hash, peer_hash, msg_id, occurred_at,
-            observed_at, device_id, nonce, payload, payload_size, received_at)
+            observed_at, device_id, nonce, payload, payload_size, target_record_id,
+            received_at)
         SELECT @record_id, allocated.value, @kind, @account_hash, @peer_hash, @msg_id,
                @occurred_at, @observed_at, @device_id, @nonce, @payload,
-               @payload_size, now()
+               @payload_size, @target_record_id, now()
         FROM allocated
         ON CONFLICT (record_id) DO UPDATE SET
-            seq          = EXCLUDED.seq,
-            observed_at  = EXCLUDED.observed_at,
-            device_id    = EXCLUDED.device_id,
-            nonce        = EXCLUDED.nonce,
-            payload      = EXCLUDED.payload,
-            payload_size = EXCLUDED.payload_size,
-            received_at  = EXCLUDED.received_at
+            seq              = EXCLUDED.seq,
+            observed_at      = EXCLUDED.observed_at,
+            device_id        = EXCLUDED.device_id,
+            nonce            = EXCLUDED.nonce,
+            payload          = EXCLUDED.payload,
+            payload_size     = EXCLUDED.payload_size,
+            target_record_id = EXCLUDED.target_record_id,
+            received_at      = EXCLUDED.received_at
         WHERE records.observed_at > EXCLUDED.observed_at
            OR (records.observed_at = EXCLUDED.observed_at
                AND records.device_id > EXCLUDED.device_id)
         RETURNING seq, (xmax::text = '0') AS was_insert;
+        """;
+
+    /// <summary>
+    /// Tombstone'lar uchun asl yozuvni o'chirish.
+    /// Idempotent: target topilmasa ham xato qaytarmaydi —
+    /// boshqa qurilma target'ni keyin push qilishi mumkin,
+    /// u kelganda tombstone bilan darhol solishtirilib o'chiriladi.
+    /// Buni amalga oshirish uchun tombstone o'zi ham saqlanadi.
+    /// </summary>
+    private const string DeleteTargetSql = """
+        DELETE FROM records WHERE record_id = @target_record_id;
         """;
 
     public async Task<IReadOnlyList<PushResult>> PushAsync(
@@ -72,6 +85,25 @@ public class SyncService(SyncDbContext db)
                 continue;
             }
 
+            // Tombstone va boshqa kind'lar uchun TargetRecordId tekshiruvi.
+            // Spec §0.13: tombstone target'ni ochiq matn sifatida uzatadi —
+            // payload shifrlangan bo'lgani uchun server uni o'qiy olmaydi.
+            if (record.Kind == RecordKind.Tombstone)
+            {
+                if (string.IsNullOrEmpty(record.TargetRecordId))
+                {
+                    results.Add(new PushResult(
+                        record.RecordId, PushOutcome.Error, Message: "missing_target"));
+                    continue;
+                }
+            }
+            else if (!string.IsNullOrEmpty(record.TargetRecordId))
+            {
+                results.Add(new PushResult(
+                    record.RecordId, PushOutcome.Error, Message: "unexpected_target"));
+                continue;
+            }
+
             var expected = Core.RecordId.Compute(
                 record.Kind, record.AccountHash, record.PeerHash, record.MsgId, record.OccurredAt);
             if (!string.Equals(expected, record.RecordId, StringComparison.Ordinal))
@@ -81,6 +113,15 @@ public class SyncService(SyncDbContext db)
                 results.Add(new PushResult(
                     record.RecordId, PushOutcome.Error, Message: "record_id_mismatch"));
                 continue;
+            }
+
+            // Tombstone: target yozuvni o'chirish. Idempotent — yo'q bo'lsa ham
+            // davom etadi. Spec §0.3 + §0.13.
+            if (record.Kind == RecordKind.Tombstone)
+            {
+                await using var delCmd = new NpgsqlCommand(DeleteTargetSql, connection);
+                delCmd.Parameters.AddWithValue("target_record_id", record.TargetRecordId!);
+                await delCmd.ExecuteNonQueryAsync(ct);
             }
 
             await using var cmd = new NpgsqlCommand(UpsertSql, connection);
@@ -96,11 +137,16 @@ public class SyncService(SyncDbContext db)
             cmd.Parameters.Add("payload", NpgsqlDbType.Bytea).Value = record.Payload;
             // Hajm serverda hisoblanadi — klientga ishonilmaydi.
             cmd.Parameters.AddWithValue("payload_size", record.Payload.Length);
+            // target_record_id: tombstone uchun to'ldiriladi, boshqalar uchun NULL.
+            if (record.TargetRecordId is not null)
+                cmd.Parameters.AddWithValue("target_record_id", record.TargetRecordId);
+            else
+                cmd.Parameters.Add(new NpgsqlParameter("target_record_id", NpgsqlDbType.Text) { Value = DBNull.Value });
 
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             if (await reader.ReadAsync(ct))
             {
-                var seq = reader.GetInt64(0);
+                var seq      = reader.GetInt64(0);
                 var wasInsert = reader.GetBoolean(1);
                 results.Add(new PushResult(
                     record.RecordId,
@@ -128,24 +174,25 @@ public class SyncService(SyncDbContext db)
             .Take(limit)
             .Select(r => new StoredRecord
             {
-                Seq         = r.Seq,
-                RecordId    = r.RecordId,
-                Kind        = r.Kind,
-                AccountHash = r.AccountHash,
-                PeerHash    = r.PeerHash,
-                MsgId       = r.MsgId,
-                OccurredAt  = r.OccurredAt,
-                ObservedAt  = r.ObservedAt,
-                DeviceId    = r.DeviceId,
-                Nonce       = r.Nonce,
-                Payload     = r.Payload
+                Seq            = r.Seq,
+                RecordId       = r.RecordId,
+                Kind           = r.Kind,
+                AccountHash    = r.AccountHash,
+                PeerHash       = r.PeerHash,
+                MsgId          = r.MsgId,
+                OccurredAt     = r.OccurredAt,
+                ObservedAt     = r.ObservedAt,
+                DeviceId       = r.DeviceId,
+                Nonce          = r.Nonce,
+                Payload        = r.Payload,
+                TargetRecordId = r.TargetRecordId
             })
             .ToListAsync(ct);
 
         if (rows.Count == 0)
             return new PullResponse { Records = rows, NextSince = since, HasMore = false };
 
-        var ids = rows.Select(r => r.RecordId).ToList();
+        var ids   = rows.Select(r => r.RecordId).ToList();
         var links = await db.RecordMedia.AsNoTracking()
             .Where(m => ids.Contains(m.RecordId))
             .ToListAsync(ct);

@@ -13,6 +13,7 @@ public sealed record StoredRecord
     public required string DeviceId    { get; init; }
     public required byte[] Nonce       { get; init; }
     public required byte[] Payload     { get; init; }
+    public string? TargetRecordId { get; init; }
     public IReadOnlyList<string> MediaHashes { get; init; } = Array.Empty<string>();
 }
 
