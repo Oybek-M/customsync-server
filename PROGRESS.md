@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **58 test, hammasi o'tadi**.
+`dotnet test` hozir: **67 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,26 +55,23 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 3 (media saqlash)
+## 🔴 KEYINGI QADAM — plan 01b, Task 4 (kalit o'ramlari)
 
-01b Task 1 va 2 tugadi.
+01b Task 1, 2, 3 tugadi.
 
-⚠️ Task 3 uchun (revizya, spec §0.5 va §0.9):
-- `hash` — **ochiq matn** sha256'si, shifrlashdan OLDIN. Aks holda
-  har qurilmada turli nonce turli hash beradi va `HEAD /media/{hash}`
-  dedup butunlay ishlamaydi.
-- Kvota to'lganda `PUT` **507 Insufficient Storage** qaytaradi.
-  Kvota `SettingsService` dan: `storage.quota_total_mb`,
-  `storage.quota_per_device_mb` (K1 — kodda literal bo'lmasin).
-
-### 01b Task 2 dan qolgan eslatmalar
+### 01b Task 2-3 dan qolgan ochiq narsalar
 
 - **Tombstone ikki yo'nalishli.** Tombstone kelganda nishon
   o'chiriladi, VA nishon keyinroq kelganda u saqlanmaydi
-  (`UpsertSql` dagi `NOT EXISTS`). Ikkinchisisiz o'chirish jimgina
-  bekor bo'lardi. Bu shartni `UpsertSql` dan olib tashlamang.
+  (`UpsertSql` dagi `NOT EXISTS`). Bu shartni olib tashlamang —
+  usiz o'chirish jimgina bekor bo'ladi.
 - `sync.push_max_bytes` sozlamasi mavjud, lekin **hali
   qo'llanilmaydi** — push hajmi bayt bo'yicha cheklanmagan.
+- **Media PUT/GET blobni butunlay xotiraga yuklaydi** (50MB default).
+  Streaming'ga o'tkazish kerak — plan 04 yoki 09 da.
+- **`record_media` da yetim qatorlar to'planadi.** Tombstone yozuvni
+  o'chirganda uning media havolalari qoladi (FK/cascade yo'q).
+  Zararsiz, lekin plan 04 (storage lifecycle) tozalashi kerak.
 
 ### Auth modeli — 01b uchun bilish shart
 
