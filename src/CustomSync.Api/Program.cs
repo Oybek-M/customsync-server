@@ -72,6 +72,10 @@ builder.Services.AddRateLimiter(options =>
             deviceId,
             _ => new FixedWindowRateLimiterOptions
             {
+                // 0 bu yerda CHEKSIZ degani emas. `storage.quota_*` va
+                // `retention.*_days` da 0 = cheksiz, lekin bu brute-force
+                // himoyasi: noto'g'ri qiymat himoyani jimgina o'chirib
+                // qo'ymasligi uchun xavfsiz standartga qaytadi.
                 PermitLimit = limit > 0 ? limit : 5,
                 Window      = TimeSpan.FromHours(1),
                 QueueLimit  = 0
