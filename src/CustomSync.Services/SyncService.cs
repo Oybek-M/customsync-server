@@ -40,6 +40,14 @@ public class SyncService(SyncDbContext db)
                @occurred_at, @observed_at, @device_id, @nonce, @payload,
                @payload_size, @target_record_id, now()
         FROM allocated
+        -- Nishoni allaqachon tombstone qilingan yozuv QAYTA TIRILMAYDI.
+        -- Qurilmalar mustaqil sync qiladi, shuning uchun tombstone o'z
+        -- nishonidan oldin kelishi oddiy hol: telefon xabarni o'chiradi,
+        -- noutbuk esa asl yozuvni hali push qilmagan bo'ladi. Bu shartsiz
+        -- keyin kelgan nishon jimgina saqlanib qolardi va o'chirish bekor
+        -- bo'lardi. Shart SQL ichida -- parallel push'da ham ishlashi uchun.
+        WHERE NOT EXISTS (
+            SELECT 1 FROM records tomb WHERE tomb.target_record_id = @record_id)
         ON CONFLICT (record_id) DO UPDATE SET
             seq              = EXCLUDED.seq,
             observed_at      = EXCLUDED.observed_at,

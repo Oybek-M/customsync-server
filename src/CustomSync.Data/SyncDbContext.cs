@@ -36,6 +36,12 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
              .HasDatabaseName("idx_records_kind");
             e.HasIndex(x => new { x.OccurredAt, x.Seq })
              .HasDatabaseName("idx_records_occur");
+            // Har push tombstone nishonini tekshiradi. Qisman indeks:
+            // target_record_id faqat tombstone'larda to'ldiriladi, ya'ni
+            // indeks kichik qoladi va hot-path'ga yuk tushirmaydi.
+            e.HasIndex(x => x.TargetRecordId)
+             .HasDatabaseName("idx_records_tombstone_target")
+             .HasFilter("target_record_id IS NOT NULL");
         });
 
         b.Entity<MediaBlobEntity>(e =>
