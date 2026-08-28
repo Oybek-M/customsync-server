@@ -262,8 +262,17 @@ public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var pushResp = await client.PostAsJsonAsync("/api/v1/sync/push", new { records = new[] { record } });
         Assert.Equal(HttpStatusCode.OK, pushResp.StatusCode);
 
+        // Pull'ni O'Z push'imizdan boshlaymiz -- `since=0` dev bazasi
+        // o'sgani sari yiqiladi (yozuv birinchi sahifadan chiqib ketadi).
+        var pushJson = await pushResp.Content.ReadFromJsonAsync<JsonElement>();
+        var since = pushJson.GetProperty("results").EnumerateArray()
+            .Where(r => r.TryGetProperty("seq", out var sq) && sq.ValueKind == JsonValueKind.Number)
+            .Select(r => r.GetProperty("seq").GetInt64())
+            .DefaultIfEmpty(1)
+            .Min() - 1;
+
         // 2. Pull qilib tekshirish
-        var pullResp = await client.GetAsync("/api/v1/sync/pull?since=0&limit=500");
+        var pullResp = await client.GetAsync($"/api/v1/sync/pull?since={(since < 0 ? 0 : since)}&limit=500");
         Assert.Equal(HttpStatusCode.OK, pullResp.StatusCode);
 
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
@@ -282,7 +291,7 @@ public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var repushResp = await client.PostAsJsonAsync("/api/v1/sync/push", new { records = new[] { record } });
         Assert.Equal(HttpStatusCode.OK, repushResp.StatusCode);
 
-        var pullAgain = await client.GetAsync("/api/v1/sync/pull?since=0&limit=500");
+        var pullAgain = await client.GetAsync($"/api/v1/sync/pull?since={(since < 0 ? 0 : since)}&limit=500");
         var pullAgainBody = await pullAgain.Content.ReadFromJsonAsync<JsonElement>();
         var recordsAgain = pullAgainBody.GetProperty("records").EnumerateArray().ToList();
         var oursAgain = recordsAgain.First(r => r.GetProperty("recordId").GetString() == recordId);

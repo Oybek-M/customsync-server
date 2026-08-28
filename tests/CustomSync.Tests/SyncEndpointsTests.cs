@@ -145,9 +145,10 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 
         var pushResp = await client.PostAsJsonAsync("/api/v1/sync/push", new { records = new[] { rec } });
         pushResp.EnsureSuccessStatusCode();
+        var pushBody = await pushResp.Content.ReadFromJsonAsync<PushResponseBody>();
+        var since = SinceBeforePush(pushBody!.Results);
 
-        // seq = 0 dan pull qilamiz
-        var pullResp = await client.GetAsync("/api/v1/sync/pull?since=0&limit=500");
+        var pullResp = await client.GetAsync($"/api/v1/sync/pull?since={since}&limit=500");
         Assert.Equal(HttpStatusCode.OK, pullResp.StatusCode);
 
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
@@ -232,7 +233,8 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal("created", tombBody!.Results[0].GetProperty("status").GetString());
 
         // Target o'chirilganini tekshiramiz — pull qilib peerHash bo'yicha filtrlash
-        var pullResp = await client.GetAsync("/api/v1/sync/pull?since=0&limit=500");
+        var since = SinceBeforePush(tombBody.Results) - 1;
+        var pullResp = await client.GetAsync($"/api/v1/sync/pull?since={(since < 0 ? 0 : since)}&limit=500");
         pullResp.EnsureSuccessStatusCode();
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
         var allRecords = pullBody.GetProperty("records").EnumerateArray().ToList();
@@ -286,7 +288,8 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
             $"Tombstone saqlanishi kerak edi, lekin: {status}");
 
         // Tombstone pull orqali ko'rinishi kerak
-        var pullResp = await client.GetAsync("/api/v1/sync/pull?since=0&limit=500");
+        var since = SinceBeforePush(body.Results);
+        var pullResp = await client.GetAsync($"/api/v1/sync/pull?since={since}&limit=500");
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
         var found = pullBody.GetProperty("records").EnumerateArray()
             .Any(r => r.GetProperty("recordId").GetString() == tombId);
@@ -313,6 +316,23 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
     // ----------------------------------------------------------------
     // JSON deserialization yordamchisi
     // ----------------------------------------------------------------
+    /// <summary>
+    /// Pull'ni O'Z push'imizdan boshlaydi. `since=0` bilan pull qilish
+    /// dev bazasi o'sgani sari yiqila boshlaydi: sahifa cheklangan va
+    /// yozuv birinchi sahifadan chiqib ketadi. Bu allaqachon sodir
+    /// bo'ldi -- baza 500 qatordan oshgach uchta test tasodifiy
+    /// yiqiladigan bo'lib qoldi.
+    /// </summary>
+    private static long SinceBeforePush(IEnumerable<JsonElement> pushResults)
+    {
+        var seqs = pushResults
+            .Where(r => r.TryGetProperty("seq", out var s)
+                        && s.ValueKind == JsonValueKind.Number)
+            .Select(r => r.GetProperty("seq").GetInt64())
+            .ToList();
+        return seqs.Count == 0 ? 0 : seqs.Min() - 1;
+    }
+
     private sealed class PushResponseBody
     {
         public List<JsonElement> Results { get; set; } = new();
