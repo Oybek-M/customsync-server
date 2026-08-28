@@ -44,8 +44,12 @@ builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<SyncService>();
+builder.Services.AddScoped(sp => new MediaService(
+    sp.GetRequiredService<SyncDbContext>(),
+    builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media"));
 builder.Services.AddSingleton<DeviceRevocationCache>();
 builder.Services.AddSingleton<CustomSync.Api.Realtime.NotifyHub>();
+
 
 var signingKey = builder.Configuration["Jwt:SigningKey"];
 if (string.IsNullOrWhiteSpace(signingKey) || signingKey.Length < 32)
@@ -121,8 +125,10 @@ app.MapHealthEndpoints();
 app.MapDeviceEndpoints();
 app.MapSettingsEndpoints();
 app.MapSyncEndpoints();
+app.MapMediaEndpoints();
 
 app.Run();
+
 
 // Integration testlar uchun (WebApplicationFactory<Program>).
 public partial class Program { }

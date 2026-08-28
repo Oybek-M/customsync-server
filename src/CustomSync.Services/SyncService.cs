@@ -74,6 +74,17 @@ public class SyncService(SyncDbContext db)
         DELETE FROM records WHERE record_id = @target_record_id;
         """;
 
+    /// <summary>
+    /// Yozuvga biriktirilgan media havolalarini saqlash (spec §0.4, Correction 2).
+    /// Idempotent: qayta push qilinganda (record_id, hash) primary key
+    /// to'qnashuvi ON CONFLICT DO NOTHING bilan yutiladi.
+    /// </summary>
+    private const string InsertRecordMediaSql = """
+        INSERT INTO record_media (record_id, hash)
+        VALUES (@record_id, @hash)
+        ON CONFLICT (record_id, hash) DO NOTHING;
+        """;
+
     public async Task<IReadOnlyList<PushResult>> PushAsync(
         string deviceId,
         IReadOnlyList<SyncRecord> records,
@@ -151,15 +162,41 @@ public class SyncService(SyncDbContext db)
             else
                 cmd.Parameters.Add(new NpgsqlParameter("target_record_id", NpgsqlDbType.Text) { Value = DBNull.Value });
 
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            if (await reader.ReadAsync(ct))
+            long? returnedSeq = null;
+            bool wasInsert = false;
+            bool storedOrSuperseded = false;
+
+            await using (var reader = await cmd.ExecuteReaderAsync(ct))
             {
-                var seq      = reader.GetInt64(0);
-                var wasInsert = reader.GetBoolean(1);
+                if (await reader.ReadAsync(ct))
+                {
+                    returnedSeq = reader.GetInt64(0);
+                    wasInsert = reader.GetBoolean(1);
+                    storedOrSuperseded = true;
+                }
+            }
+
+            if (storedOrSuperseded)
+            {
                 results.Add(new PushResult(
                     record.RecordId,
                     wasInsert ? PushOutcome.Created : PushOutcome.Superseded,
-                    seq));
+                    returnedSeq));
+
+                // Correction 2: saqlangan yoki almashtirilgan yozuvning media
+                // havolalarini record_media jadvaliga yozish. Idempotent:
+                // qayta push qilinganda ON CONFLICT DO NOTHING tufayli
+                // dublikat qatorlar hosil bo'lmaydi.
+                if (record.Media.Count > 0)
+                {
+                    foreach (var mediaRef in record.Media)
+                    {
+                        await using var mediaCmd = new NpgsqlCommand(InsertRecordMediaSql, connection);
+                        mediaCmd.Parameters.AddWithValue("record_id", record.RecordId);
+                        mediaCmd.Parameters.AddWithValue("hash",      mediaRef.Hash);
+                        await mediaCmd.ExecuteNonQueryAsync(ct);
+                    }
+                }
             }
             else
             {
@@ -169,6 +206,7 @@ public class SyncService(SyncDbContext db)
                 results.Add(new PushResult(record.RecordId, PushOutcome.Duplicate));
             }
         }
+
 
         return results;
     }

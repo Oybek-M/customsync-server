@@ -6,6 +6,7 @@ public class MediaBlobEntity
     public string   Hash        { get; set; } = null!;
     public long     Size        { get; set; }
     public byte[]   Nonce       { get; set; } = null!;
-    public string   StoragePath { get; set; } = null!;
-    public DateTime UploadedAt  { get; set; }
+    public string   StoragePath        { get; set; } = null!;
+    public DateTime UploadedAt         { get; set; }
+    public string?  UploadedByDeviceId { get; set; }
 }
