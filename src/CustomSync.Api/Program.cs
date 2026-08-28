@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using CustomSync.Api.Auth;
 using CustomSync.Api.Endpoints;
 using CustomSync.Data;
 using CustomSync.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -44,11 +46,40 @@ builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<SyncService>();
+builder.Services.AddScoped<KeyWrapService>();
 builder.Services.AddScoped(sp => new MediaService(
     sp.GetRequiredService<SyncDbContext>(),
     builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media"));
 builder.Services.AddSingleton<DeviceRevocationCache>();
 builder.Services.AddSingleton<CustomSync.Api.Realtime.NotifyHub>();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("keywrap", context =>
+    {
+        var deviceId = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "anonymous";
+
+        var settings = context.RequestServices.GetRequiredService<SettingsService>();
+        // Sozlama qiymati partitsiya birinchi marta yaratilganda olinadi.
+        // Agar sozlama keyinroq o'zgartirilsa, yangi partitsiyalarga ta'sir qiladi.
+        // Har so'rovda rate limiterni qayta qurish cheklovni butunlay o'chirib
+        // qo'yishi sababli bu maqbul yechim.
+        var limit = settings.GetIntAsync("auth.wrap_rate_per_hour").GetAwaiter().GetResult();
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            deviceId,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit > 0 ? limit : 5,
+                Window      = TimeSpan.FromHours(1),
+                QueueLimit  = 0
+            });
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 
 
 var signingKey = builder.Configuration["Jwt:SigningKey"];
@@ -120,14 +151,17 @@ if (args.Contains("--create-enrollment-code"))
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapHealthEndpoints();
 app.MapDeviceEndpoints();
 app.MapSettingsEndpoints();
 app.MapSyncEndpoints();
 app.MapMediaEndpoints();
+app.MapKeyEndpoints();
 
 app.Run();
+
 
 
 // Integration testlar uchun (WebApplicationFactory<Program>).

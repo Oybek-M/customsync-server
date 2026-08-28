@@ -47,7 +47,7 @@ public class SettingsService(SyncDbContext db)
         New("api.max_page_size",          "200",  "int",      "api",     "So'ralishi mumkin bo'lgan maksimal sahifa hajmi"),
         New("auth.jwt_lifetime_minutes",  "15",   "int",      "auth",    "JWT amal qilish muddati"),
         New("auth.enroll_code_minutes",   "10",   "int",      "auth",    "Ro'yxatdan o'tkazish kodining amal qilish muddati"),
-        New("auth.wrap_rate_per_hour",    "5",    "int",      "auth",    "Kalit o'ramini yuklab olish urinishlari (soatiga, IP bo'yicha)"),
+        New("auth.wrap_rate_per_hour",    "5",    "int",      "auth",    "Kalit o'ramini yuklab olish urinishlari (soatiga, qurilma bo'yicha)"),
         New("media.max_upload_bytes",     "52428800", "int",  "media",   "Bitta media faylning maksimal hajmi"),
 
         // Spec §0.3 -- retention. 0 = cheksiz saqlash. `activity` uchun
