@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **67 test, hammasi o'tadi**.
+`dotnet test` hozir: **76 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,9 +55,13 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 4 (kalit o'ramlari)
+## 🔴 KEYINGI QADAM — plan 01b, Task 5 (keyset pagination va statistika)
 
-01b Task 1, 2, 3 tugadi.
+01b Task 1-4 tugadi.
+
+⚠️ Task 5 uchun: **K3 — offset pagination TAQIQLANGAN.** Faqat keyset
+(cursor) + `seq` snapshot. Sahifa hajmi `api.default_page_size` va
+`api.max_page_size` dan (K1). Spec §5.6 da SQL namunasi bor.
 
 ### 01b Task 2-3 dan qolgan ochiq narsalar
 
@@ -69,6 +73,11 @@ entity instance'larini har `DbContext`ga berardi.
   qo'llanilmaydi** — push hajmi bayt bo'yicha cheklanmagan.
 - **Media PUT/GET blobni butunlay xotiraga yuklaydi** (50MB default).
   Streaming'ga o'tkazish kerak — plan 04 yoki 09 da.
+- **`auth.wrap_rate_per_hour` da 0 CHEKSIZ degani EMAS.** Boshqa
+  sozlamalarda 0 = cheksiz, bu yerda esa xavfsiz standartga (5)
+  qaytadi — brute-force himoyasi jimgina o'chib qolmasligi uchun.
+- **Rate limiter partitsiyasi qurilma ID bo'yicha**, IP emas. Limit
+  qiymati partitsiya birinchi yaratilganda olinadi.
 - **`record_media` da yetim qatorlar to'planadi.** Tombstone yozuvni
   o'chirganda uning media havolalari qoladi (FK/cascade yo'q).
   Zararsiz, lekin plan 04 (storage lifecycle) tozalashi kerak.
