@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **76 test, hammasi o'tadi**.
+`dotnet test` hozir: **85 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,13 +55,17 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 5 (keyset pagination va statistika)
+## 🔴 KEYINGI QADAM — plan 01b, Task 6 (WebSocket bildirishnoma)
 
-01b Task 1-4 tugadi.
+01b Task 1-5 tugadi.
 
-⚠️ Task 5 uchun: **K3 — offset pagination TAQIQLANGAN.** Faqat keyset
-(cursor) + `seq` snapshot. Sahifa hajmi `api.default_page_size` va
-`api.max_page_size` dan (K1). Spec §5.6 da SQL namunasi bor.
+⚠️ Task 6 da `NotifyHub` stub'i haqiqiy implementatsiyaga
+almashtiriladi (`SyncEndpoints` uni allaqachon chaqiradi).
+
+🔴 **Testlarda `pull?since=0` ISHLATMANG.** Dev bazasi umumiy va
+allaqachon 500 qatordan oshgan — yozuv birinchi sahifadan chiqib
+ketadi va test tasodifiy yiqiladi. Pull'ni o'z push'ingiz qaytargan
+`seq` dan boshlang (`SyncEndpointsTests.SinceBeforePush` namunasi).
 
 ### 01b Task 2-3 dan qolgan ochiq narsalar
 
