@@ -146,20 +146,16 @@ public class StatsTests : IClassFixture<WebApplicationFactory<Program>>
         var sync  = scope.ServiceProvider.GetRequiredService<SyncService>();
         var stats = scope.ServiceProvider.GetRequiredService<StatsService>();
 
-        var peerA = $"peer_a_{Guid.NewGuid():N}"; // 1 ta yozuv, 10000 bayt, occurredAt = 2_000_000_100
-        var peerB = $"peer_b_{Guid.NewGuid():N}"; // 5 ta yozuv, 100 baytdan = 500 bayt, occurredAt = 2_000_000_200
-        var peerC = $"peer_c_{Guid.NewGuid():N}"; // 2 ta yozuv, 1000 baytdan = 2000 bayt, occurredAt = 2_000_000_300
+        var peerA = $"peer_a_{Guid.NewGuid():N}"; // 10 ta yozuv, 10000 bayt, occurredAt = 2_000_000_100
+        var peerB = $"peer_b_{Guid.NewGuid():N}"; // 30 ta yozuv, 100 bayt, occurredAt = 2_000_000_200
+        var peerC = $"peer_c_{Guid.NewGuid():N}"; // 20 ta yozuv, 1000 bayt, occurredAt = 2_000_000_300
 
-        await sync.PushAsync("test-device", [
-            MakeRecord(peerA, 1, 2_000_000_100L, new byte[10000]),
-            MakeRecord(peerB, 1, 2_000_000_150L, new byte[100]),
-            MakeRecord(peerB, 2, 2_000_000_160L, new byte[100]),
-            MakeRecord(peerB, 3, 2_000_000_170L, new byte[100]),
-            MakeRecord(peerB, 4, 2_000_000_180L, new byte[100]),
-            MakeRecord(peerB, 5, 2_000_000_200L, new byte[100]),
-            MakeRecord(peerC, 1, 2_000_000_250L, new byte[1000]),
-            MakeRecord(peerC, 2, 2_000_000_300L, new byte[1000])
-        ]);
+        var records = new List<SyncRecord>();
+        for (int i = 0; i < 10; i++) records.Add(MakeRecord(peerA, i + 1, 2_000_000_100L + i, new byte[1000])); // 10000 bayt
+        for (int i = 0; i < 30; i++) records.Add(MakeRecord(peerB, i + 1, 2_000_000_200L + i, new byte[10]));   // 300 bayt
+        for (int i = 0; i < 20; i++) records.Add(MakeRecord(peerC, i + 1, 2_000_000_300L + i, new byte[100]));  // 2000 bayt
+
+        await sync.PushAsync("test-device", records);
 
         var ourPeers = new HashSet<string> { peerA, peerB, peerC };
 
