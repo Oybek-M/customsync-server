@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **91 test, hammasi o'tadi**.
+`dotnet test` hozir: **99 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,16 +55,25 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 7 (`.cmx` almashuv formati)
+## 🔴 KEYINGI QADAM — plan 01b, Task 8 (platformalararo test vektorlari)
 
-01b Task 1-6 tugadi.
+01b Task 1-7 tugadi. 9 task'dan 2 tasi qoldi (8 va 9).
 
-⚠️ Task 7 uchun (revizya, spec §0.7): `.cmx` va tdesktop eksport v3
-**bitta format** bo'ladi. Tashqi qobiq — ZIP, lekin `.cmx`
-kengaytmasi bilan; `manifest.json` da `format` maydoni. v3 dan
-keladigan a'zolar: `settings.json`, `index.json`, media alohida
-arxivda bo'lishi mumkin. Qo'lda ochish yo'li ataylab qoldiriladi
-(kengaytmani `.zip` ga o'zgartirish kifoya).
+⚠️ Task 8 uchun: `test-vectors.json` **allaqachon mavjud** va
+`RecordIdTests` uni o'qiydi (spec §0.12 dan keyin qayta
+generatsiya qilingan — 11 ta `record_id` holati, `account_hash`
+bo'limi, `peer_hash` o'zgarmagan). Vektorlarni QAYTA YARATMANG —
+plan `tools/GenerateTestVectors/` deb yozgan bo'lsa ham, yagona
+manba `C:\TBuild	desktop\docs\sync-protocol\generate-vectors.py`.
+Task 8 da .NET tomoni AES-GCM, HKDF va PBKDF2 vektorlarini ham
+qayta hosil qila olishini tekshirish qoladi (hozir faqat
+`record_id` tekshirilgan).
+
+### 01b Task 7 dan qolgan
+
+- **Server eksporti media bloblarni o'z ichiga OLMAYDI** (spec §0.7
+  bo'yicha media alohida arxivda bo'lishi mumkin). Kodda izoh bor.
+  Shu `.cmx` dan tiklashda biriktirmalar bo'lmaydi.
 
 🔴 **`o.Events` ni QAYTA TAYINLAMANG.** Unda ikkita handler bor:
 `OnTokenValidated` (bekor qilingan qurilma tekshiruvi) va
