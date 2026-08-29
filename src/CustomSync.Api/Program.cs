@@ -1,8 +1,10 @@
+using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using CustomSync.Api.Auth;
 using CustomSync.Api.Endpoints;
+using CustomSync.Api.Realtime;
 using CustomSync.Data;
 using CustomSync.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -23,6 +25,8 @@ var tmpConfig = new ConfigurationBuilder()
     .Build();
 
 Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore.Routing", Serilog.Events.LogEventLevel.Warning)
     .WriteTo.Console()
     .WriteTo.File(
         tmpConfig["Serilog:File:Path"] ?? "logs/customsync-.log",
@@ -120,6 +124,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     ctx.Fail("device_revoked");
 
                 return Task.CompletedTask;
+            },
+            OnMessageReceived = context =>
+            {
+                var token = context.Request.Query["access_token"];
+                if (!string.IsNullOrEmpty(token) &&
+                    context.HttpContext.Request.Path.StartsWithSegments("/ws"))
+                {
+                    context.Token = token;
+                }
+                return Task.CompletedTask;
             }
         };
     });
@@ -154,6 +168,7 @@ if (args.Contains("--create-enrollment-code"))
     return;
 }
 
+app.UseWebSockets();
 app.UseSerilogRequestLogging();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -167,6 +182,49 @@ app.MapMediaEndpoints();
 app.MapKeyEndpoints();
 app.MapRecordEndpoints();
 app.MapStatsEndpoints();
+
+app.Map("/ws/notify", async (HttpContext context, NotifyHub hub) =>
+{
+    if (!context.WebSockets.IsWebSocketRequest)
+    {
+        context.Response.StatusCode = StatusCodes.Status400BadRequest;
+        return;
+    }
+
+    var deviceId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (deviceId is null)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+
+    using var socket = await context.WebSockets.AcceptWebSocketAsync();
+    hub.Register(deviceId, socket);
+
+    // Klient hech narsa yubormaydi; ulanish yopilguncha ushlab turamiz.
+    var buffer = new byte[256];
+    try
+    {
+        while (socket.State == WebSocketState.Open)
+        {
+            var result = await socket.ReceiveAsync(buffer, CancellationToken.None);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                if (socket.State == WebSocketState.CloseReceived)
+                {
+                    await socket.CloseOutputAsync(
+                        result.CloseStatus ?? WebSocketCloseStatus.NormalClosure,
+                        result.CloseStatusDescription,
+                        CancellationToken.None);
+                }
+                break;
+            }
+        }
+    }
+    catch (WebSocketException) { /* uzilish — normal holat */ }
+
+    hub.Prune();
+}).RequireAuthorization();
 
 app.Run();
 
