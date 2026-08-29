@@ -67,7 +67,7 @@ tag alohida), `pbkdf2` (3). Primitivlar
 🔴 **Task 8 plan matni ESKIRGAN — takrorlamang.** U
 `tools/GenerateTestVectors` qurib, `test-vectors.json` ni yozishni
 aytadi. Fayl allaqachon mavjud va yagona nusxada
-`C:\TBuild	desktop\docs\sync-protocol\` da turadi. Bu repoda
+`C:\TBuild\tdesktop\docs\sync-protocol\` da turadi. Bu repoda
 nusxa YARATILMADI va yaratilmasin.
 
 ### 01b Task 7 dan qolgan
