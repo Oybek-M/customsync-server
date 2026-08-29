@@ -22,7 +22,7 @@ Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan ta
 | 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
 | 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
 
-`dotnet test` hozir: **85 test, hammasi o'tadi**.
+`dotnet test` hozir: **91 test, hammasi o'tadi**.
 
 🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
 commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
@@ -55,12 +55,21 @@ entity instance'larini har `DbContext`ga berardi.
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 6 (WebSocket bildirishnoma)
+## 🔴 KEYINGI QADAM — plan 01b, Task 7 (`.cmx` almashuv formati)
 
-01b Task 1-5 tugadi.
+01b Task 1-6 tugadi.
 
-⚠️ Task 6 da `NotifyHub` stub'i haqiqiy implementatsiyaga
-almashtiriladi (`SyncEndpoints` uni allaqachon chaqiradi).
+⚠️ Task 7 uchun (revizya, spec §0.7): `.cmx` va tdesktop eksport v3
+**bitta format** bo'ladi. Tashqi qobiq — ZIP, lekin `.cmx`
+kengaytmasi bilan; `manifest.json` da `format` maydoni. v3 dan
+keladigan a'zolar: `settings.json`, `index.json`, media alohida
+arxivda bo'lishi mumkin. Qo'lda ochish yo'li ataylab qoldiriladi
+(kengaytmani `.zip` ga o'zgartirish kifoya).
+
+🔴 **`o.Events` ni QAYTA TAYINLAMANG.** Unda ikkita handler bor:
+`OnTokenValidated` (bekor qilingan qurilma tekshiruvi) va
+`OnMessageReceived` (WebSocket query-string token). Yangi
+`JwtBearerEvents` obyekti yaratish ikkalasidan birini yo'q qiladi.
 
 🔴 **Testlarda `pull?since=0` ISHLATMANG.** Dev bazasi umumiy va
 allaqachon 500 qatordan oshgan — yozuv birinchi sahifadan chiqib
