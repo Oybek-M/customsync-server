@@ -53,6 +53,7 @@ builder.Services.AddScoped<SyncService>();
 builder.Services.AddScoped<KeyWrapService>();
 builder.Services.AddScoped<RecordQueryService>();
 builder.Services.AddScoped<StatsService>();
+builder.Services.AddScoped<InterchangeService>();
 builder.Services.AddScoped(sp => new MediaService(
     sp.GetRequiredService<SyncDbContext>(),
     builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media"));
@@ -182,6 +183,7 @@ app.MapMediaEndpoints();
 app.MapKeyEndpoints();
 app.MapRecordEndpoints();
 app.MapStatsEndpoints();
+app.MapInterchangeEndpoints();
 
 app.Map("/ws/notify", async (HttpContext context, NotifyHub hub) =>
 {
