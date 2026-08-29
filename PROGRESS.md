@@ -64,7 +64,7 @@ entity instance'larini har `DbContext`ga berardi.
 generatsiya qilingan — 11 ta `record_id` holati, `account_hash`
 bo'limi, `peer_hash` o'zgarmagan). Vektorlarni QAYTA YARATMANG —
 plan `tools/GenerateTestVectors/` deb yozgan bo'lsa ham, yagona
-manba `C:\TBuild	desktop\docs\sync-protocol\generate-vectors.py`.
+manba `C:\TBuild\tdesktop\docs\sync-protocol\generate-vectors.py`.
 Task 8 da .NET tomoni AES-GCM, HKDF va PBKDF2 vektorlarini ham
 qayta hosil qila olishini tekshirish qoladi (hozir faqat
 `record_id` tekshirilgan).
