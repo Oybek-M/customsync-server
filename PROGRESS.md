@@ -1,261 +1,232 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-08-27**
+Oxirgi yangilanish: **2026-08-29**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
+**Hozir:** `dotnet test` → **105 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+Branch `Oybek`, ish daraxti toza.
+
 ---
 
-## Qayerdamiz
+## 1. Qilingan ishlar
 
-Plan **01a — Backend poydevori**, **TO'LIQ TUGADI** — 7 ta task + rejadan tashqari 6b.
+### Plan 01a — Backend poydevori ✅ TO'LIQ TUGADI
 
-| Task | Holat | Izoh |
+| Task | Commit | Natija |
 |---|---|---|
-| 1 — Solution skeleti | ✅ commit `ccb1d89` | 5 loyiha, `/api/v1/health` |
-| 2 — `RecordId` + kontraktlar | ✅ commit `c028de3` | 9 test, `test-vectors.json` bilan tekshirilgan |
-| 3 — PostgreSQL sxemasi | ✅ commit `6acd969` | 10 jadval, ustunlar snake_case |
-| 4 — `SettingsService` | ✅ commit `86e5377` | 4 test, `Program.cs` ga ulandi (Step 6) |
-| 5 — Qurilma ro'yxati | ✅ commit `00d110c` + `74f9f54` | 6 test; atomar redeem va deviceId tuzatildi. JWT qismi Task 6 da |
-| 6 — JWT endpoint'lari | ✅ commit `e709bee` | JWT issuer, auth middlewares va device/settings endpoints (4 ta integratsion testlar) |
-| 6b — Avtorizatsiya rollari | ✅ commit `59f2de7` + `57eb74d` | 10 test; rol claim'i, darhol bekor qilish keshi, rol oq ro'yxati |
-| 7 — Serilog + audit log | ✅ commit `cb0c09c` + `45412f2` | 5 test; audit actor alohida ustunda |
+| 1 — Solution skeleti | `ccb1d89` | 5 loyiha (Api→Services→Data→Core), `/api/v1/health` |
+| 2 — `RecordId` + kontraktlar | `c028de3` | `test-vectors.json` bilan tekshirilgan |
+| 3 — PostgreSQL sxemasi | `6acd969` | 10 jadval, ustunlar snake_case |
+| 4 — `SettingsService` | `86e5377` | Runtime konfiguratsiya (K1 mexanizmi) |
+| 5 — Qurilma ro'yxati | `00d110c` + `74f9f54` | Atomar enrollment kod, rotatsiyalanuvchi refresh token |
+| 6 — JWT endpoint'lari | `e709bee` | JWT issuer, device/settings endpoint'lari |
+| **6b — Avtorizatsiya rollari** | `59f2de7` + `57eb74d` | **Rejadan tashqari.** `device`/`admin` roli, darhol bekor qilish keshi |
+| 7 — Serilog + audit log | `cb0c09c` + `45412f2` | Audit actor alohida ustunda |
 
-`dotnet test` hozir: **105 test, hammasi o'tadi**.
+### Plan 01b — Sync yadrosi (9 task'dan 8 tasi ✅)
 
-🔴 **2026-08-26: `record_id` ga `account_hash` qo'shildi (spec §0.12,
-commit `04cb174`).** Ko'p akkaunt aralashuvi tuzatildi. `activity`
-kind uchun `account_hash=""` (akkauntlar bo'ylab birlashadi),
-qolgan barcha kind haqiqiy hash oladi. `test-vectors.json` qayta
-generatsiya qilindi, `RecordId.Compute` 5 argument oladi endi
-(`accountHash` qo'shildi). Task 5 dan boshlaganda `RecordId.Compute`
-chaqiruvlari shu yangi signaturani kutadi.
-
-🔴 **2026-08-26: ustunlar `snake_case` (commit `6acd969`).**
-`EFCore.NamingConventions` + `.UseSnakeCaseNamingConvention()`.
-Sabab: plan 01b sync hot-path'ni **raw `NpgsqlCommand`** bilan
-yozadi; EF standarti bilan har so'rovda `"PeerHash"` deb qo'shtirnoq
-kerak bo'lardi va bitta unutilgani runtime xato berardi.
-
-⚠️ **Migratsiyalar birlashtirildi.** Ikki eski migratsiya
-(`InitialSchema` + `AddAccountHash`) o'chirildi, o'rniga bitta yangi
-`20260826114427_InitialSchema`. Hech narsa deploy qilinmagani va
-bazada faqat qayta hosil bo'ladigan seed ma'lumot bo'lgani uchun
-xavfsiz edi. **Bundan keyin migratsiyalarni birlashtirmang** —
-birinchi deploydan keyin bu yo'l yopiladi.
-
-Yangi `DbContext` qurilgan HAR joyda `.UseSnakeCaseNamingConvention()`
-bo'lishi shart (`Program.cs` va `DatabaseFixture.cs` — ikkalasi mos
-bo'lmasa testlar boshqa sxemaga qarshi ishlaydi).
-
-**`SettingsService.Defaults` → `CreateDefaults()` metodi.** Static
-ro'yxat `UpdatedAt` ni klass yuklanganda muzlatib qo'yardi va bir xil
-entity instance'larini har `DbContext`ga berardi.
+| Task | Commit | Natija |
+|---|---|---|
+| 1 — Cursor va monotonlik | `f476520` + `725174f` | `seq` qulflangan hisoblagichdan; dedup konflikt testlari |
+| 2 — Push/pull endpoint'lari | `fab4487` + `466e8da` | Tombstone ikki yo'nalishli |
+| 3 — Media saqlash | `4dea7ba` | Kontent-adresli bloblar, kvota → 507 |
+| 4 — Kalit o'ramlari | `dad9c9f` + `f3f3ac2` | Qurilma bo'yicha rate limiting |
+| 5 — Keyset pagination + statistika | `f25b5d0` + `41fc3b6` | K3 keyset, `seq` tiebreaker |
+| 6 — WebSocket bildirishnoma | `3d27b48` | `{"type":"changes","seq":N}` signali |
+| 7 — `.cmx` almashuv formati | `ebe9a5a` | Import `PushAsync` orqali o'tadi |
+| 8 — Platformalararo vektorlar | `d1afa39` | Beshala oila .NET da tekshiriladi |
 
 ---
 
-## 🔴 KEYINGI QADAM — plan 01b, Task 9 (deployment) — OXIRGISI
+## 2. 🔴 KEYINGI QADAM — plan 01b, Task 9 (deployment)
 
-01b Task 1-8 tugadi. **Faqat Task 9 qoldi**, keyin plan 01b yopiladi.
+01b ning **oxirgi** task'i. Undan keyin plan 01b yopiladi.
 
-✅ **Beshala vektor oilasi endi .NET da tekshiriladi**: `hkdf` (4 kalit),
-`account_hash` (3), `peer_hash` (3), `record_id` (11), `aes_gcm` (3,
-tag alohida), `pbkdf2` (3). Primitivlar
-`src/CustomSync.Core/CryptoPrimitives.cs` da.
+Task 9 faqat **konfiguratsiya fayllari** yaratadi — kod emas:
+`deploy/customsync.service`, `deploy/nginx-customsync.conf`,
+`deploy/README.md`. **Test soni o'zgarmaydi** (105 da qoladi).
 
-🔴 **Task 8 plan matni ESKIRGAN — takrorlamang.** U
-`tools/GenerateTestVectors` qurib, `test-vectors.json` ni yozishni
-aytadi. Fayl allaqachon mavjud va yagona nusxada
-`C:\TBuild\tdesktop\docs\sync-protocol\` da turadi. Bu repoda
-nusxa YARATILMADI va yaratilmasin.
+Plan matnini o'qiyotganda diqqat qiling:
 
-### 01b Task 7 dan qolgan
+- ⚠️ Plandagi **"Qabul qilish mezonlari (1b)" bo'limi ESKIRGAN** — u
+  "25 test" deydi, biz 105 damiz. E'tibor bermang.
+- Nginx `client_max_body_size` `media.max_upload_bytes` (50MB) bilan
+  mos bo'lishi kerak.
+- `systemd` dagi `ReadWritePaths` media ildizi bilan mos bo'lsin —
+  `appsettings.json` dagi `Storage:MediaRoot`.
+- Deploy hujjatida yozilsin: `Jwt:SigningKey` bo'sh bo'lsa **startup
+  ataylab yiqiladi** (`Program.cs` da tekshiruv bor).
+- WebSocket uchun nginx'da `proxy_read_timeout` uzun bo'lishi shart,
+  aks holda `/ws/notify` 60 soniyada uziladi.
+- ⚠️ **Server ishga tushirilmaydi.** Bu task faqat fayl yozadi;
+  ularni VPS ga qo'llash — foydalanuvchining ishi.
 
-- **Server eksporti media bloblarni o'z ichiga OLMAYDI** (spec §0.7
-  bo'yicha media alohida arxivda bo'lishi mumkin). Kodda izoh bor.
-  Shu `.cmx` dan tiklashda biriktirmalar bo'lmaydi.
+### Keyin nima bo'ladi
 
-🔴 **`o.Events` ni QAYTA TAYINLAMANG.** Unda ikkita handler bor:
-`OnTokenValidated` (bekor qilingan qurilma tekshiruvi) va
-`OnMessageReceived` (WebSocket query-string token). Yangi
-`JwtBearerEvents` obyekti yaratish ikkalasidan birini yo'q qiladi.
+| Plan | Nima |
+|---|---|
+| 02 | tdesktop sync agenti (C++/Qt) — **tdesktop repo'sida bajariladi** |
+| 03 | `server-controller` web app (Vue 3) |
+| 04 | Storage lifecycle — monitoring, retention, arxivlash |
+| 05 | Always-on TDLib capture service |
+| 06 | Reliz boshqaruvi |
 
-🔴 **Testlarda `pull?since=0` ISHLATMANG.** Dev bazasi umumiy va
-allaqachon 500 qatordan oshgan — yozuv birinchi sahifadan chiqib
-ketadi va test tasodifiy yiqiladi. Pull'ni o'z push'ingiz qaytargan
-`seq` dan boshlang (`SyncEndpointsTests.SinceBeforePush` namunasi).
+---
 
-### 01b Task 2-3 dan qolgan ochiq narsalar
+## 3. 🔴 Buzmaslik kerak bo'lgan narsalar
 
-- **Tombstone ikki yo'nalishli.** Tombstone kelganda nishon
-  o'chiriladi, VA nishon keyinroq kelganda u saqlanmaydi
-  (`UpsertSql` dagi `NOT EXISTS`). Bu shartni olib tashlamang —
-  usiz o'chirish jimgina bekor bo'ladi.
-- `sync.push_max_bytes` sozlamasi mavjud, lekin **hali
-  qo'llanilmaydi** — push hajmi bayt bo'yicha cheklanmagan.
-- **Media PUT/GET blobni butunlay xotiraga yuklaydi** (50MB default).
-  Streaming'ga o'tkazish kerak — plan 04 yoki 09 da.
-- **`auth.wrap_rate_per_hour` da 0 CHEKSIZ degani EMAS.** Boshqa
-  sozlamalarda 0 = cheksiz, bu yerda esa xavfsiz standartga (5)
-  qaytadi — brute-force himoyasi jimgina o'chib qolmasligi uchun.
-- **Rate limiter partitsiyasi qurilma ID bo'yicha**, IP emas. Limit
-  qiymati partitsiya birinchi yaratilganda olinadi.
-- **`record_media` da yetim qatorlar to'planadi.** Tombstone yozuvni
-  o'chirganda uning media havolalari qoladi (FK/cascade yo'q).
-  Zararsiz, lekin plan 04 (storage lifecycle) tozalashi kerak.
+Bular implement paytida topilgan xatolarning tuzatilgan holati.
+Har biri jimgina ma'lumot yo'qotadigan turdan edi.
 
-### Auth modeli — 01b uchun bilish shart
+- **`o.Events` ni QAYTA TAYINLAMANG** (`Program.cs`). Unda ikkita
+  handler bor: `OnTokenValidated` (bekor qilingan qurilma) va
+  `OnMessageReceived` (WebSocket query-string token). Yangi
+  `JwtBearerEvents` obyekti ikkalasidan birini yo'q qiladi.
+- **Tombstone ikki yo'nalishli.** Tombstone kelganda nishon o'chiriladi,
+  VA nishon keyinroq kelganda saqlanmaydi (`UpsertSql` dagi
+  `NOT EXISTS`). Ikkinchisisiz o'chirish jimgina bekor bo'ladi.
+- **`RedeemAsync` atomar** — shartli `ExecuteUpdateAsync` tranzaksiya
+  ichida. Oddiy o'qish-keyin-yozishga aylantirmang: bir martalik kod
+  ikki marta ishlatiladigan bo'lib qoladi.
+- **`SettingsService.Cache` connection string bo'yicha ajratilgan.**
+  Bitta jarayonda bir nechta baza bo'ladi (har test klassi o'z
+  vaqtinchalik bazasini oladi).
+- **`DeviceRevocationCache` — singleton.** Scoped bo'lsa butun
+  mexanizm ishlamaydi.
+- **Ustunlar snake_case** (`EFCore.NamingConventions`). Yangi
+  `DbContext` qurilgan HAR joyda `.UseSnakeCaseNamingConvention()`
+  bo'lishi shart (`Program.cs` va `DatabaseFixture.cs`).
+
+---
+
+## 4. 🔴 Testlar haqida — uch marta yiqilgan xatolar
+
+- **`pull?since=0` ISHLATMANG.** Dev bazasi umumiy va 500 qatordan
+  oshgan; yozuv birinchi sahifadan chiqib ketadi va test tasodifiy
+  yiqiladi. Pull'ni o'z push'ingiz qaytargan `seq` dan boshlang —
+  namuna: `SyncEndpointsTests.SinceBeforePush`.
+- **Global sanoqqa assertion qo'ymang.** `WebApplicationFactory`
+  umumiy dev bazasiga ulanadi va unda oldingi tasklarning yozuvlari
+  bor. Har testga o'z `peer_hash`i (GUID) berilsin va faqat o'ziga
+  qaralsin.
+- **Sozlamani o'zgartirgan test uni `try/finally` bilan qaytarsin.**
+  Aks holda keyingi testlar tartibga qarab buziladi.
+- **`IClassFixture<DatabaseFixture>` bitta bazani butun klassga**
+  baham qiladi, metodga emas.
+
+---
+
+## 5. Ochiq qolgan mayda ishlar
+
+Hech biri bloklamaydi, lekin unutilmasin:
+
+| Nima | Qayerda hal qilinadi |
+|---|---|
+| `sync.push_max_bytes` sozlamasi mavjud, lekin qo'llanilmaydi | 01b keyingi revizyasi |
+| Media PUT/GET blobni butunlay xotiraga yuklaydi (50MB) | Plan 04 yoki 09 |
+| `record_media` da yetim qatorlar (tombstone o'chirgach qoladi, FK yo'q) | Plan 04 (storage lifecycle) |
+| Server eksporti media bloblarni o'z ichiga olmaydi | Ataylab; spec §0.7 |
+| Revocation keshi bitta jarayonga tegishli | Plan 04/06 — `LISTEN/NOTIFY` |
+| `auth.wrap_rate_per_hour` da 0 ≠ cheksiz (xavfsiz standart 5) | Ataylab; kodda izohlangan |
+
+---
+
+## 6. Auth modeli — qisqacha
 
 - JWT'da `role` claim'i: `device` yoki `admin`. Oq ro'yxat
-  `DeviceService.IsValidRole` da — boshqa satr qabul qilinmaydi.
-- Sync endpoint'lari (push/pull/media) **`device` roli uchun ochiq**
-  bo'lishi kerak — ular admin siyosatiga bog'lanmasin.
-- **Bekor qilish `DeviceRevocationCache` orqali `OnTokenValidated` da
-  tekshiriladi — xotirada, `O(1)`.** 01b da har so'rovda qurilma
-  faolligini DB'dan tekshirmang, kesh buni allaqachon qiladi.
-- Ma'lum cheklov: kesh bitta jarayonga tegishli. Ko'p instansiyali
-  deploy'da `LISTEN/NOTIFY` kerak (plan 04/06).
+  `DeviceService.IsValidRole` da.
+- **`device` uchun ochiq:** `/sync/push`, `/sync/pull`, `/media/*`,
+  `/ws/notify`, `/keys/wraps` (o'qish), o'zini `DELETE` qilish.
+- **Faqat `admin`:** `/settings`, `/records`, `/stats`, `/import`,
+  `/export`, `/devices` boshqaruvi, `/keys/wraps` yaratish va o'chirish.
+- Bekor qilish `OnTokenValidated` da xotiradan tekshiriladi — sync
+  hot-path'ga DB so'rovi tushmaydi.
 
 ---
 
-## Task 4 dan qolgan ikkita muhim eslatma
+## 7. Muhit — tekshirilgan faktlar
 
-**1. `SettingsService.Cache` connection string bo'yicha ajratilgan,
-plan matnida bitta flat static dictionary edi.** Bitta test jarayonida
-bir nechta baza bo'lishi mumkin (har test klassi o'z vaqtinchalik
-bazasini oladi) — flat static kesh ularni bulg'ab qo'yardi, ayniqsa
-`Program.cs` Step 6 dan keyin `HealthTests` ham o'z (haqiqiy dev)
-bazasiga `EnsureDefaultsAsync` chaqira boshlagach. Keyingi tasklarda
-`SettingsService` ga tegilganda shu naqshni saqlang: `Cache` — instance
-property, `db.Database.GetConnectionString()` bo'yicha `CachesByDatabase`
-dan olinadi.
+| Nima | Holat |
+|---|---|
+| .NET SDK | 8.0.405 **va** 10.0.400 → `global.json` 8.0.x ga qadaydi |
+| PostgreSQL | 17.2 ishlab turibdi (plan 16 deydi — muammo emas) |
+| `dotnet-ef` | global tool 9.0.1, EF Core 8 bilan ishlaydi |
+| `test-vectors.json` | `C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json` |
+| pg auth | `scram-sha-256` — parolsiz kirish yo'q |
 
-**2. `SettingsServiceTests` da `IClassFixture<DatabaseFixture>` bitta
-bazani butun klassga baham qiladi (metodga emas!).** Plan izohi "Har
-test alohida baza" deydi, lekin kod bloki (`IClassFixture`) buni
-bermaydi — bu plan matnidagi ziddiyat, kod ustun deb hisoblandi.
-Bazani mutatsiya qiladigan har qanday yangi test oxirida qiymatni
-asl holiga qaytarishi shart, aks holda boshqa testlar tartibga qarab
-buziladi (`Set_then_get_returns_new_value_without_restart` da
-`try/finally` bilan namuna bor).
+🔴 **Paket qo'shganda ALBATTA `--version 8.0.*`** — versiyasiz
+`dotnet add package` net10.0 uchun qurilgan paketni oladi va `NU1202`
+beradi. Bu loyihada besh marta uchragan.
+
+Connection string va `Jwt:SigningKey` —
+`src\CustomSync.Api\appsettings.Development.json` da (gitignore'da).
+`db-bootstrap.ps1` ni **qayta** ishga tushirish rolga yangi parol
+qo'yadi va faylni qayta yozadi.
 
 ---
 
-## Baza — tayyor (2026-08-25)
+## 8. Plandan chetlashishlar (sabab bilan)
 
-`scripts\db-bootstrap.ps1` ishga tushirildi, migratsiya qo'llandi.
-10 ta jadval, hammasi `customsync` egaligida:
-`devices`, `records`, `media_blobs`, `record_media`, `key_wraps`,
-`server_settings`, `enrollment_codes`, `audit_log`, `sync_counter`,
-`__EFMigrationsHistory`.
+Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 
-Connection string `src\CustomSync.Api\appsettings.Development.json`
-da (gitignore'da). `dotnet ef` `ASPNETCORE_ENVIRONMENT` ni o'zi
-`Development` ga qo'yadi, shuning uchun u shu fayldan o'qiydi —
-`appsettings.json` dagi `CHANGE_ME` ishlatilmaydi.
-
-Skriptni **qayta** ishga tushirish rolga YANGI tasodifiy parol qo'yadi
-va sozlama faylini qayta yozadi. Lokalda zararsiz (ikkalasi birga
-yangilanadi), lekin deploy qilingan muhitga qarshi ishlatmang.
+1. **`global.json`** SDK 8.0.x ga qadaydi (mashinada 10.0 ham bor).
+2. **EF Core 8.0.11 ga tenglashtirilgan** — `Design` paketi `8.0.*`
+   bilan 8.0.30 ni olardi, Npgsql esa 8.0.11 ga bog'liq (MSB3277).
+3. **`Mvc.Testing` `8.0.*`** — versiyasiz 10.x olinardi.
+4. **`RecordKind` da 8 ta kind, planda 6 ta** — `media_index` va
+   `tombstone` spec §0.6 dan.
+5. **Testlar `test-vectors.json` ni o'qiydi**, nusxa olinmagan.
+6. **`appsettings.Development.json` gitignore'da.**
+7. **`SettingsService.Defaults` → `CreateDefaults()` metodi** —
+   static ro'yxat `UpdatedAt` ni muzlatib qo'yardi.
+8. **`SettingsService.Cache` connection string bo'yicha ajratilgan.**
+9. **`DatabaseFixture` parolni `appsettings.Development.json` dan
+   o'qiydi**, plandagi `CHANGE_ME` literali o'rniga.
+10. **Ustunlar snake_case** — 01b raw SQL uchun.
+11. **`record_id` da `account_hash`** (spec §0.12), **tombstone
+    nishoni ochiq maydonda** (spec §0.13).
+12. **`audit_log.actor_device_id` alohida ustun**, JSON ichida emas.
+13. **`/records`, `/stats`, `/import`, `/export` — admin** (planda
+    bo'sh `RequireAuthorization()` edi).
+14. **Rate limiter qurilma bo'yicha partitsiyalangan** (planda
+    partitsiyasiz, ya'ni hammaga bitta chelak edi).
 
 ---
 
-## Hujjatlarni o'qish tartibi (yangi sessiya)
+## 9. Protokol o'zgarishlari (tdesktop repo'sida)
+
+Implement paytida ikkita protokol kamchiligi topildi va spec'ga yozildi.
+tdesktop `Oybek` branch, commit `5c49103942`:
+
+- **§0.12 — `account_hash`.** `record_id` da akkaunt o'lchovi yo'q edi;
+  ikki akkaunt `(peer_hash, msg_id)` bo'yicha to'qnashib, serverda
+  bir-birining ustiga yozardi. `activity` kind uchun `account_hash=""`
+  (last-seen bypass akkauntlar bo'ylab birlashishi kerak).
+- **§0.13 — tombstone nishoni ochiq maydonda.** §0.3 serverdan
+  `payload.target_record_id` ni o'qishni talab qilardi, lekin `payload`
+  shifrlangan.
+
+`test-vectors.json` qayta generatsiya qilindi (`record_id` 7→11 holat,
+`account_hash` yangi bo'lim). Generator va fayl mosligi tekshirilgan.
+
+---
+
+## 10. Hujjatlarni o'qish tartibi (yangi sessiya)
 
 Nusxa yo'q — hammasi `C:\TBuild\tdesktop\docs\` da yagona nusxada.
 
 ```
-1. sync-protocol/STATUS.md          -- kim nimani bajardi
-2. sync-protocol/CHANGELOG.md       -- protokolda nima o'zgardi
-3. superpowers/specs/2026-07-29-multi-device-sync-backend-design.md
+1. Shu fayl (PROGRESS.md)
+2. sync-protocol/STATUS.md          -- kim nimani bajardi
+3. sync-protocol/CHANGELOG.md       -- protokolda nima o'zgardi
+4. superpowers/specs/2026-07-29-multi-device-sync-backend-design.md
      -> §0 REVIZIYA dan boshlang, u asosiy matndan USTUN
-4. superpowers/plans/2026-07-29-multi-device-sync-00-index.md
+5. superpowers/plans/2026-07-29-multi-device-sync-00-index.md
      -> K1-K7 qoidalari
-5. superpowers/plans/2026-07-29-multi-device-sync-01a-backend-foundation.md
-     -> boshidagi "REVIZIYA 2026-08-25" blokini albatta o'qing
 ```
 
----
-
-## Muhit — tekshirilgan faktlar
-
-| Nima | Holat |
-|---|---|
-| .NET SDK | 8.0.405 **va** 10.0.400 o'rnatilgan → `global.json` 8.0.x ga qadaydi |
-| PostgreSQL | **17.2** ishlab turibdi (plan 16 deydi — sxemada 16-ga xos narsa yo'q, muammo emas) |
-| `dotnet-ef` | global tool 9.0.1 — EF Core 8 loyihasida ishlaydi, tekshirildi |
-| `test-vectors.json` | `C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json` |
-| pg auth | `scram-sha-256` — parolsiz kirish yo'q |
-
-Test vektorlari boshqa joyda bo'lsa:
-`set CUSTOMSYNC_TEST_VECTORS=<to'liq yo'l>`
-
----
-
-## Plandan chetlashishlar (sabab bilan)
-
-Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
-
-1. **`global.json` qo'shildi** (SDK 8.0.405, `rollForward: latestFeature`).
-   Mashinada 10.0 SDK ham bor; usiz `dotnet new` net10.0 ga ketardi.
-
-2. **`Microsoft.EntityFrameworkCore.Design` 8.0.11 ga qadaldi.**
-   `8.0.*` 8.0.30 ni olardi, Npgsql provider esa EF Core 8.0.11 ga
-   bog'liq → MSB3277 versiya to'qnashuvi. Endi build 0 warning.
-
-3. **`Microsoft.AspNetCore.Mvc.Testing` `8.0.*`** — versiyasiz
-   `dotnet add package` 10.0.11 ni olib, net8.0 bilan mos kelmasdi.
-
-4. **`RecordKind` da 8 ta kind, planda 6 ta.** `media_index` va
-   `tombstone` spec §0.6 dan — revizya plan matnidan ustun.
-
-5. **`RecordIdTests` `test-vectors.json` ni o'qiydi.** Plan buni
-   so'ramagan, lekin `sync-protocol/README.md` "birinchi ish —
-   vektorlarni qayta hosil qilish" deydi. Fayl nusxalanmagan; topilmasa
-   test **yiqiladi** (jimgina o'tib ketmaydi).
-
-6. **`appsettings.Development.json` gitignore'da**, parol
-   `db-bootstrap.ps1` tomonidan generatsiya qilinadi.
-   `appsettings.json` da `CHANGE_ME` placeholder qoladi.
-
-7. **`SettingsService.Defaults` da 10 ta qo'shimcha kalit** (8 ta
-   `retention.<kind>_days` + 2 ta `storage.quota_*`) — spec §0.3/§0.9
-   dan, planning `Defaults` ro'yxatida yo'q edi.
-
-8. **`SettingsService.Cache` connection string bo'yicha ajratilgan**
-   (yuqoridagi "Task 4 dan qolgan eslatma 1" ga qarang). Plan matnida
-   bitta flat static dictionary edi — bu ishlamas edi, chunki
-   `Program.cs` Step 6 dan keyin turli baza (dev + har test klassining
-   vaqtinchalik bazasi) bitta jarayonda birga yashaydi.
-
-9. **`DatabaseFixture` da `Password=CHANGE_ME` o'rniga resolver.**
-   Plandagi literal parol ishlamaydi; haqiqiysi
-   `appsettings.Development.json` dan o'qiladi (5-band bilan bir xil
-   sabab).
-
----
-
-## Buzilmaydigan qoidalar (K1-K7 + protokol)
-
-Batafsil: `00-index.md` va `sync-protocol/README.md`.
-
-- **K1** — sozlanadigan HAR qiymat `server_settings` jadvalida.
-  Kodda literal: sync interval, batch/sahifa hajmi, retention, disk
-  chegarasi, rate limit, timeout, feature toggle — **taqiqlangan**.
-- **K3** — offset pagination taqiqlangan, faqat keyset + `seq` snapshot.
-- **K4** — yozish idempotent (`record_id` PRIMARY KEY).
-- **K6** — TDD: avval yiqiladigan test, keyin minimal implementatsiya.
-- **K7** — commit: imperativ sarlavha, tanada **nima uchun**.
-  `Co-Authored-By` **yo'q**. Branch `Oybek`. `upstream` ga push yo'q.
-- `sha256` — **ochiq matn** ustidan, shifrlashdan OLDIN (§0.5).
-- Retention tombstone **yaratmaydi** (§0.3).
-- Manfiy `msg_id` — ishora saqlanadi (§0.6).
-
----
-
-## Sessiya oxirida
-
-1. Bu faylni yangilang.
-2. Protokolga tegdingizmi → `tdesktop/docs/sync-protocol/CHANGELOG.md`.
-3. `tdesktop/docs/sync-protocol/STATUS.md` da `customsync-server` qatori.
+`docs/` ichida har task uchun tayyorlangan prompt fayllari bor
+(`01b-task*-prompt.md`) — ularda plan matnidagi eskirgan joylar va
+tuzatishlar yozilgan.
