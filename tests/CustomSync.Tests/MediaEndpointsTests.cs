@@ -241,14 +241,14 @@ public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var recordId = RecordId.Compute("edited", "acc01", peer, 1, 1753900000L);
         var record = new
         {
-            recordId,
+            record_id = recordId,
             kind        = "edited",
-            accountHash = "acc01",
-            peerHash    = peer,
-            msgId       = 1L,
-            occurredAt  = 1753900000L,
-            observedAt  = 1753900001L,
-            deviceId    = "test-device",
+            account_hash = "acc01",
+            peer_hash    = peer,
+            msg_id       = 1L,
+            occurred_at  = 1753900000L,
+            observed_at  = 1753900001L,
+            device_id    = "test-device",
             nonce       = Convert.ToBase64String(new byte[12]),
             payload     = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
             media       = new[]
@@ -277,10 +277,10 @@ public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
         var records = pullBody.GetProperty("records").EnumerateArray().ToList();
-        var ours = records.FirstOrDefault(r => r.GetProperty("recordId").GetString() == recordId);
+        var ours = records.FirstOrDefault(r => r.GetProperty("record_id").GetString() == recordId);
         Assert.True(ours.ValueKind != JsonValueKind.Undefined, "Yozuv pull ro'yxatida topilmadi");
 
-        var mediaHashes = ours.GetProperty("mediaHashes").EnumerateArray()
+        var mediaHashes = ours.GetProperty("media_hashes").EnumerateArray()
             .Select(h => h.GetString()!)
             .ToList();
         Assert.Contains(hash1, mediaHashes);
@@ -294,8 +294,8 @@ public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var pullAgain = await client.GetAsync($"/api/v1/sync/pull?since={(since < 0 ? 0 : since)}&limit=500");
         var pullAgainBody = await pullAgain.Content.ReadFromJsonAsync<JsonElement>();
         var recordsAgain = pullAgainBody.GetProperty("records").EnumerateArray().ToList();
-        var oursAgain = recordsAgain.First(r => r.GetProperty("recordId").GetString() == recordId);
-        var mediaAgain = oursAgain.GetProperty("mediaHashes").EnumerateArray()
+        var oursAgain = recordsAgain.First(r => r.GetProperty("record_id").GetString() == recordId);
+        var mediaAgain = oursAgain.GetProperty("media_hashes").EnumerateArray()
             .Select(h => h.GetString()!)
             .ToList();
         Assert.Equal(2, mediaAgain.Count);

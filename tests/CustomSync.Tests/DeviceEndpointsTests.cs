@@ -37,7 +37,7 @@ public class DeviceEndpointsTests : IClassFixture<WebApplicationFactory<Program>
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<EnrollResponse>();
+        var body = await response.Content.ReadFromJsonAsync<EnrollResponse>(TestJson.Options);
         Assert.NotNull(body);
         Assert.NotNull(body.DeviceId);
         Assert.NotNull(body.RefreshToken);
@@ -79,25 +79,25 @@ public class DeviceEndpointsTests : IClassFixture<WebApplicationFactory<Program>
             name = "refresh-device",
             platform = "platform-refresh"
         });
-        var enrolled = await enrollResponse.Content.ReadFromJsonAsync<EnrollResponse>();
+        var enrolled = await enrollResponse.Content.ReadFromJsonAsync<EnrollResponse>(TestJson.Options);
         Assert.NotNull(enrolled);
 
         // Birinchi refresh
         var refreshResponse1 = await client.PostAsJsonAsync("/api/v1/devices/refresh", new
         {
-            deviceId = enrolled.DeviceId,
-            refreshToken = enrolled.RefreshToken
+            device_id = enrolled.DeviceId,
+            refresh_token = enrolled.RefreshToken
         });
         Assert.Equal(HttpStatusCode.OK, refreshResponse1.StatusCode);
-        var refreshed1 = await refreshResponse1.Content.ReadFromJsonAsync<RefreshResponse>();
+        var refreshed1 = await refreshResponse1.Content.ReadFromJsonAsync<RefreshResponse>(TestJson.Options);
         Assert.NotNull(refreshed1);
         Assert.NotEqual(enrolled.RefreshToken, refreshed1.RefreshToken);
 
         // Eski refresh token bilan qayta urinish (rad etilishi kerak)
         var refreshResponse2 = await client.PostAsJsonAsync("/api/v1/devices/refresh", new
         {
-            deviceId = enrolled.DeviceId,
-            refreshToken = enrolled.RefreshToken
+            device_id = enrolled.DeviceId,
+            refresh_token = enrolled.RefreshToken
         });
         Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse2.StatusCode);
     }

@@ -37,11 +37,11 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
 
     private static object MakeWrapPayload(string label) => new
     {
-        wrapType   = "passphrase",
+        wrap_type   = "passphrase",
         label,
         salt       = Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }),
         nonce      = Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }),
-        wrappedKey = Convert.ToBase64String(new byte[] { 10, 20, 30, 40 }),
+        wrapped_key = Convert.ToBase64String(new byte[] { 10, 20, 30, 40 }),
         iterations = 600000
     };
 
@@ -56,7 +56,7 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.Equal(HttpStatusCode.OK, postResp.StatusCode);
 
         var postBody = await postResp.Content.ReadFromJsonAsync<JsonElement>();
-        var wrapId = postBody.GetProperty("wrapId").GetString();
+        var wrapId = postBody.GetProperty("wrap_id").GetString();
         Assert.NotNull(wrapId);
 
         // GET / oddiy qurilma uchun ham ro'yxatni qaytarishi kerak
@@ -65,7 +65,7 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
 
         var list = await listResp.Content.ReadFromJsonAsync<List<JsonElement>>();
         Assert.NotNull(list);
-        var found = list.FirstOrDefault(w => w.GetProperty("wrapId").GetString() == wrapId);
+        var found = list.FirstOrDefault(w => w.GetProperty("wrap_id").GetString() == wrapId);
         Assert.True(found.ValueKind != JsonValueKind.Undefined, "Yaratilgan wrap ro'yxatda topilmadi");
         Assert.Equal(label, found.GetProperty("label").GetString());
     }
@@ -79,19 +79,19 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
         var label = $"label_{Guid.NewGuid():N}";
         var postResp = await adminClient.PostAsJsonAsync("/api/v1/keys/wraps", MakeWrapPayload(label));
         var postBody = await postResp.Content.ReadFromJsonAsync<JsonElement>();
-        var wrapId = postBody.GetProperty("wrapId").GetString()!;
+        var wrapId = postBody.GetProperty("wrap_id").GetString()!;
 
         // GET /{wrapId}
         var getResp = await deviceClient.GetAsync($"/api/v1/keys/wraps/{wrapId}");
         Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
 
         var getBody = await getResp.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(wrapId, getBody.GetProperty("wrapId").GetString());
-        Assert.Equal("passphrase", getBody.GetProperty("wrapType").GetString());
+        Assert.Equal(wrapId, getBody.GetProperty("wrap_id").GetString());
+        Assert.Equal("passphrase", getBody.GetProperty("wrap_type").GetString());
         Assert.Equal(label, getBody.GetProperty("label").GetString());
         Assert.NotEmpty(getBody.GetProperty("salt").GetString()!);
         Assert.NotEmpty(getBody.GetProperty("nonce").GetString()!);
-        Assert.NotEmpty(getBody.GetProperty("wrappedKey").GetString()!);
+        Assert.NotEmpty(getBody.GetProperty("wrapped_key").GetString()!);
         Assert.Equal(600000, getBody.GetProperty("iterations").GetInt32());
 
         // LastUsedAt bazada yangilanganini tekshirish
@@ -121,7 +121,7 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
         var label = $"label_{Guid.NewGuid():N}";
         var postResp = await adminClient.PostAsJsonAsync("/api/v1/keys/wraps", MakeWrapPayload(label));
         var postBody = await postResp.Content.ReadFromJsonAsync<JsonElement>();
-        var wrapId = postBody.GetProperty("wrapId").GetString()!;
+        var wrapId = postBody.GetProperty("wrap_id").GetString()!;
 
         // 1-marta DELETE -> 204 NoContent
         var del1 = await adminClient.DeleteAsync($"/api/v1/keys/wraps/{wrapId}");
@@ -186,7 +186,7 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
         // 1. Create
         var postResp = await adminClient.PostAsJsonAsync("/api/v1/keys/wraps", MakeWrapPayload(label));
         var postBody = await postResp.Content.ReadFromJsonAsync<JsonElement>();
-        var wrapId = postBody.GetProperty("wrapId").GetString()!;
+        var wrapId = postBody.GetProperty("wrap_id").GetString()!;
 
         // 2. Retrieve
         var getResp = await userClient.GetAsync($"/api/v1/keys/wraps/{wrapId}");
@@ -227,7 +227,7 @@ public class KeyWrapTests : IClassFixture<WebApplicationFactory<Program>>
         var label = $"rate_label_{Guid.NewGuid():N}";
         var postResp = await adminClient.PostAsJsonAsync("/api/v1/keys/wraps", MakeWrapPayload(label));
         var postBody = await postResp.Content.ReadFromJsonAsync<JsonElement>();
-        var wrapId = postBody.GetProperty("wrapId").GetString()!;
+        var wrapId = postBody.GetProperty("wrap_id").GetString()!;
 
         using var scope = _factory.Services.CreateScope();
         var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();

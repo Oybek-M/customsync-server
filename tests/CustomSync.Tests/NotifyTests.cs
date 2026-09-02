@@ -42,14 +42,14 @@ public class NotifyTests : IClassFixture<WebApplicationFactory<Program>>
         var recordId = RecordId.Compute("edited", "acc01", peerHash, msgId, 1753900000L);
         return new
         {
-            recordId,
+            record_id = recordId,
             kind        = "edited",
-            accountHash = "acc01",
-            peerHash,
-            msgId       = (long)msgId,
-            occurredAt  = 1753900000L,
-            observedAt  = 1753900001L,
-            deviceId    = "test-device",
+            account_hash = "acc01",
+            peer_hash = peerHash,
+            msg_id       = (long)msgId,
+            occurred_at  = 1753900000L,
+            observed_at  = 1753900001L,
+            device_id    = "test-device",
             nonce       = Convert.ToBase64String(new byte[12]),
             payload     = Convert.ToBase64String(new byte[] { 1, 2, 3 })
         };

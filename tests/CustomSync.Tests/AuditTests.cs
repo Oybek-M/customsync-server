@@ -75,7 +75,7 @@ public class AuditTests : IClassFixture<WebApplicationFactory<Program>>
         });
 
         response.EnsureSuccessStatusCode();
-        var body     = await response.Content.ReadFromJsonAsync<EnrollResponse>();
+        var body     = await response.Content.ReadFromJsonAsync<EnrollResponse>(TestJson.Options);
         var deviceId = body!.DeviceId;
 
         var rows = await GetAuditRowsForDevice(deviceId);

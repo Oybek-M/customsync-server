@@ -58,17 +58,17 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var recordId = RecordId.Compute(kind, "acc01", peerHash, msgId, 1753900000L);
         return new
         {
-            recordId,
+            record_id = recordId,
             kind,
-            accountHash     = "acc01",
-            peerHash,
-            msgId            = (long)msgId,
-            occurredAt       = 1753900000L,
-            observedAt       = 1753900001L,
-            deviceId         = "test-device",
+            account_hash     = "acc01",
+            peer_hash = peerHash,
+            msg_id            = (long)msgId,
+            occurred_at       = 1753900000L,
+            observed_at       = 1753900001L,
+            device_id         = "test-device",
             nonce            = Convert.ToBase64String(new byte[12]),
             payload          = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-            targetRecordId
+            target_record_id = targetRecordId
         };
     }
 
@@ -155,10 +155,10 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var records  = pullBody.GetProperty("records").EnumerateArray().ToList();
 
         var ours = records.Where(r =>
-            r.GetProperty("peerHash").GetString() == peer).ToList();
+            r.GetProperty("peer_hash").GetString() == peer).ToList();
 
         Assert.Single(ours);
-        Assert.True(pullBody.GetProperty("nextSince").GetInt64() > 0);
+        Assert.True(pullBody.GetProperty("next_since").GetInt64() > 0);
     }
 
     // ----------------------------------------------------------------
@@ -205,7 +205,7 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
             "/api/v1/sync/push", new { records = new[] { targetRec } });
         pushTarget.EnsureSuccessStatusCode();
 
-        var targetId = ((dynamic)targetRec).recordId as string
+        var targetId = ((dynamic)targetRec).record_id as string
             ?? RecordId.Compute("deleted", "acc01", peer, 1, 1753900000L);
 
         // Tombstone push qilamiz — target'ni o'chirishi kerak
@@ -213,17 +213,17 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var tombId   = RecordId.Compute("tombstone", "acc01", tombPeer, 99, 1753900500L);
         var tombRecord = new
         {
-            recordId        = tombId,
+            record_id        = tombId,
             kind            = "tombstone",
-            accountHash     = "acc01",
-            peerHash        = tombPeer,
-            msgId           = 99L,
-            occurredAt      = 1753900500L,
-            observedAt      = 1753900501L,
-            deviceId        = "test-device",
+            account_hash     = "acc01",
+            peer_hash        = tombPeer,
+            msg_id           = 99L,
+            occurred_at      = 1753900500L,
+            observed_at      = 1753900501L,
+            device_id        = "test-device",
             nonce           = Convert.ToBase64String(new byte[12]),
             payload         = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-            targetRecordId  = targetId
+            target_record_id  = targetId
         };
 
         var pushTomb = await client.PostAsJsonAsync(
@@ -241,12 +241,12 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 
         // Target qatori mavjud bo'lmasligi kerak
         var targetFound = allRecords.Any(r =>
-            r.GetProperty("recordId").GetString() == targetId);
+            r.GetProperty("record_id").GetString() == targetId);
         Assert.False(targetFound, "Target yozuv o'chirilishi kerak edi");
 
         // Tombstone esa saqlanishi kerak
         var tombFound = allRecords.Any(r =>
-            r.GetProperty("recordId").GetString() == tombId);
+            r.GetProperty("record_id").GetString() == tombId);
         Assert.True(tombFound, "Tombstone saqlanishi kerak edi");
     }
 
@@ -264,17 +264,17 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var fakeTargetId = "0000000000000000000000000000000000000000000000000000000000000000";
         var tombRecord = new
         {
-            recordId        = tombId,
+            record_id        = tombId,
             kind            = "tombstone",
-            accountHash     = "acc01",
-            peerHash        = peer,
-            msgId           = 77L,
-            occurredAt      = 1753901000L,
-            observedAt      = 1753901001L,
-            deviceId        = "test-device",
+            account_hash     = "acc01",
+            peer_hash        = peer,
+            msg_id           = 77L,
+            occurred_at      = 1753901000L,
+            observed_at      = 1753901001L,
+            device_id        = "test-device",
             nonce           = Convert.ToBase64String(new byte[12]),
             payload         = Convert.ToBase64String(new byte[] { 1, 2, 3 }),
-            targetRecordId  = fakeTargetId
+            target_record_id  = fakeTargetId
         };
 
         var resp = await client.PostAsJsonAsync(
@@ -292,7 +292,7 @@ public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var pullResp = await client.GetAsync($"/api/v1/sync/pull?since={since}&limit=500");
         var pullBody = await pullResp.Content.ReadFromJsonAsync<JsonElement>();
         var found = pullBody.GetProperty("records").EnumerateArray()
-            .Any(r => r.GetProperty("recordId").GetString() == tombId);
+            .Any(r => r.GetProperty("record_id").GetString() == tombId);
         Assert.True(found, "Tombstone pull orqali ko'rinishi kerak edi");
     }
 

@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using CustomSync.Api.Auth;
 using CustomSync.Api.Endpoints;
@@ -45,6 +46,14 @@ builder.Host.UseSerilog();
 builder.Services.AddDbContext<SyncDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"))
      .UseSnakeCaseNamingConvention());
+// HTTP JSON ham snake_case -- spec, .cmx almashuv formati va tdesktop
+// agenti (plan 02) hammasi shu shaklni ishlatadi. Standart camelCase'da
+// qolsa, klient yuborgan "record_id" serverga null bo'lib yetib borardi
+// va xato faqat runtime'da, tushunarsiz validatsiya xabari sifatida
+// ko'rinardi.
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower);
+
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<JwtIssuer>();
