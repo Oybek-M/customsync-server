@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-08-29**
+Oxirgi yangilanish: **2026-09-02**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -25,7 +25,7 @@ Branch `Oybek`, ish daraxti toza.
 | **6b — Avtorizatsiya rollari** | `59f2de7` + `57eb74d` | **Rejadan tashqari.** `device`/`admin` roli, darhol bekor qilish keshi |
 | 7 — Serilog + audit log | `cb0c09c` + `45412f2` | Audit actor alohida ustunda |
 
-### Plan 01b — Sync yadrosi (9 task'dan 8 tasi ✅)
+### Plan 01b — Sync yadrosi ✅ TO'LIQ TUGADI
 
 | Task | Commit | Natija |
 |---|---|---|
@@ -37,41 +37,49 @@ Branch `Oybek`, ish daraxti toza.
 | 6 — WebSocket bildirishnoma | `3d27b48` | `{"type":"changes","seq":N}` signali |
 | 7 — `.cmx` almashuv formati | `ebe9a5a` | Import `PushAsync` orqali o'tadi |
 | 8 — Platformalararo vektorlar | `d1afa39` | Beshala oila .NET da tekshiriladi |
+| 9 — Deployment | `2ee8970` + `.gitattributes` | systemd `Type=exec`, nginx WS `map`, deploy README |
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 01b, Task 9 (deployment)
+## 2. 🔴 KEYINGI QADAM — plan tanlash
 
-01b ning **oxirgi** task'i. Undan keyin plan 01b yopiladi.
+**Plan 01a va 01b ikkalasi ham yopildi.** Backend to'liq ishlaydi:
+105 test, 0 warning, deploy fayllari tayyor.
 
-Task 9 faqat **konfiguratsiya fayllari** yaratadi — kod emas:
-`deploy/customsync.service`, `deploy/nginx-customsync.conf`,
-`deploy/README.md`. **Test soni o'zgarmaydi** (105 da qoladi).
+Keyingi ish qaysi planda davom etishi — qaror qabul qilinishi kerak:
 
-Plan matnini o'qiyotganda diqqat qiling:
+| Plan | Nima | Qayerda | Izoh |
+|---|---|---|---|
+| **02** | tdesktop sync agenti (C++/Qt) | **tdesktop repo'sida** | Mantiqiy keyingisi — backend bo'sh turibdi, unga yozadigan klient yo'q |
+| 03 | `server-controller` web app (Vue 3) | shu repo | Boshqaruv UI. 02 dan oldin qilinsa, ko'rsatadigan ma'lumot bo'lmaydi |
+| 04 | Storage lifecycle | shu repo | 5-bo'limdagi mayda ishlarning ko'pi shu yerda hal bo'ladi |
+| 05 | Always-on TDLib capture | shu repo | Ehtiyoji amaliy dalil bilan tasdiqlangan — `docs/plan05-real-world-evidence.md` |
+| 06 | Reliz boshqaruvi | — | Oxirgi |
 
-- ⚠️ Plandagi **"Qabul qilish mezonlari (1b)" bo'limi ESKIRGAN** — u
-  "25 test" deydi, biz 105 damiz. E'tibor bermang.
-- Nginx `client_max_body_size` `media.max_upload_bytes` (50MB) bilan
-  mos bo'lishi kerak.
-- `systemd` dagi `ReadWritePaths` media ildizi bilan mos bo'lsin —
-  `appsettings.json` dagi `Storage:MediaRoot`.
-- Deploy hujjatida yozilsin: `Jwt:SigningKey` bo'sh bo'lsa **startup
-  ataylab yiqiladi** (`Program.cs` da tekshiruv bor).
-- WebSocket uchun nginx'da `proxy_read_timeout` uzun bo'lishi shart,
-  aks holda `/ws/notify` 60 soniyada uziladi.
-- ⚠️ **Server ishga tushirilmaydi.** Bu task faqat fayl yozadi;
-  ularni VPS ga qo'llash — foydalanuvchining ishi.
+**Tavsiya: plan 02.** Backend'ning hech bir qismi haqiqiy klient bilan
+sinalmagan — barcha 105 test serverning o'ziga qaraydi. Birinchi
+haqiqiy klient ulangunicha protokolda yana nechta nomuvofiqlik borligi
+noma'lum, va ular qancha kech topilsa shuncha qimmat.
 
-### Keyin nima bo'ladi
+### 🔴 Plan 02 boshlashdan oldin bilish shart
 
-| Plan | Nima |
-|---|---|
-| 02 | tdesktop sync agenti (C++/Qt) — **tdesktop repo'sida bajariladi** |
-| 03 | `server-controller` web app (Vue 3) |
-| 04 | Storage lifecycle — monitoring, retention, arxivlash |
-| 05 | Always-on TDLib capture service |
-| 06 | Reliz boshqaruvi |
+- **`record_id` formulasi o'zgargan** — spec §0.12, `account_hash`
+  qo'shildi. `activity` kind uchun u **bo'sh satr**.
+- **`peer_hash` formulasi o'zgarmagan.**
+- **`tombstone` push qilganda `target_record_id` OCHIQ maydonda ham
+  yuborilishi shart** — spec §0.13. Server `payload` ni o'qiy olmaydi.
+- **`sha256` ochiq matn ustidan**, shifrlashdan OLDIN (§0.5).
+- **Sxema versiyasi: v13 band** (A17 `read_at`). `sync_outbox` +
+  `sync_state` migratsiyasi **v14** bo'ladi —
+  `docs/a17-read-at-sync-requirement.md`.
+- Beshala vektor oilasi .NET da tasdiqlangan; C++ tomoni ham
+  `test-vectors.json` ga qarshi tekshirilishi shart.
+
+### Serverda qolgan, planga bog'liq bo'lmagan ish
+
+`read_at` konflikt qoidasi hali spec §0 ga yozilmagan va `message`
+kind payload sxemasida yo'q. Batafsil:
+`docs/a17-read-at-sync-requirement.md`. Server kodiga hozir tegmaydi.
 
 ---
 
