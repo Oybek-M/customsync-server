@@ -1,0 +1,42 @@
+[Unit]
+Description=CustomSync backend
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+# DIQQAT: Type=notify EMAS. Ilova Microsoft.Extensions.Hosting.Systemd
+# paketini ishlatmaydi, ya'ni systemd'ga "tayyorman" signalini hech qachon
+# yubormaydi. Type=notify bo'lsa systemd TimeoutStartSec kutadi, keyin
+# jarayonni o'ldiradi va Restart=always uni cheksiz qayta ishga tushiradi.
+Type=exec
+User=customsync
+Group=customsync
+WorkingDirectory=/var/www/customsync
+ExecStart=/usr/bin/dotnet /var/www/customsync/CustomSync.Api.dll
+Restart=always
+RestartSec=5
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5080
+StandardOutput=journal
+StandardError=journal
+
+# Resurs cheklovlari -- bitta jarayon butun VPS ni yeb qo'ymasligi uchun.
+MemoryMax=1G
+CPUQuota=150%
+
+# Qattiqlashtirish
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# ProtectSystem=strict butun fayl tizimini faqat-o'qish qiladi. Ikkala
+# yo'l ham kerak: media bloblari va Serilog fayllari (Serilog yo'li
+# appsettings.json da nisbiy -- "logs/", ya'ni WorkingDirectory ichida).
+ReadWritePaths=/var/lib/customsync /var/www/customsync/logs
+
+[Install]
+WantedBy=multi-user.target
