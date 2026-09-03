@@ -1,14 +1,70 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-02**
+Oxirgi yangilanish: **2026-09-03**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **105 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **109 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
+
+## 0. 🆕 2026-09-03 — plan 06 Task 1–4 va tozalash
+
+> Bu bo'limni **tdesktop sessiyasi** yozdi. Siz plan 02 ustida ishlayotgan
+> bo'lsangiz, quyidagilar sizning ishingizga tegmaydi — faqat bilib
+> turing, adashmaslik uchun.
+
+**Plan 06 Task 1–4 bajarildi** (Gemini, 4 commit: `a1e7161`, `c38350e`,
+`1660229`, `d6a7fe4`). Reliz yuklash API'si: `Modules/Releases` emas,
+`Services/Releases/` + `Api/Endpoints/ReleaseEndpoints.cs`.
+
+Klient tomoni (Task 5) tdesktop repo'sida allaqachon tayyor va
+sinovdan o'tgan: `tools/publish/release-api.ps1`.
+
+### Men (tdesktop sessiyasi) nima qildim
+
+**1. To'rtta o'lik fayl o'chirildi** (`git rm`):
+
+```
+src/CustomSync.Data/Entities/Release.cs          class Release : ReleaseEntity {}
+src/CustomSync.Data/Entities/ReleaseMirror.cs    class ReleaseMirror : ReleaseMirrorEntity {}
+src/CustomSync.Data/Entities/UploadSession.cs    class UploadSession : UploadSessionEntity {}
+src/CustomSync.Api/Modules/Releases/ReleaseController.cs   const string ModuleName
+```
+
+Ular hech qayerda ishlatilmasdi — `DbSet` lar `*Entity` klasslarga
+qaraydi. Gemini rejadagi "File Structure" ro'yxatini fayl nomlari
+darajasida takrorlab yaratgan edi.
+
+`Release : ReleaseEntity` shunchaki keraksiz emas: kimdir uni modelga
+qo'shsa, **EF Core buni meros deb hisoblab discriminator ustuni
+yaratadi** va migratsiya buziladi.
+
+O'chirilgandan keyin: `dotnet build` → 0 warning, `dotnet test` →
+109/109. Ya'ni o'lik ekani kompilyator bilan tasdiqlandi.
+
+`src/CustomSync.Api/Modules/` papkasi bo'shab qoldi va o'chirildi.
+`.gitignore` dagi `!src/**/[Rr]eleases/` qatoriga **tegilmadi** — u
+`Services/Releases/` uchun kerak (25–26-qatorlardagi .NET build
+chiqishi ignore'ini bekor qiladi).
+
+### ⚠️ Ochiq qolgan test bo'shlig'i
+
+`Upload_ResumesAfterInterruption` testida "uzilish" — bo'laklar
+orasida shunchaki to'xtash, ya'ni **toza chegarada**. Server hech
+qachon **yarim yozilgan bo'lak** holatini boshdan kechirmaydi.
+
+Aynan shu holat tdesktop klientidagi haqiqiy xatoni ochgandi:
+dastlabki klient uzilgan bo'lakni ayni offsetdan qayta yuborardi va
+416 olib butunlay yiqilardi.
+
+Server kodi bu holatga **to'g'ri yozilgan** — `WriteChunkAsync` da
+`finally` bloki `Received` ni `FileInfo.Length` dan yangilaydi —
+lekin sinalmagan. Bitta test qo'shilsa yopiladi: oqimni bo'lak
+o'rtasida uzish, so'ng `GET` yarim sonni qaytarishini va keyingi
+`PUT` o'sha offsetdan qabul qilinishini tekshirish.
 
 ## 1. Qilingan ishlar
 
