@@ -68,6 +68,10 @@ public class SettingsService(SyncDbContext db)
         // Spec §0.9 -- kvota. 0 = cheksiz.
         New("storage.quota_total_mb",       "0", "int", "storage", "Umumiy media hajmi chegarasi, MB (0 = cheksiz)"),
         New("storage.quota_per_device_mb",  "0", "int", "storage", "Qurilma bo'yicha media hajmi chegarasi, MB (0 = cheksiz)"),
+
+        // Plan 06 -- releases
+        New("releases.mirrors",              "[]",    "json", "releases", "Relizlarni tarqatish mirror'lari ro'yxati"),
+        New("releases.verify_after_publish", "false", "bool", "releases", "Tarqatilgandan so'ng HTTP GET orqali sha256 ni tekshirish"),
     ];
 
     private static ServerSettingEntity New(
