@@ -14,6 +14,9 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
     public DbSet<ServerSettingEntity>  ServerSettings  => Set<ServerSettingEntity>();
     public DbSet<EnrollmentCodeEntity> EnrollmentCodes => Set<EnrollmentCodeEntity>();
     public DbSet<AuditLogEntity>       AuditLogs       => Set<AuditLogEntity>();
+    public DbSet<ReleaseEntity>        Releases        => Set<ReleaseEntity>();
+    public DbSet<ReleaseMirrorEntity>  ReleaseMirrors  => Set<ReleaseMirrorEntity>();
+    public DbSet<UploadSessionEntity>  UploadSessions  => Set<UploadSessionEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -80,6 +83,30 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.At);
             e.HasIndex(x => x.ActorDeviceId).HasDatabaseName("idx_audit_actor");
+        });
+
+        b.Entity<ReleaseEntity>(e =>
+        {
+            e.ToTable("releases");
+            e.HasKey(x => x.ReleaseId);
+            e.HasIndex(x => new { x.Platform, x.Version, x.Channel }).IsUnique();
+        });
+
+        b.Entity<ReleaseMirrorEntity>(e =>
+        {
+            e.ToTable("release_mirrors");
+            e.HasKey(x => new { x.ReleaseId, x.Mirror });
+            e.HasOne(x => x.Release)
+             .WithMany(r => r.Mirrors)
+             .HasForeignKey(x => x.ReleaseId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<UploadSessionEntity>(e =>
+        {
+            e.ToTable("upload_sessions");
+            e.HasKey(x => x.SessionId);
+            e.HasIndex(x => x.ReleaseId);
         });
     }
 }
