@@ -66,6 +66,14 @@ builder.Services.AddScoped<InterchangeService>();
 builder.Services.AddScoped(sp => new MediaService(
     sp.GetRequiredService<SyncDbContext>(),
     builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media"));
+builder.Services.AddScoped(sp => new CustomSync.Services.Releases.UploadSessionStore(
+    sp.GetRequiredService<SyncDbContext>(),
+    builder.Configuration["Storage:ReleasesRoot"] ?? "/var/lib/customsync/releases"));
+builder.Services.AddScoped(sp => new CustomSync.Services.Releases.ReleaseService(
+    sp.GetRequiredService<SyncDbContext>(),
+    sp.GetRequiredService<CustomSync.Services.Releases.UploadSessionStore>(),
+    sp.GetRequiredService<SettingsService>(),
+    builder.Configuration["Storage:ReleasesRoot"] ?? "/var/lib/customsync/releases"));
 builder.Services.AddSingleton<DeviceRevocationCache>();
 builder.Services.AddSingleton<CustomSync.Api.Realtime.NotifyHub>();
 
@@ -193,6 +201,7 @@ app.MapKeyEndpoints();
 app.MapRecordEndpoints();
 app.MapStatsEndpoints();
 app.MapInterchangeEndpoints();
+app.MapReleaseEndpoints();
 
 app.Map("/ws/notify", async (HttpContext context, NotifyHub hub) =>
 {
