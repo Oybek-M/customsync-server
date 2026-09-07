@@ -2,7 +2,8 @@
 
 Multi-device sync backend — CustomMod ekotizimining server qismi.
 
-**Holat:** 🟡 implement boshlandi — plan 01a, 7 task'dan 2 tasi tugadi.
+**Holat:** ✅ plan **01a** (backend poydevori) va **01b** (sync yadrosi)
+tugadi — `dotnet test`: 105 test, hammasi o'tadi.
 Aniq holat va keyingi qadam: [`PROGRESS.md`](PROGRESS.md).
 
 ---
