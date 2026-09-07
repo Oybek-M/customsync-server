@@ -65,6 +65,18 @@ undan **ustun turadi** — 11 ta qaror bor.
 5. **Konfiguratsiya kodda bo'lmaydi** — `server_settings` jadvalida
    va web app'dan tahrirlanadi (K1 qoidasi).
 
+## Litsenziya
+
+[MIT](LICENSE).
+
+⚠️ Bu **faqat shu repo'ga** taalluqli. tdesktop mijoz tomoni
+(CustomMod) Telegram Desktop'ning **GPLv3 + OpenSSL istisnosi**
+ostida qoladi va shundayligicha qoladi. MIT kod GPL loyihasi ichida
+ishlatilishi mumkin, teskarisi esa yo'q — shuning uchun bu ajratma
+to'g'ri: GPLv3 mijoz + MIT server.
+
+---
+
 ## Nima uchun hujjatlar bu yerda emas
 
 Ikki loyiha bir xil protokolni bajaradi. Hujjat ikki joyda tursa,
