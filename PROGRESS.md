@@ -134,6 +134,36 @@ serverga yozadi — deploy qilinmagan serverga qarshi capture xizmatini
 yozish, ikkinchi tekshirilmagan qatlamni birinchisining ustiga qo'yish
 demak.
 
+### 🔴 Plan 05 ga kelganda hal qilinadigan: `libtdjson`
+
+Qaror KEYINGA qoldirildi (2026-09-09), lekin tahlil qilingan:
+
+**Windows build KERAK EMAS.** Capture xizmati VPS'da (Ubuntu)
+ishlaydi, ya'ni `libtdjson.so` (linux-x64) kerak. Laptopda build
+qilinsa `tdjson.dll` chiqadi — u faqat lokal ishlab chiqishga
+yaraydi, deploy'ga emas.
+
+Build og'irligi: ~8 GB RAM, `-j2` bilan 30-60+ daqiqa. Bu
+foydalanuvchining og'ir-build taqig'iga tushadi.
+
+Uchta yo'l, arzonidan boshlab:
+
+1. **Tayyor native NuGet paketi** — agar `linux-x64` ni qoplasa,
+   build umuman kerak emas. Ishlatishdan oldin nashr qiluvchisi va
+   versiyasi tekshirilsin: bu akkauntga ulanadigan kutubxona.
+2. **VPS'da build** — swap qo'shib. Sekin, lekin to'g'ri artefakt
+   darhol kerakli joyda chiqadi va laptopga tegmaydi.
+3. **Docker'da build** (mashinada Docker bor) — Linux `.so` ni
+   laptopda olish, konteynerga CPU/RAM chegarasi bilan.
+
+Yana ikkita to'siq, ikkalasini ham FOYDALANUVCHI hal qiladi:
+`api_id`/`api_hash` (my.telegram.org, repoga commit qilinmaydi) va
+telefon -> kod -> 2FA login. Agent bularni bajarmaydi.
+
+TDLib faqat ishga tushganda kerak (P/Invoke runtime'da bog'lanadi),
+kompilyatsiya uchun emas — ya'ni Task 1 ning skeleti va interop
+qatlami `.so` siz ham yozilishi mumkin.
+
 ### Serverda qolgan, planga bog'liq bo'lmagan ish
 
 `read_at` konflikt qoidasi hali spec §0 ga yozilmagan va `message`
