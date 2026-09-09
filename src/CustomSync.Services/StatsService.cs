@@ -164,7 +164,17 @@ public class StatsService(SyncDbContext db, SettingsService? settings = null)
             }
             else if (growth > 0)
             {
-                daysUntilFull = (int)(remaining / growth);
+                // long -> int cast'i to'g'ridan-to'g'ri qilinmaydi. Deyarli
+                // bo'sh turgan serverda (oyna ichida bitta kichik yozuv ->
+                // kuniga bir necha bayt) va katta diskda natija int32 ga
+                // sig'maydi va MANFIY songa aylanadi: 1 TB / 14 bayt =
+                // ~7*10^10 kun -> -1585872604. Panelda bu "disk to'lgan"
+                // dan ham yomonroq ko'rinadi. int.MaxValue = "amalda
+                // hech qachon".
+                var projected = remaining / growth;
+                daysUntilFull = projected > int.MaxValue
+                    ? int.MaxValue
+                    : (int)projected;
             }
         }
 

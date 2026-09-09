@@ -145,4 +145,28 @@ public class StorageMetricsTests : IClassFixture<DatabaseFixture>
         Assert.True(summary.DailyGrowthBytes > 0);
         Assert.Equal(0, summary.DaysUntilFull);
     }
+
+    [Fact]
+    public async Task Very_slow_growth_on_a_large_disk_does_not_overflow_to_a_negative()
+    {
+        await using var db = _fixture.CreateContext();
+        await ClearTablesAsync(db);
+
+        // Deyarli bo'sh turgan server: oyna ichida bitta kichik yozuv.
+        // O'sish kuniga bir necha bayt, disk esa 1 TB -> long hisobida
+        // ~7*10^10 kun chiqadi. int ga to'g'ridan-to'g'ri cast qilinsa u
+        // MANFIY songa aylanadi va panelda "-1585872604 kun" ko'rinadi.
+        db.Records.Add(MakeRecord(100, DateTime.UtcNow.AddDays(-6)));
+        await db.SaveChangesAsync();
+
+        var stats = new StatsService(db);
+        var summary = await stats.SummaryAsync(diskCapacityBytes: 1_000_000_000_000L);
+
+        Assert.True(summary.DailyGrowthBytes > 0);
+        Assert.NotNull(summary.DaysUntilFull);
+        Assert.True(
+            summary.DaysUntilFull >= 0,
+            $"DaysUntilFull manfiy bo'lmasligi kerak, olingan: {summary.DaysUntilFull}");
+    }
+
 }
