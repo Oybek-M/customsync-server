@@ -68,6 +68,7 @@ public class SettingsService(SyncDbContext db)
         // Spec §0.9 -- kvota. 0 = cheksiz.
         New("storage.quota_total_mb",       "0", "int", "storage", "Umumiy media hajmi chegarasi, MB (0 = cheksiz)"),
         New("storage.quota_per_device_mb",  "0", "int", "storage", "Qurilma bo'yicha media hajmi chegarasi, MB (0 = cheksiz)"),
+        New("storage.growth_window_days",   "7", "int", "storage", "Xotira o'sishini hisoblash oynasi (kun). Qisqaroq oyna tasodifiy kunlarga sezgir, uzunroq oyna esa yaqinda boshlangan o'sishni yashiradi"),
 
         // Plan 06 -- releases
         New("releases.mirrors",              "[]",    "json", "releases", "Relizlarni tarqatish mirror'lari ro'yxati"),
