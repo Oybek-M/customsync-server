@@ -99,37 +99,40 @@ o'rtasida uzish, so'ng `GET` yarim sonni qaytarishini va keyingi
 
 ## 2. 🔴 KEYINGI QADAM — plan tanlash
 
-**Plan 01a va 01b ikkalasi ham yopildi.** Backend to'liq ishlaydi:
-105 test, 0 warning, deploy fayllari tayyor.
+**01a, 01b va (tdesktop repo'sida) 02 yopildi.** Backend to'liq
+ishlaydi: 105 test, 0 warning, deploy fayllari tayyor. tdesktop
+agentining 11 ta task'i ham kodda tugadi va v7.2.6 upstream merge'idan
+keyin build o'tdi (2026-09-09).
 
-Keyingi ish qaysi planda davom etishi — qaror qabul qilinishi kerak:
+🔴 **Ammo klient bilan server HALI HECH QACHON GAPLASHMAGAN.**
+105 test ham, C++ selftest ham faqat o'z tomonini tekshiradi.
+Protokolda nechta nomuvofiqlik borligi noma'lum, va ular qancha kech
+topilsa shuncha qimmat.
+
+Server hech qayerda deploy qilinmagan. Shuning uchun quyidagilar
+**bloklangan**:
+
+| Bloklangan ish | Nima uchun |
+|---|---|
+| Qo'lda regressiya ro'yxatining 2- va 3-bo'limi | "server yetib bo'lmaydi" va "kalit yo'q" holatlarini sinash uchun server manzili kerak |
+| `_inFlight` watchdog | faqat tarmoq so'rovi javobsiz osilganda otiladi |
+| Kalit ulashish oqimi (Task 12) | `/keys/wraps` endpoint'isiz boshlanmaydi |
+| WebSocket bildirishnomasi (Task 9) | `/ws/notify` kerak |
 
 | Plan | Nima | Qayerda | Izoh |
 |---|---|---|---|
-| **02** | tdesktop sync agenti (C++/Qt) | **tdesktop repo'sida** | Mantiqiy keyingisi — backend bo'sh turibdi, unga yozadigan klient yo'q |
-| 03 | `server-controller` web app (Vue 3) | shu repo | Boshqaruv UI. 02 dan oldin qilinsa, ko'rsatadigan ma'lumot bo'lmaydi |
-| 04 | Storage lifecycle | shu repo | 5-bo'limdagi mayda ishlarning ko'pi shu yerda hal bo'ladi |
-| 05 | Always-on TDLib capture | shu repo | Ehtiyoji amaliy dalil bilan tasdiqlangan — `docs/plan05-real-world-evidence.md` |
+| **Deploy** | mavjud backend'ni VPS'ga chiqarish | shu repo | Yangi kod emas — `deploy/` fayllari tayyor. Yuqoridagi to'rttasini birdan ochadi |
+| 05 | Always-on TDLib capture | shu repo | Loyihaning asosiy maqsadi: asosiy akkaunt uzluksiz tirik qolsin. `docs/plan05-real-world-evidence.md` |
+| 03 | `server-controller` web app (Vue 3) | shu repo | Boshqaruv UI |
+| 04 | Storage lifecycle | shu repo | Mayda ishlarning ko'pi shu yerda |
 | 06 | Reliz boshqaruvi | — | Oxirgi |
 
-**Tavsiya: plan 02.** Backend'ning hech bir qismi haqiqiy klient bilan
-sinalmagan — barcha 105 test serverning o'ziga qaraydi. Birinchi
-haqiqiy klient ulangunicha protokolda yana nechta nomuvofiqlik borligi
-noma'lum, va ular qancha kech topilsa shuncha qimmat.
-
-### 🔴 Plan 02 boshlashdan oldin bilish shart
-
-- **`record_id` formulasi o'zgargan** — spec §0.12, `account_hash`
-  qo'shildi. `activity` kind uchun u **bo'sh satr**.
-- **`peer_hash` formulasi o'zgarmagan.**
-- **`tombstone` push qilganda `target_record_id` OCHIQ maydonda ham
-  yuborilishi shart** — spec §0.13. Server `payload` ni o'qiy olmaydi.
-- **`sha256` ochiq matn ustidan**, shifrlashdan OLDIN (§0.5).
-- **Sxema versiyasi: v13 band** (A17 `read_at`). `sync_outbox` +
-  `sync_state` migratsiyasi **v14** bo'ladi —
-  `docs/a17-read-at-sync-requirement.md`.
-- Beshala vektor oilasi .NET da tasdiqlangan; C++ tomoni ham
-  `test-vectors.json` ga qarshi tekshirilishi shart.
+**Tavsiya: avval deploy.** U yangi kod yozishni talab qilmaydi, lekin
+plan 02 ning butun natijasini "kompilyatsiya bo'ldi" darajasidan
+"haqiqatan ishlaydi" darajasiga ko'taradi. Plan 05 esa xuddi shu
+serverga yozadi — deploy qilinmagan serverga qarshi capture xizmatini
+yozish, ikkinchi tekshirilmagan qatlamni birinchisining ustiga qo'yish
+demak.
 
 ### Serverda qolgan, planga bog'liq bo'lmagan ish
 
