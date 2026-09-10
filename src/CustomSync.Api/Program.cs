@@ -8,6 +8,7 @@ using CustomSync.Api.Endpoints;
 using CustomSync.Api.Realtime;
 using CustomSync.Data;
 using CustomSync.Services;
+using CustomSync.Services.Storage.Targets;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -63,9 +64,15 @@ builder.Services.AddScoped<KeyWrapService>();
 builder.Services.AddScoped<RecordQueryService>();
 builder.Services.AddScoped<StatsService>();
 builder.Services.AddScoped<InterchangeService>();
+var mediaRoot = builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media";
+var archiveStagingRoot = builder.Configuration["Storage:ArchiveStagingRoot"] ?? "/var/lib/customsync/staging";
+ManualDownloadTarget.ValidateRoots(archiveStagingRoot, mediaRoot);
+
 builder.Services.AddScoped(sp => new MediaService(
     sp.GetRequiredService<SyncDbContext>(),
-    builder.Configuration["Storage:MediaRoot"] ?? "/var/lib/customsync/media"));
+    mediaRoot));
+builder.Services.AddScoped(sp => new ManualDownloadTarget(archiveStagingRoot));
+builder.Services.AddScoped<IArchiveTarget>(sp => sp.GetRequiredService<ManualDownloadTarget>());
 builder.Services.AddScoped(sp => new CustomSync.Services.Releases.UploadSessionStore(
     sp.GetRequiredService<SyncDbContext>(),
     builder.Configuration["Storage:ReleasesRoot"] ?? "/var/lib/customsync/releases"));
