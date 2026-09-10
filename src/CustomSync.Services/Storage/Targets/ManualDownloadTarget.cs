@@ -45,12 +45,22 @@ public class ManualDownloadTarget(string stagingRoot) : IArchiveTarget
         var fullStaging = Path.GetFullPath(stagingRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var fullMedia = Path.GetFullPath(mediaRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+        static bool Contains(string outer, string inner) =>
+            inner.StartsWith(outer + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            inner.StartsWith(outer + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+
+        // Tekshiruv IKKI TOMONLAMA. Staging media ichida bo'lsa arxivlar
+        // kvotaga sanaladi va purge'ni ishga tushirgan raqamni oshiradi.
+        // Media staging ichida bo'lsa esa staging fayllarini boshqaruvchi
+        // metodlar media blob'lariga yetib boradi. Ikkala daraxt ham
+        // bir-biridan tashqarida turishi shart.
         if (fullStaging.Equals(fullMedia, StringComparison.OrdinalIgnoreCase) ||
-            fullStaging.StartsWith(fullMedia + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-            fullStaging.StartsWith(fullMedia + Path.AltDirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            Contains(fullMedia, fullStaging) ||
+            Contains(fullStaging, fullMedia))
         {
             throw new InvalidOperationException(
-                $"Storage:ArchiveStagingRoot ('{stagingRoot}') Storage:MediaRoot ('{mediaRoot}') ichida joylashishi mumkin emas.");
+                $"Storage:ArchiveStagingRoot ('{stagingRoot}') va Storage:MediaRoot ('{mediaRoot}') "
+                + "bir-birining ichida joylashishi mumkin emas.");
         }
     }
 
@@ -228,6 +238,19 @@ public class ManualDownloadTarget(string stagingRoot) : IArchiveTarget
             : Path.Combine(fullStagingRoot, location));
 
         if (!fullPath.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(false);
+        }
+
+        // Faqat staging ildizining BEVOSITA bolasi o'chiriladi.
+        // ListStagedAsync rekursiv emas, ya'ni u faqat ildizdagi fayllarni
+        // ko'rsatadi -- o'chirish esa undan chuqurroqqa yetsa, ko'rinmagan
+        // narsani o'chirgan bo'lamiz. Bu ayniqsa media daraxti staging
+        // ichiga sozlanib qolgan holatda blob'larni yo'q qilishi mumkin.
+        var parent = Path.GetDirectoryName(fullPath);
+        if (parent is null ||
+            !parent.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                   .Equals(fullStagingRoot, StringComparison.OrdinalIgnoreCase))
         {
             return Task.FromResult(false);
         }

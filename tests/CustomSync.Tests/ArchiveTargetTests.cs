@@ -188,4 +188,42 @@ public class ArchiveTargetTests : IDisposable
             return await base.ReadAsync(buffer, cancellationToken);
         }
     }
+
+    [Fact]
+    public async Task Test8_Delete_cannot_reach_below_the_directory_that_list_shows()
+    {
+        // ListStagedAsync rekursiv EMAS -- u faqat staging ildizidagi
+        // fayllarni ko'rsatadi. DeleteStagedAsync esa istalgan chuqurlikka
+        // yetadi. Ya'ni o'chirish ko'rinmaydigan narsaga yetib boradi.
+        //
+        // Bu ValidateRoots teskari tomondan himoyalanmagani bilan
+        // birlashganda haqiqiy xavf: mediaRoot staging ICHIDA sozlansa,
+        // shu metod media blob'larini o'chira oladi.
+        var target = new ManualDownloadTarget(_tempStagingRoot);
+        await target.HealthCheckAsync();
+
+        var nested = Path.Combine(_tempStagingRoot, "nested");
+        Directory.CreateDirectory(nested);
+        var victim = Path.Combine(nested, "media_blob.bin");
+        await File.WriteAllBytesAsync(victim, new byte[] { 1, 2, 3 });
+
+        var deleted = await target.DeleteStagedAsync(victim);
+
+        Assert.False(deleted);
+        Assert.True(File.Exists(victim), "Staging ildizidan pastdagi fayl o'chirilmasligi kerak");
+    }
+
+    [Fact]
+    public void Test9_Media_root_inside_staging_root_is_refused_too()
+    {
+        // ValidateRoots faqat "staging media ichida" holatini tekshiradi.
+        // Teskarisi ham xuddi shunday xavfli: ikkala daraxt bir-biriga
+        // kirmasligi kerak.
+        var staging = Path.Combine(_tempStagingRoot, "arxiv");
+        var media = Path.Combine(staging, "media");
+
+        Assert.Throws<InvalidOperationException>(
+            () => ManualDownloadTarget.ValidateRoots(staging, media));
+    }
+
 }
