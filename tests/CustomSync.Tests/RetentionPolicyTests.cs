@@ -285,4 +285,54 @@ public class RetentionPolicyTests
         Assert.False(decision.ShouldAct);
         Assert.Contains("invalid", decision.Reason, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Test9_Never_delete_protects_regardless_of_its_own_age_window()
+    {
+        // Operator "peer_vip ni hech qachon o'chirma" degan himoya yozadi va
+        // unga OlderThanDays qiymatini ham beradi. Keyinroq kimdir keng
+        // qamrovli "90 kundan eskisini o'chir" siyosatini qo'shadi.
+        //
+        // Himoya siyosati YOSHGA bog'liq bo'lsa, 90-365 kun oralig'idagi
+        // yozuvlar himoyalanmay qoladi va jimgina o'chiriladi -- bu aynan
+        // never_delete oldini olishi kerak bo'lgan holat.
+        var candidate = new RetentionCandidate(
+            Kind: "activity",
+            PeerHash: "peer_vip",
+            HasMedia: false,
+            ReceivedAt: _now.AddDays(-100));
+
+        var protect = new RetentionPolicyEntity
+        {
+            PolicyId      = "pol_protect",
+            Name          = "VIP himoya",
+            Enabled       = true,
+            PeerHash      = "peer_vip",
+            OlderThanDays = 365,
+            Action        = RetentionActions.NeverDelete,
+            Priority      = 1
+        };
+
+        var broad = new RetentionPolicyEntity
+        {
+            PolicyId      = "pol_broad",
+            Name          = "Keng tozalash",
+            Enabled       = true,
+            OlderThanDays = 90,
+            Action        = RetentionActions.DeleteOnly,
+            Priority      = 0
+        };
+
+        var decision = RetentionEvaluator.Evaluate(
+            candidate,
+            new[] { protect, broad },
+            new Dictionary<string, int>(),
+            minDays: 30,
+            now: _now);
+
+        Assert.False(decision.ShouldAct);
+        Assert.Equal(RetentionActions.NeverDelete, decision.Action);
+        Assert.Equal("pol_protect", decision.PolicyId);
+    }
+
 }

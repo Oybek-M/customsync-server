@@ -82,9 +82,17 @@ public static class RetentionEvaluator
         // never_delete boshqa hamma siyosatlardan ustun turadi (ustuvorlikdan qat'i nazar).
         foreach (var policy in policies)
         {
+            // DIQQAT: bu yerda ATAYLAB yosh (OlderThanDays) tekshirilmaydi.
+            // never_delete -- himoya, va himoya QAMROV bo'yicha ishlaydi,
+            // yosh bo'yicha emas. Yoshga bog'lansa quyidagi holat yuzaga
+            // keladi: operator "peer_vip ni himoyala, 365 kundan eskisini"
+            // deb yozadi, keyinroq kimdir "90 kundan eskisini o'chir" degan
+            // keng siyosat qo'shadi -- va 90-365 kun oralig'idagi yozuvlar
+            // himoyasiz qolib jimgina o'chadi. Bu aynan never_delete oldini
+            // olishi kerak bo'lgan holat (plan 04 Task 2: "muhim chat
+            // keyinroq qo'shilgan keng qoidaga ilinib qolmasin").
             if (string.Equals(policy.Action, RetentionActions.NeverDelete, StringComparison.OrdinalIgnoreCase) &&
-                MatchesScope(policy, candidate) &&
-                IsOlderThan(candidate.ReceivedAt, policy.OlderThanDays, now))
+                MatchesScope(policy, candidate))
             {
                 return new RetentionDecision(
                     ShouldAct: false,
