@@ -17,6 +17,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
     public DbSet<ReleaseEntity>        Releases        => Set<ReleaseEntity>();
     public DbSet<ReleaseMirrorEntity>  ReleaseMirrors  => Set<ReleaseMirrorEntity>();
     public DbSet<UploadSessionEntity>  UploadSessions  => Set<UploadSessionEntity>();
+    public DbSet<RetentionPolicyEntity> RetentionPolicies => Set<RetentionPolicyEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -107,6 +108,13 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.ToTable("upload_sessions");
             e.HasKey(x => x.SessionId);
             e.HasIndex(x => x.ReleaseId);
+        });
+
+        b.Entity<RetentionPolicyEntity>(e =>
+        {
+            e.ToTable("retention_policies");
+            e.HasKey(x => x.PolicyId);
+            e.HasIndex(x => x.Priority);
         });
     }
 }

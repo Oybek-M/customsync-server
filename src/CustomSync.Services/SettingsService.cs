@@ -55,7 +55,7 @@ public class SettingsService(SyncDbContext db)
         // shart -- aks holda mijoz o'chirgan yozuvni server pull orqali
         // qaytarib beradi, mijoz yana o'chiradi, cheksiz sikl yuzaga
         // keladi. Retention hech qachon tombstone yaratmaydi -- u
-        // lokal tozalash, global o'chirish emas.
+        New("retention.min_days",             "30", "int", "retention", "Retention siyosatlarining minimal muddati (kun). Klient 30 kun saqlaydi, server undan kam bo'lishiga yo'l qo'ymaydi"),
         New("retention.deleted_days",         "0",  "int", "retention", "`deleted` yozuvlarini saqlash muddati (0 = cheksiz)"),
         New("retention.edited_days",          "0",  "int", "retention", "`edited` yozuvlarini saqlash muddati (0 = cheksiz)"),
         New("retention.activity_days",        "90", "int", "retention", "`activity` yozuvlarini saqlash muddati. Mijozda 30 kun -- server UZUNROQ saqlashi shart, aks holda cheksiz sikl yuzaga keladi"),
