@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-03**
+Oxirgi yangilanish: **2026-09-11**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **109 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **135 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -95,44 +95,75 @@ o'rtasida uzish, so'ng `GET` yarim sonni qaytarishini va keyingi
 | 8 — Platformalararo vektorlar | `d1afa39` | Beshala oila .NET da tekshiriladi |
 | 9 — Deployment | `2ee8970` + `.gitattributes` | systemd `Type=exec`, nginx WS `map`, deploy README |
 
+### Plan 04 — Storage lifecycle 🟡 JARAYONDA (3/6)
+
+Har task Gemini'ga prompt bilan berildi va hisobotiga ishonilmasdan
+qayta tekshirildi: `dotnet test` mustaqil yurgizildi, har
+implementatsiya **delegate'nikidan boshqa** usulda ataylab buzilib
+testlar bo'sh emasligi isbotlandi. Uchala task'da ham xato topildi.
+
+| Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
+|---|---|---|---|
+| 1 — Xotira metrikasi | `f0268d4` + `4b4162f` | `StatsService.SummaryAsync`; o'sish kuzatilgan oynaga bo'linadi va media'ni ham sanaydi | `DaysUntilFull` int'ga sig'masdan **manfiy** bo'lardi (1 TB / 16 bayt/kun → -1924509447 kun) |
+| 2 — Retention siyosatlari | `9f9b7e6` + `88b635d` | `RetentionPolicyEntity` + migratsiya; sof `RetentionEvaluator`; `retention.min_days` = 30 pol | `never_delete` himoyasi o'z **yosh oynasiga** bog'langan edi — keng qoida himoyalangan peer'ning 90–365 kunlik arxivini jimgina o'chirardi |
+| 3 — Arxiv target seam | `146e58d` + `338ce0c` | `IArchiveTarget` + `RequiresExplicitConfirmation`; `ManualDownloadTarget` | `DeleteStagedAsync` ro'yxatda ko'rinmaydigan pastki papkalarga yetardi; `ValidateRoots` media↔staging joylashuvini faqat bir tomondan tekshirardi |
+
+Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
+`tdesktop/docs/superpowers/plans/04-task{1,2,3}-prompt.md`):
+
+- **Task 1:** yangi `StorageMetricsService` yaratilmadi — `StatsService`
+  ikkala metodni allaqachon implement qilgan edi. Plandagi o'sish
+  formulasi doim 7 ga bo'lardi va media'ni sanamasdi.
+- **Task 2:** plan 01a dan beri seed qilingan `retention.<kind>_days`
+  sozlamalari **hech qayerda o'qilmas edi**. Endi ular evaluator ichida
+  eng past ustuvorlikdagi yashirin siyosat — ikkinchi, raqobatlashuvchi
+  mexanizm paydo bo'lmadi. Plan migratsiyani va testlarni unutgan edi.
+- **Task 3:** planning interfeysi "qayta o'qish = zaxira xavfsiz" deb
+  hisoblardi. Qo'lda yuklab olishda arxiv **o'sha diskda** turadi,
+  ya'ni bu yolg'on — shuning uchun `RequiresExplicitConfirmation`
+  qo'shildi. Path traversal va xato holatidagi yarim fayl ham tuzatildi.
+
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan tanlash
+## 2. 🔴 KEYINGI QADAM — plan 04 Task 6
 
-**01a, 01b va (tdesktop repo'sida) 02 yopildi.** Backend to'liq
-ishlaydi: 105 test, 0 warning, deploy fayllari tayyor. tdesktop
-agentining 11 ta task'i ham kodda tugadi va v7.2.6 upstream merge'idan
-keyin build o'tdi (2026-09-09).
+### Kelishilgan tartib (2026-09-09)
 
-🔴 **Ammo klient bilan server HALI HECH QACHON GAPLASHMAGAN.**
-105 test ham, C++ selftest ham faqat o'z tomonini tekshiradi.
-Protokolda nechta nomuvofiqlik borligi noma'lum, va ular qancha kech
-topilsa shuncha qimmat.
+    04 -> 05 -> 03 -> read_at -> TO'LIQ DEPLOY
 
-Server hech qayerda deploy qilinmagan. Shuning uchun quyidagilar
-**bloklangan**:
+Foydalanuvchi qarori. Dastlab 05 dan boshlash rejalashtirilgan edi;
+plan 05 ning o'z kirish sharti (*"04 majburiy — xizmat doimiy ma'lumot
+oqimi hosil qiladi va xotira boshqaruvisiz disk tez to'ladi"*) topilgach,
+04 oldinga olindi.
 
-| Bloklangan ish | Nima uchun |
-|---|---|
-| Qo'lda regressiya ro'yxatining 2- va 3-bo'limi | "server yetib bo'lmaydi" va "kalit yo'q" holatlarini sinash uchun server manzili kerak |
-| `_inFlight` watchdog | faqat tarmoq so'rovi javobsiz osilganda otiladi |
-| Kalit ulashish oqimi (Task 12) | `/keys/wraps` endpoint'isiz boshlanmaydi |
-| WebSocket bildirishnomasi (Task 9) | `/ws/notify` kerak |
+⚠️ **Deploy oxirida — bu ongli qaror, xavfi yozib qo'yilgan.**
+Klient bilan server hali hech qachon gaplashmagan: 135 server testi ham,
+C++ selftest ham faqat o'z tomonini tekshiradi, `test-vectors.json` esa
+HTTP xulqini (enroll, bir martalik refresh token, cursor semantikasi,
+403, WebSocket handshake) qoplamaydi. Plan 05 shu kontraktning C# dagi
+ikkinchi implementatsiyasi bo'ladi — nomuvofiqlik chiqsa, u ikkala kod
+bazasida birdan topiladi. Deploy'gacha quyidagilar **bloklangan**:
+qo'lda regressiya ro'yxatining 2–3-bo'limi, `_inFlight` watchdog, kalit
+ulashish oqimi, WebSocket bildirishnomasi.
 
-| Plan | Nima | Qayerda | Izoh |
-|---|---|---|---|
-| **Deploy** | mavjud backend'ni VPS'ga chiqarish | shu repo | Yangi kod emas — `deploy/` fayllari tayyor. Yuqoridagi to'rttasini birdan ochadi |
-| 05 | Always-on TDLib capture | shu repo | Loyihaning asosiy maqsadi: asosiy akkaunt uzluksiz tirik qolsin. `docs/plan05-real-world-evidence.md` |
-| 03 | `server-controller` web app (Vue 3) | shu repo | Boshqaruv UI |
-| 04 | Storage lifecycle | shu repo | Mayda ishlarning ko'pi shu yerda |
-| 06 | Reliz boshqaruvi | — | Oxirgi |
+### Plan 04 ichidagi tartib: 3 -> 6 -> 7
 
-**Tavsiya: avval deploy.** U yangi kod yozishni talab qilmaydi, lekin
-plan 02 ning butun natijasini "kompilyatsiya bo'ldi" darajasidan
-"haqiqatan ishlaydi" darajasiga ko'taradi. Plan 05 esa xuddi shu
-serverga yozadi — deploy qilinmagan serverga qarshi capture xizmatini
-yozish, ikkinchi tekshirilmagan qatlamni birinchisining ustiga qo'yish
-demak.
+| Task | Holat | Nima uchun shu o'rinda |
+|---|---|---|
+| 1, 2, 3 | ✅ | yuqoridagi jadval |
+| **6 — ikki fazali o'chirish** | ⚪ **KEYINGISI** | 05 ni aslida shu bloklaydi: diskni to'lishdan saqlaydigan yagona narsa |
+| 7 — rejalashtirilgan ishlar | ⚪ | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
+| 4 — S3 / SFTP target | ⏸ keyinga | xavfsizlik qo'shmaydi, faqat manzil. Task 3 seam'i tufayli o'chirish oqimiga tegmasdan keyin qo'shiladi |
+| 5 — Telegram bot target | ⏸ keyinga | xuddi shu sabab |
+| 8 — Web UI | → plan 03 | Task 1-3 dagi kabi |
+
+🔴 **Bu tartibning oqibatini bilib qo'ying:** `ManualDownloadTarget`
+arxivni **o'sha VPS diskiga** yozadi va uning tekshiruvi — inson
+tasdig'i. Ya'ni u joy bo'shatmaydi va **avtomatik ishlay olmaydi**.
+3 → 6 → 7 dan keyin avtomatik himoya faqat `delete_only` siyosatlari
+orqali ishlaydi — bu `activity` uchun maqbul (mijoz 30, server 90 kun
+saqlaydi). Avtomatik `archive_then_delete` kerak bo'lsa — Task 4 majburiy,
+chunki arxiv serverdan tashqariga chiqishi kerak.
 
 ### 🔴 Plan 05 ga kelganda hal qilinadigan: `libtdjson`
 
@@ -227,6 +258,11 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | Server eksporti media bloblarni o'z ichiga olmaydi | Ataylab; spec §0.7 |
 | Revocation keshi bitta jarayonga tegishli | Plan 04/06 — `LISTEN/NOTIFY` |
 | `auth.wrap_rate_per_hour` da 0 ≠ cheksiz (xavfsiz standart 5) | Ataylab; kodda izohlangan |
+| 🔴 `RequiresExplicitConfirmation` hali hech kim tomonidan **qo'llanmaydi** — Task 3 faqat bayroqni qo'shdi | **Plan 04 Task 6** — tasdiqsiz qo'lda arxivdan keyin o'chirish rad etilishi SHART |
+| Staging papkasining o'zi cheksiz o'sadi; avtomatik tozalash ataylab yo'q (yuklab olinmagan arxiv — yagona nusxa) | Plan 04 Task 6 yoki 7 |
+| `never_delete` siyosatida `OlderThanDays` endi ma'nosiz — formada yashirilmasa operator uni ishlayapti deb o'ylaydi | Plan 03 (UI) |
+| `SummaryAsync` agregatsiyasi `StorageAsync` bilan takrorlanadi | Plan 04 Task 6 ga qo'shib, bir qatorlik tozalash |
+| `ArchiveTargetTests.Test1` SHA-256 ni asl kontentdan hisoblaydi — checksum diskdan emas, kirish oqimidan olinsa ham o'tadi | Buzilgan fayl tizimi simulyatsiyasi kerak; hozircha oqlanmaydi |
 
 ---
 
