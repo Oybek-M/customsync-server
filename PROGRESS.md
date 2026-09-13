@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-11**
+Oxirgi yangilanish: **2026-09-14**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **135 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **152 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -107,7 +107,7 @@ testlar bo'sh emasligi isbotlandi. To'rtala task'da ham xato topildi va tuzatild
 | 1 — Xotira metrikasi | `f0268d4` + `4b4162f` | `StatsService.SummaryAsync`; o'sish kuzatilgan oynaga bo'linadi va media'ni ham sanaydi | `DaysUntilFull` int'ga sig'masdan **manfiy** bo'lardi (1 TB / 16 bayt/kun → -1924509447 kun) |
 | 2 — Retention siyosatlari | `9f9b7e6` + `88b635d` | `RetentionPolicyEntity` + migratsiya; sof `RetentionEvaluator`; `retention.min_days` = 30 pol | `never_delete` himoyasi o'z **yosh oynasiga** bog'langan edi — keng qoida himoyalangan peer'ning 90–365 kunlik arxivini jimgina o'chirardi |
 | 3 — Arxiv target seam | `146e58d` + `338ce0c` | `IArchiveTarget` + `RequiresExplicitConfirmation`; `ManualDownloadTarget` | `DeleteStagedAsync` ro'yxatda ko'rinmaydigan pastki papkalarga yetardi; `ValidateRoots` media↔staging joylashuvini faqat bir tomondan tekshirardi |
-| 6 — Ikki fazali xavfsiz o'chirish | `ce9a032` + `d6f5f40` | `ArchiveRunEntity` + migratsiya; `PurgeService` (`PreviewAsync`, `ExecuteAsync`, `ConfirmAsync`, `SweepOrphanedMediaAsync`); yetim media 24h karantini; 17 ta xavfsizlik testi | 1) Plandagi xavfli `RetentionScope` o'rniga har bir yozuv `RetentionEvaluator.Evaluate` dan o'tkaziladi (`never_delete` buzilmaydi); 2) `tombstone` qatorlar mutlaqo o'chirilmaydi; 3) Faqat aynan arxivlangan versiya `(record_id, observed_at, device_id)` o'chiriladi (superseded push o'chib ketmaydi); 4) Yetim media nomzodlari faqat o'chgan yozuvlardan olinadi, `orphaned_at` 24h saqlanadi, `ExistsAsync` bayroqni tozalaydi, fayllar tranzaksiya commit'idan keyin o'chadi; 5) Arxiv diskdagi temp `.cmx` faylga yoziladi, xotirani to'ldirmaydi; 6) `RequiresExplicitConfirmation` targetlar faqat tasdiqdan keyin o'chiriladi; 7) Tekshiruvdagi K1-K3 va T1-T3 to'liq tuzatildi |
+| 6 — Ikki fazali xavfsiz o'chirish | `ce9a032` + `388d6f4` + `620214e` | `ArchiveRunEntity` + migratsiya; `PurgeService` (`PreviewAsync`, `ExecuteAsync`, `ConfirmAsync`, `SweepOrphanedMediaAsync`); yetim media 24h karantini; 17 ta xavfsizlik testi | 1) Plandagi xavfli `RetentionScope` o'rniga har bir yozuv `RetentionEvaluator.Evaluate` dan o'tkaziladi (`never_delete` buzilmaydi); 2) `tombstone` qatorlar mutlaqo o'chirilmaydi; 3) Faqat aynan arxivlangan versiya `(record_id, observed_at, device_id)` o'chiriladi (superseded push o'chib ketmaydi); 4) Yetim media nomzodlari faqat o'chgan yozuvlardan olinadi, `orphaned_at` 24h saqlanadi, `ExistsAsync` bayroqni tozalaydi, fayllar tranzaksiya commit'idan keyin o'chadi; 5) Arxiv diskdagi temp `.cmx` faylga yoziladi, xotirani to'ldirmaydi; 6) `RequiresExplicitConfirmation` targetlar faqat tasdiqdan keyin o'chiriladi; 7) Tekshiruvdagi K1-K3 va T1-T3 to'liq tuzatildi |
 
 Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
 `tdesktop/docs/superpowers/plans/04-task{1,2,3}-prompt.md`):
@@ -148,6 +148,32 @@ Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
     - **T2:** Arxivga yozuvga bog'langan media bloblar kiritilishi, ularning baytlari, hajmi va nonce'lari mosligi hamda diskda yo'q media'lar `MissingMedia` sifatida to'g'ri sanalishi sinovdan o'tkazildi (`Test_T2`).
     - **T3:** Arxivdagi yozuvlar sonini solishtiruvchi `VerifyArchiveRecordCount` alohida ajratilib, nomuvofiqlikda `InvalidDataException` tashlashi unit test bilan qamrab olindi (`Test_T3`).
     - **Qo'shimcha:** `ConfirmAsync` da stream seek qilib bo'lmasa temp faylga ko'chirish, `UPDATE archive_runs` dagi atomar status tekshiruvi, `ExecuteAsync` dagi xatoliklarni `failed_verification`/`failed_upload` qilib saqlash va testlardagi global siyosatlarni `finally` da tozalash amalga oshirildi.
+
+### Task 6 tekshiruvi (2026-09-14) — qanday qabul qilindi
+
+Uch bosqich. Har birida testlar mustaqil yurgizildi va Gemini'nikidan
+BOSHQA mutatsiyalar qilindi.
+
+| Bosqich | Commit | Topilgan |
+|---|---|---|
+| 1. Implement (Gemini) | `ce9a032` | 146/146. Mutatsiyalardan 3 tasi ushlanmadi: siyosat `PolicyId` sharti, arxivdagi media, arxiv yozuvlar soni. Kod o'qishdan: **K1** `ConfirmAsync` retention'ni qayta baholamasdi (kutish paytida qo'shilgan `never_delete` chetlab o'tilardi); **K2** yetim blob `DELETE` shartni qayta tekshirmasdi (poyga); **K3** nomzodlar evaluator'dan oldin `Take(limit)` — siyosat och qolardi. Prompt: `tdesktop/docs/superpowers/plans/04-task6-fixes-prompt.md` |
+| 2. Tuzatish (Gemini) | `388d6f4` | 152/152. K1–K3, T1–T3 to'g'ri tuzatilgan. Yangi bo'shliq: K3 testi (limit 5, 7 yozuv) sahifa hajmi `Math.Clamp(limit, 100, 1000)` tufayli bitta sahifaga sig'ib, sahifalash sikli sinalmagan — "faqat birinchi sahifa" mutatsiyasi o'tib ketdi |
+| 3. Yakuniy (Claude) | `620214e` | Pastki chegara 1 ga tushirildi; o'sha mutatsiya endi `Test_K3` ni yiqitadi. 152/152 |
+
+Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
+
+- Keyset skani har run eng eskidan boshlanadi va `MaxScanLimit = 50 000`
+  da to'xtaydi. Eng eski 50 000+ yozuv himoyalangan bo'lsa, siyosat yana
+  och qoladi. Task 7 cursor'ni run'lar orasida saqlashi mumkin.
+- Ikki parallel `ConfirmAsync`: ikkalasi ham o'chiradi (faqat arxivlangan
+  versiyalar — ma'lumot yo'qolmaydi), keyin holat yangilanishida biri
+  istisno bilan tugaydi va `deleted_count` to'liq bo'lmasligi mumkin.
+  To'liq yechim — avval run'ni `confirming` holatiga "egallash".
+- Vaqtinchalik arxiv `Path.GetTempPath()` da. Ba'zi VPS'larda `/tmp` —
+  tmpfs (RAM); deploy'da staging diskiga ko'chirishni o'ylang.
+- `SweepOrphanedMediaAsync` public — Task 7 uni purge'dan mustaqil
+  chaqirishi kerak (aks holda karantindagi bloblar faqat mos yozuv
+  topilgan run'da tozalanadi).
 
 ---
 
