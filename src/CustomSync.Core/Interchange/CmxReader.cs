@@ -13,11 +13,18 @@ public static class CmxReader
 
     public const int SupportedFormatVersion = 1;
 
-    public static async Task<(
+    public static Task<(
         CmxManifest Manifest,
         IReadOnlyList<SyncRecord> Records,
         IReadOnlyDictionary<string, byte[]> Media)> ReadAsync(
             Stream input, CancellationToken ct = default)
+        => ReadAsync(input, readMedia: true, ct);
+
+    public static async Task<(
+        CmxManifest Manifest,
+        IReadOnlyList<SyncRecord> Records,
+        IReadOnlyDictionary<string, byte[]> Media)> ReadAsync(
+            Stream input, bool readMedia, CancellationToken ct = default)
     {
         using var zip = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
 
@@ -50,12 +57,15 @@ public static class CmxReader
         }
 
         var media = new Dictionary<string, byte[]>();
-        foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("media/")))
+        if (readMedia)
         {
-            await using var stream = entry.Open();
-            using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer, ct);
-            media[entry.Name] = buffer.ToArray();
+            foreach (var entry in zip.Entries.Where(e => e.FullName.StartsWith("media/")))
+            {
+                await using var stream = entry.Open();
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer, ct);
+                media[entry.Name] = buffer.ToArray();
+            }
         }
 
         return (manifest, records, media);

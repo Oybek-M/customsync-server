@@ -95,18 +95,19 @@ o'rtasida uzish, so'ng `GET` yarim sonni qaytarishini va keyingi
 | 8 — Platformalararo vektorlar | `d1afa39` | Beshala oila .NET da tekshiriladi |
 | 9 — Deployment | `2ee8970` + `.gitattributes` | systemd `Type=exec`, nginx WS `map`, deploy README |
 
-### Plan 04 — Storage lifecycle 🟡 JARAYONDA (3/6)
+### Plan 04 — Storage lifecycle 🟡 JARAYONDA (4/6)
 
 Har task Gemini'ga prompt bilan berildi va hisobotiga ishonilmasdan
 qayta tekshirildi: `dotnet test` mustaqil yurgizildi, har
 implementatsiya **delegate'nikidan boshqa** usulda ataylab buzilib
-testlar bo'sh emasligi isbotlandi. Uchala task'da ham xato topildi.
+testlar bo'sh emasligi isbotlandi. To'rtala task'da ham xato topildi va tuzatildi.
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
 | 1 — Xotira metrikasi | `f0268d4` + `4b4162f` | `StatsService.SummaryAsync`; o'sish kuzatilgan oynaga bo'linadi va media'ni ham sanaydi | `DaysUntilFull` int'ga sig'masdan **manfiy** bo'lardi (1 TB / 16 bayt/kun → -1924509447 kun) |
 | 2 — Retention siyosatlari | `9f9b7e6` + `88b635d` | `RetentionPolicyEntity` + migratsiya; sof `RetentionEvaluator`; `retention.min_days` = 30 pol | `never_delete` himoyasi o'z **yosh oynasiga** bog'langan edi — keng qoida himoyalangan peer'ning 90–365 kunlik arxivini jimgina o'chirardi |
 | 3 — Arxiv target seam | `146e58d` + `338ce0c` | `IArchiveTarget` + `RequiresExplicitConfirmation`; `ManualDownloadTarget` | `DeleteStagedAsync` ro'yxatda ko'rinmaydigan pastki papkalarga yetardi; `ValidateRoots` media↔staging joylashuvini faqat bir tomondan tekshirardi |
+| 6 — Ikki fazali xavfsiz o'chirish | `7e9add8` | `ArchiveRunEntity` + migratsiya; `PurgeService` (`PreviewAsync`, `ExecuteAsync`, `ConfirmAsync`); yetim media 24h karantini; 11 ta xavfsizlik testi | 1) Plandagi xavfli `RetentionScope` o'rniga har bir yozuv `RetentionEvaluator.Evaluate` dan o'tkaziladi (`never_delete` buzilmaydi); 2) `tombstone` qatorlar mutlaqo o'chirilmaydi; 3) Faqat aynan arxivlangan versiya `(record_id, observed_at, device_id)` o'chiriladi (superseded push o'chib ketmaydi); 4) Yetim media nomzodlari faqat o'chgan yozuvlardan olinadi, `orphaned_at` 24h saqlanadi, `ExistsAsync` bayroqni tozalaydi, fayllar tranzaksiya commit'idan keyin o'chadi; 5) Arxiv diskdagi temp `.cmx` faylga yoziladi, xotirani to'ldirmaydi; 6) `RequiresExplicitConfirmation` targetlar faqat tasdiqdan keyin o'chiriladi |
 
 Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
 `tdesktop/docs/superpowers/plans/04-task{1,2,3}-prompt.md`):
@@ -122,10 +123,27 @@ Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
   hisoblardi. Qo'lda yuklab olishda arxiv **o'sha diskda** turadi,
   ya'ni bu yolg'on — shuning uchun `RequiresExplicitConfirmation`
   qo'shildi. Path traversal va xato holatidagi yarim fayl ham tuzatildi.
+- **Task 6:**
+  - Plandagi `RetentionScope` kodi butunlay rad etildi, o'rniga har nomzod
+    `RetentionEvaluator.Evaluate` dan o'tkazilib, ustuvorlik va `never_delete`
+    100% hurmat qilinishi ta'minlandi.
+  - `kind = "tombstone"` qatorlari qat'iy chiqarib tashlandi — klientlar va
+    upsert sinkxronizatsiyasi uchun tombstone abadiy saqlanadi.
+  - O'chirish shartida plandagi `WHERE record_id IN (...)` o'rniga
+    `(record_id, observed_at, device_id)` uchligi ishlatildi — bu tanlov
+    va o'chirish orasida kelgan yangiroq versiyani o'chib ketishdan saqlaydi.
+  - Yetim media boshqaruvi: plandagi "bazadagi barcha havolasiz bloblar"
+    o'rniga faqat ayni shu purge paytida o'chgan yozuvlarga tegishli bloblar
+    saralanadi, `orphaned_at` belgisi qo'yiladi va 24 soatdan keyin o'chiriladi.
+    `MediaService.ExistsAsync` chaqirilsa `orphaned_at` NULL ga qaytariladi.
+  - Arxiv `MemoryStream` da emas, diskdagi temp `.cmx` faylda yaratilib,
+    `CmxReader` bilan qayta o'qilgach target'ga jo'natiladi.
+  - `RequiresExplicitConfirmation` targetlarida run `awaiting_confirmation`
+    holatiga o'tib kutadi, o'chirish faqat `ConfirmAsync` dan keyin bajariladi.
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 04 Task 6
+## 2. 🔴 KEYINGI QADAM — plan 04 Task 7
 
 ### Kelishilgan tartib (2026-09-09)
 
@@ -137,7 +155,7 @@ oqimi hosil qiladi va xotira boshqaruvisiz disk tez to'ladi"*) topilgach,
 04 oldinga olindi.
 
 ⚠️ **Deploy oxirida — bu ongli qaror, xavfi yozib qo'yilgan.**
-Klient bilan server hali hech qachon gaplashmagan: 135 server testi ham,
+Klient bilan server hali hech qachon gaplashmagan: 146 server testi ham,
 C++ selftest ham faqat o'z tomonini tekshiradi, `test-vectors.json` esa
 HTTP xulqini (enroll, bir martalik refresh token, cursor semantikasi,
 403, WebSocket handshake) qoplamaydi. Plan 05 shu kontraktning C# dagi
@@ -151,8 +169,8 @@ ulashish oqimi, WebSocket bildirishnomasi.
 | Task | Holat | Nima uchun shu o'rinda |
 |---|---|---|
 | 1, 2, 3 | ✅ | yuqoridagi jadval |
-| **6 — ikki fazali o'chirish** | ⚪ **KEYINGISI** | 05 ni aslida shu bloklaydi: diskni to'lishdan saqlaydigan yagona narsa |
-| 7 — rejalashtirilgan ishlar | ⚪ | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
+| 6 — ikki fazali o'chirish | ✅ | diskni to'lishdan saqlaydigan xavfsiz ikki fazali purge mexanizmi |
+| **7 — rejalashtirilgan ishlar** | ⚪ **KEYINGISI** | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
 | 4 — S3 / SFTP target | ⏸ keyinga | xavfsizlik qo'shmaydi, faqat manzil. Task 3 seam'i tufayli o'chirish oqimiga tegmasdan keyin qo'shiladi |
 | 5 — Telegram bot target | ⏸ keyinga | xuddi shu sabab |
 | 8 — Web UI | → plan 03 | Task 1-3 dagi kabi |

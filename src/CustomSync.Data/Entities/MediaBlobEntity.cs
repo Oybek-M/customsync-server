@@ -9,4 +9,5 @@ public class MediaBlobEntity
     public string   StoragePath        { get; set; } = null!;
     public DateTime UploadedAt         { get; set; }
     public string?  UploadedByDeviceId { get; set; }
+    public DateTime? OrphanedAt        { get; set; }
 }

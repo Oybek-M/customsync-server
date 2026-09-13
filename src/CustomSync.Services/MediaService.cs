@@ -12,7 +12,18 @@ namespace CustomSync.Services;
 public class MediaService(SyncDbContext db, string storageRoot)
 {
     public async Task<bool> ExistsAsync(string hash, CancellationToken ct = default)
-        => await db.MediaBlobs.AnyAsync(m => m.Hash == hash, ct);
+    {
+        var blob = await db.MediaBlobs.FirstOrDefaultAsync(m => m.Hash == hash, ct);
+        if (blob is null) return false;
+
+        if (blob.OrphanedAt != null)
+        {
+            blob.OrphanedAt = null;
+            await db.SaveChangesAsync(ct);
+        }
+
+        return true;
+    }
 
     public async Task<long> GetTotalStoredBytesAsync(CancellationToken ct = default)
         => await db.MediaBlobs.SumAsync(m => (long?)m.Size, ct) ?? 0L;

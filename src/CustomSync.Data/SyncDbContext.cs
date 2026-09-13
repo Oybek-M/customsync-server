@@ -18,6 +18,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
     public DbSet<ReleaseMirrorEntity>  ReleaseMirrors  => Set<ReleaseMirrorEntity>();
     public DbSet<UploadSessionEntity>  UploadSessions  => Set<UploadSessionEntity>();
     public DbSet<RetentionPolicyEntity> RetentionPolicies => Set<RetentionPolicyEntity>();
+    public DbSet<ArchiveRunEntity>     ArchiveRuns       => Set<ArchiveRunEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -52,6 +53,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
         {
             e.ToTable("media_blobs");
             e.HasKey(x => x.Hash);
+            e.HasIndex(x => x.OrphanedAt).HasFilter("orphaned_at IS NOT NULL");
         });
 
         b.Entity<RecordMediaEntity>(e =>
@@ -115,6 +117,15 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.ToTable("retention_policies");
             e.HasKey(x => x.PolicyId);
             e.HasIndex(x => x.Priority);
+        });
+
+        b.Entity<ArchiveRunEntity>(e =>
+        {
+            e.ToTable("archive_runs");
+            e.HasKey(x => x.RunId);
+            e.Property(x => x.RunId).ValueGeneratedOnAdd();
+            e.HasIndex(x => x.StartedAt);
+            e.HasIndex(x => x.PolicyId);
         });
     }
 }

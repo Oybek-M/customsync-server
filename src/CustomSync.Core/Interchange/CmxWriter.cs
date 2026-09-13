@@ -45,4 +45,35 @@ public static class CmxWriter
             await stream.WriteAsync(content, ct);
         }
     }
+
+    public static async Task WriteAsync(
+        Stream output,
+        CmxManifest manifest,
+        IReadOnlyList<SyncRecord> records,
+        IReadOnlyDictionary<string, string> mediaFiles,
+        CancellationToken ct = default)
+    {
+        using var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
+
+        var manifestEntry = zip.CreateEntry("manifest.json");
+        await using (var stream = manifestEntry.Open())
+            await JsonSerializer.SerializeAsync(stream, manifest, Json, ct);
+
+        var recordsEntry = zip.CreateEntry("records.jsonl");
+        await using (var stream = recordsEntry.Open())
+        await using (var writer = new StreamWriter(stream, Encoding.UTF8))
+        {
+            foreach (var record in records)
+                await writer.WriteLineAsync(JsonSerializer.Serialize(record, Json));
+        }
+
+        foreach (var (hash, filePath) in mediaFiles)
+        {
+            if (!File.Exists(filePath)) continue;
+            var entry = zip.CreateEntry($"media/{hash}");
+            await using var entryStream = entry.Open();
+            await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            await fileStream.CopyToAsync(entryStream, ct);
+        }
+    }
 }
