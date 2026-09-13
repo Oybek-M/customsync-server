@@ -128,6 +128,95 @@ public class PurgeService
         throw new ArgumentException($"Noma'lum yoki topilmagan retention siyosati: '{policyId}'");
     }
 
+    private sealed record RetentionEvaluationContext(
+        IReadOnlyList<RetentionPolicyEntity> Policies,
+        IReadOnlyDictionary<string, int> SettingsDays,
+        int MinDays,
+        DateTime Now);
+
+    private async Task<RetentionEvaluationContext> LoadEvaluationContextAsync(DateTime now, CancellationToken ct)
+    {
+        var allPolicies = await _db.RetentionPolicies.AsNoTracking()
+            .Where(p => p.Enabled)
+            .ToListAsync(ct);
+
+        var minDays = 30;
+        try
+        {
+            minDays = await _settings.GetIntAsync("retention.min_days", ct);
+        }
+        catch (KeyNotFoundException)
+        {
+            minDays = 30;
+        }
+        if (minDays <= 0) minDays = 30;
+
+        var settingsDays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var k in RecordKind.All)
+        {
+            try
+            {
+                var d = await _settings.GetIntAsync($"retention.{k}_days", ct);
+                if (d > 0) settingsDays[$"retention.{k}_days"] = d;
+            }
+            catch (KeyNotFoundException)
+            {
+                // Standart sozlama hali mavjud bo'lmasa o'tkazib yuboramiz
+            }
+        }
+
+        return new RetentionEvaluationContext(allPolicies, settingsDays, minDays, now);
+    }
+
+    /// <summary>
+    /// K1: Nomzod yozuvlarni RetentionEvaluator orqali baholash.
+    /// GetMatchedRecordsAsync va ConfirmAsync aynan shu yagona metoddan foydalanadi.
+    /// </summary>
+    private async Task<List<RecordEntity>> FilterMatchedRecordsAsync(
+        IReadOnlyList<RecordEntity> records,
+        string expectedPolicyId,
+        RetentionEvaluationContext evalCtx,
+        CancellationToken ct)
+    {
+        if (records.Count == 0) return [];
+
+        var ids = records.Select(r => r.RecordId).ToList();
+        var recordIdsWithMedia = (await _db.RecordMedia.AsNoTracking()
+            .Where(rm => ids.Contains(rm.RecordId))
+            .Select(rm => rm.RecordId)
+            .Distinct()
+            .ToListAsync(ct))
+            .ToHashSet();
+
+        var matched = new List<RecordEntity>();
+        foreach (var record in records)
+        {
+            // 🔴 QOIDA 2: Tombstone'lar HECH QACHON o'chirilmaydi!
+            if (record.Kind == RecordKind.Tombstone)
+            {
+                continue;
+            }
+
+            var candidate = new RetentionCandidate(
+                record.Kind,
+                record.PeerHash,
+                recordIdsWithMedia.Contains(record.RecordId),
+                record.ReceivedAt);
+
+            var decision = RetentionEvaluator.Evaluate(
+                candidate, evalCtx.Policies, evalCtx.SettingsDays, evalCtx.MinDays, evalCtx.Now);
+
+            // 🔴 T1: Faqat ShouldAct == true VA aynan shu expectedPolicyId g'olib bo'lganlar olinadi.
+            // Bu never_delete va boshqa yuqoriroq prioritetli siyosatlarni chetlab o'tishni to'liq oldini oladi.
+            if (decision.ShouldAct && string.Equals(decision.PolicyId, expectedPolicyId, StringComparison.OrdinalIgnoreCase))
+            {
+                matched.Add(record);
+            }
+        }
+
+        return matched;
+    }
+
     private async Task<List<RecordEntity>> GetMatchedRecordsAsync(
         ResolvedPolicy resolved,
         DateTime now,
@@ -161,73 +250,49 @@ public class PurgeService
             query = query.Where(r => r.ReceivedAt <= cutoff);
         }
 
-        var candidates = await query
-            .OrderBy(r => r.ReceivedAt)
-            .ThenBy(r => r.Seq)
-            .Take(limit)
-            .ToListAsync(ct);
+        var evalCtx = await LoadEvaluationContextAsync(now, ct);
 
-        if (candidates.Count == 0)
-        {
-            return [];
-        }
-
-        // Nomzodlar uchun media mavjudligini tekshirish
-        var candidateIds = candidates.Select(c => c.RecordId).ToList();
-        var recordIdsWithMedia = (await _db.RecordMedia.AsNoTracking()
-            .Where(rm => candidateIds.Contains(rm.RecordId))
-            .Select(rm => rm.RecordId)
-            .Distinct()
-            .ToListAsync(ct))
-            .ToHashSet();
-
-        // Barcha siyosatlar va sozlamalarni yuklaymiz
-        var allPolicies = await _db.RetentionPolicies.AsNoTracking()
-            .Where(p => p.Enabled)
-            .ToListAsync(ct);
-
-        var minDays = 30;
-        try
-        {
-            minDays = await _settings.GetIntAsync("retention.min_days", ct);
-        }
-        catch (KeyNotFoundException)
-        {
-            minDays = 30;
-        }
-        if (minDays <= 0) minDays = 30;
-
-        var settingsDays = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var k in RecordKind.All)
-        {
-            try
-            {
-                var d = await _settings.GetIntAsync($"retention.{k}_days", ct);
-                if (d > 0) settingsDays[$"retention.{k}_days"] = d;
-            }
-            catch (KeyNotFoundException)
-            {
-                // Standart sozlama hali mavjud bo'lmasa o'tkazib yuboramiz
-            }
-        }
-
-        // 🔴 QOIDA 1: HAR BIR nomzod RetentionEvaluator.Evaluate dan o'tkaziladi
+        // 🔴 K3 tuzatish: Keyset sahifalash (received_at, seq).
+        // Eng eski nomzodlar never_delete yoki boshqa siyosatga tegishli bo'lsa ham,
+        // undan yangiroq yaroqli yozuvlar och qolib ketmaydi (starvation yo'q).
+        const int MaxScanLimit = 50_000;
+        int pageSize = Math.Clamp(limit, 100, 1000);
+        int totalScanned = 0;
         var matched = new List<RecordEntity>();
-        foreach (var record in candidates)
+
+        DateTime? cursorReceivedAt = null;
+        long? cursorSeq = null;
+
+        while (matched.Count < limit && totalScanned < MaxScanLimit)
         {
-            var candidate = new RetentionCandidate(
-                record.Kind,
-                record.PeerHash,
-                recordIdsWithMedia.Contains(record.RecordId),
-                record.ReceivedAt);
-
-            var decision = RetentionEvaluator.Evaluate(candidate, allPolicies, settingsDays, minDays, now);
-
-            // Faqat ShouldAct == true VA aynan shu policyId bo'yicha qaror qabul qilinganlar olinadi.
-            // Bu never_delete va ustuvorlik chetlab o'tilmasligini 100% kafolatlaydi.
-            if (decision.ShouldAct && string.Equals(decision.PolicyId, resolved.PolicyId, StringComparison.OrdinalIgnoreCase))
+            int fetchCount = Math.Min(pageSize, MaxScanLimit - totalScanned);
+            IQueryable<RecordEntity> pageQuery = query;
+            if (cursorReceivedAt.HasValue && cursorSeq.HasValue)
             {
-                matched.Add(record);
+                var cr = cursorReceivedAt.Value;
+                var cs = cursorSeq.Value;
+                pageQuery = pageQuery.Where(r => r.ReceivedAt > cr || (r.ReceivedAt == cr && r.Seq > cs));
+            }
+
+            var page = await pageQuery
+                .OrderBy(r => r.ReceivedAt)
+                .ThenBy(r => r.Seq)
+                .Take(fetchCount)
+                .ToListAsync(ct);
+
+            if (page.Count == 0)
+                break;
+
+            totalScanned += page.Count;
+            cursorReceivedAt = page[^1].ReceivedAt;
+            cursorSeq = page[^1].Seq;
+
+            var pageMatched = await FilterMatchedRecordsAsync(page, resolved.PolicyId, evalCtx, ct);
+            foreach (var m in pageMatched)
+            {
+                matched.Add(m);
+                if (matched.Count >= limit)
+                    break;
             }
         }
 
@@ -444,39 +509,119 @@ public class PurgeService
 
         // 🔴 5-band: Arxiv xotiraga emas, vaqtinchalik faylga yoziladi
         var tempArchiveFile = Path.Combine(Path.GetTempPath(), $"customsync-purge-{Guid.NewGuid():N}.cmx");
-        string expectedHash;
+        string expectedHash = "";
         try
         {
-            await using (var fileStream = new FileStream(
-                tempArchiveFile, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, useAsync: true))
+            try
             {
-                await CmxWriter.WriteAsync(fileStream, manifest, syncRecords, mediaFilePaths, ct);
-            }
-
-            // Yuborishdan OLDIN mahalliy fayl CmxReader bilan o'qib ko'riladi
-            await using (var testRead = File.OpenRead(tempArchiveFile))
-            {
-                var (_, readRecords, _) = await CmxReader.ReadAsync(testRead, readMedia: false, ct);
-                if (readRecords.Count != syncRecords.Count)
+                await using (var fileStream = new FileStream(
+                    tempArchiveFile, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, useAsync: true))
                 {
-                    throw new InvalidDataException(
-                        $"Verification failed: arxiv yozuvlar soni mos kelmadi ({readRecords.Count} != {syncRecords.Count}).");
+                    await CmxWriter.WriteAsync(fileStream, manifest, syncRecords, mediaFilePaths, ct);
+                }
+
+                // Yuborishdan OLDIN mahalliy fayl CmxReader bilan o'qib ko'riladi
+                await using (var testRead = File.OpenRead(tempArchiveFile))
+                {
+                    var (_, readRecords, _) = await CmxReader.ReadAsync(testRead, readMedia: false, ct);
+                    VerifyArchiveRecordCount(readRecords.Count, syncRecords.Count);
+                }
+
+                // Mahalliy fayldan SHA-256 hisoblanadi
+                await using (var hashStream = File.OpenRead(tempArchiveFile))
+                {
+                    var hashBytes = await SHA256.HashDataAsync(hashStream, ct);
+                    expectedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
                 }
             }
-
-            // Mahalliy fayldan SHA-256 hisoblanadi
-            await using (var hashStream = File.OpenRead(tempArchiveFile))
+            catch (Exception ex)
             {
-                var hashBytes = await SHA256.HashDataAsync(hashStream, ct);
-                expectedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                // 🔴 Minor 10: Arxiv yaratish yoki tekshirishda xatolik yuz bersa run ro'yxatga olinadi
+                var failedRun = new ArchiveRunEntity
+                {
+                    PolicyId = resolved.PolicyId,
+                    TargetId = target.TargetId,
+                    Status = ArchiveRunStatus.FailedVerification,
+                    StartedAt = startedAt,
+                    FinishedAt = _clock(),
+                    MatchedCount = matched.Count,
+                    DeletedCount = 0,
+                    FreedBytes = 0,
+                    MissingMedia = missingMediaCount,
+                    ArchiveLocation = null,
+                    Sha256 = expectedHash,
+                    Error = ex.Message
+                };
+                _db.ArchiveRuns.Add(failedRun);
+                await _db.SaveChangesAsync(ct);
+
+                await _audit.WriteAsync("purge.verification_failed", detail: new
+                {
+                    targetId = target.TargetId,
+                    error = ex.Message
+                }, ct: ct);
+
+                return new PurgeResult(
+                    Success: false,
+                    RunId: failedRun.RunId,
+                    Status: ArchiveRunStatus.FailedVerification,
+                    MatchedCount: matched.Count,
+                    DeletedCount: 0,
+                    FreedBytes: 0,
+                    MissingMedia: missingMediaCount,
+                    ArchiveLocation: null,
+                    Sha256: expectedHash,
+                    Error: ex.Message);
             }
 
             // Target'ga yuborish
             var archiveFileName = $"customsync-purge-{DateTime.UtcNow:yyyyMMdd-HHmmss}.cmx";
             Targets.ArchiveUploadResult uploadResult;
-            await using (var uploadStream = File.OpenRead(tempArchiveFile))
+            try
             {
-                uploadResult = await target.UploadAsync(archiveFileName, uploadStream, ct);
+                await using (var uploadStream = File.OpenRead(tempArchiveFile))
+                {
+                    uploadResult = await target.UploadAsync(archiveFileName, uploadStream, ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                // 🔴 Minor 10: Target istisno tashlasa run ro'yxatga olinadi
+                var failedRun = new ArchiveRunEntity
+                {
+                    PolicyId = resolved.PolicyId,
+                    TargetId = target.TargetId,
+                    Status = ArchiveRunStatus.FailedUpload,
+                    StartedAt = startedAt,
+                    FinishedAt = _clock(),
+                    MatchedCount = matched.Count,
+                    DeletedCount = 0,
+                    FreedBytes = 0,
+                    MissingMedia = missingMediaCount,
+                    ArchiveLocation = null,
+                    Sha256 = expectedHash,
+                    Error = $"Target exception: {ex.Message}"
+                };
+                _db.ArchiveRuns.Add(failedRun);
+                await _db.SaveChangesAsync(ct);
+
+                await _audit.WriteAsync("purge.upload_failed", detail: new
+                {
+                    targetId = target.TargetId,
+                    error = ex.Message
+                }, ct: ct);
+
+                return new PurgeResult(
+                    Success: false,
+                    RunId: failedRun.RunId,
+                    Status: ArchiveRunStatus.FailedUpload,
+                    MatchedCount: matched.Count,
+                    DeletedCount: 0,
+                    FreedBytes: 0,
+                    MissingMedia: missingMediaCount,
+                    ArchiveLocation: null,
+                    Sha256: expectedHash,
+                    Error: failedRun.Error);
             }
 
             if (!uploadResult.Success)
@@ -618,7 +763,7 @@ public class PurgeService
                     MissingMedia = missingMediaCount,
                     ArchiveLocation = uploadResult.Location,
                     Sha256 = expectedHash,
-                    Error = "Verification failed: target'dan yuklab olingan arxiv SHA256 checksumi mos kelmadi."
+                    Error = "Verification failed: target'dan qayta o'qilgan arxiv SHA-256 mos kelmadi."
                 };
                 _db.ArchiveRuns.Add(failedRun);
                 await _db.SaveChangesAsync(ct);
@@ -767,77 +912,258 @@ public class PurgeService
         target ??= _targets.FirstOrDefault(t => t.TargetId == run.TargetId)
             ?? throw new InvalidOperationException($"Target '{run.TargetId}' topilmadi.");
 
-        await using var stream = await target.DownloadAsync(run.ArchiveLocation, ct);
-        if (stream is null)
+        await using var downloadStream = await target.DownloadAsync(run.ArchiveLocation, ct);
+        if (downloadStream is null)
         {
             throw new InvalidOperationException(
                 $"Verification failed: target'dan arxivni o'qib bo'lmadi ({run.ArchiveLocation}).");
         }
 
-        // 🔴 7-band: SHA-256 tekshiruvi
-        var hashBytes = await SHA256.HashDataAsync(stream, ct);
-        var actualHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
-        if (!string.Equals(actualHash, run.Sha256, StringComparison.OrdinalIgnoreCase))
+        // 🔴 Minor 8: Agar oqim CanSeek bo'lmasa (masalan kelajakdagi tarmoq/S3 oqimlari),
+        // vaqtinchalik faylga ko'chirib, o'sha fayldan hash va CmxReader bilan o'qiymiz.
+        string? tempDownloadFile = null;
+        Stream stream = downloadStream;
+        if (!downloadStream.CanSeek)
         {
-            await _audit.WriteAsync("purge.confirmation_failed", detail: new
+            tempDownloadFile = Path.Combine(Path.GetTempPath(), $"customsync-confirm-{Guid.NewGuid():N}.cmx");
+            await using (var fs = new FileStream(tempDownloadFile, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 4096, useAsync: true))
             {
-                runId,
-                reason = "archive_altered",
-                expectedHash = run.Sha256,
-                actualHash
+                await downloadStream.CopyToAsync(fs, ct);
+            }
+            stream = new FileStream(tempDownloadFile, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+        }
+
+        try
+        {
+            // 🔴 7-band: SHA-256 tekshiruvi
+            var hashBytes = await SHA256.HashDataAsync(stream, ct);
+            var actualHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            if (!string.Equals(actualHash, run.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                await _audit.WriteAsync("purge.confirmation_failed", detail: new
+                {
+                    runId,
+                    reason = "archive_altered",
+                    expectedHash = run.Sha256,
+                    actualHash
+                }, ct: ct);
+
+                return new PurgeResult(
+                    Success: false,
+                    RunId: run.RunId,
+                    Status: run.Status,
+                    MatchedCount: run.MatchedCount,
+                    DeletedCount: 0,
+                    FreedBytes: 0,
+                    MissingMedia: run.MissingMedia,
+                    ArchiveLocation: run.ArchiveLocation,
+                    Sha256: run.Sha256,
+                    Error: "Verification failed: arxiv o'zgartirilgan, SHA256 checksumi mos kelmadi.");
+            }
+
+            if (stream.CanSeek)
+            {
+                stream.Position = 0;
+            }
+
+            // Arxivdan yozuvlarni o'qiymiz
+            var (_, records, _) = await CmxReader.ReadAsync(stream, readMedia: false, ct);
+            var archiveKeys = records
+                .Select(r => new PurgeTargetKey(r.RecordId, r.ObservedAt, r.DeviceId))
+                .ToList();
+
+            // 🔴 K1 tuzatish: Arxivdagi yozuvlarga mos keluvchi bazadagi joriy qatorlarni olib,
+            // GetMatchedRecordsAsync dagi bilan AYNAN bir xil evaluator filtridan o'tkazamiz.
+            // Agar tasdiqlash kutilgan oraliqda operator never_delete qo'shgan bo'lsa yoki
+            // siyosat o'zgargan bo'lsa, u yozuvlar o'chirilmaydi!
+            var archiveRecordIds = archiveKeys.Select(k => k.RecordId).Distinct().ToList();
+            var currentDbRecords = await _db.Records.AsNoTracking()
+                .Where(r => archiveRecordIds.Contains(r.RecordId))
+                .ToListAsync(ct);
+
+            var archiveKeySet = new HashSet<(string RecordId, long ObservedAt, string DeviceId)>(
+                archiveKeys.Select(k => (k.RecordId, k.ObservedAt, k.DeviceId)));
+            var candidateDbRecords = currentDbRecords
+                .Where(r => archiveKeySet.Contains((r.RecordId, r.ObservedAt, r.DeviceId)))
+                .ToList();
+
+            var confirmEvalCtx = await LoadEvaluationContextAsync(_clock(), ct);
+            var verifiedRecords = await FilterMatchedRecordsAsync(candidateDbRecords, run.PolicyId, confirmEvalCtx, ct);
+            var targetKeys = verifiedRecords
+                .Select(r => new PurgeTargetKey(r.RecordId, r.ObservedAt, r.DeviceId))
+                .ToList();
+
+            // 3-banddagi shart bilan o'chiramiz
+            var (deletedCount, freedBytes) = await DeleteRecordsAndCleanMediaAsync(targetKeys, _clock(), ct);
+
+            // 🔴 Minor 9: Holat o'tishini shartli va atomar qilamiz.
+            // Parallel ConfirmAsync chaqiruvlari run'dagi deleted_count ni ustiga yozmasin.
+            var connection = (NpgsqlConnection)_db.Database.GetDbConnection();
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync(ct);
+            }
+
+            const string updateRunSql = """
+                UPDATE archive_runs
+                SET status = @completedStatus,
+                    deleted_count = @deletedCount,
+                    freed_bytes = @freedBytes,
+                    finished_at = @finishedAt
+                WHERE run_id = @runId
+                  AND status = @awaitingStatus;
+                """;
+
+            var finishedAt = _clock();
+            await using (var cmd = new NpgsqlCommand(updateRunSql, connection))
+            {
+                cmd.Parameters.AddWithValue("completedStatus", ArchiveRunStatus.Completed);
+                cmd.Parameters.AddWithValue("deletedCount", deletedCount);
+                cmd.Parameters.AddWithValue("freedBytes", freedBytes);
+                cmd.Parameters.AddWithValue("finishedAt", finishedAt);
+                cmd.Parameters.AddWithValue("runId", run.RunId);
+                cmd.Parameters.AddWithValue("awaitingStatus", ArchiveRunStatus.AwaitingConfirmation);
+
+                var rowsUpdated = await cmd.ExecuteNonQueryAsync(ct);
+                if (rowsUpdated == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Run {runId} allaqachon boshqa parallel jarayon tomonidan tasdiqlangan yoki holati o'zgargan.");
+                }
+            }
+
+            run.Status = ArchiveRunStatus.Completed;
+            run.DeletedCount = deletedCount;
+            run.FreedBytes = freedBytes;
+            run.FinishedAt = finishedAt;
+
+            await _audit.WriteAsync("purge.confirmed", detail: new
+            {
+                runId = run.RunId,
+                deleted = deletedCount,
+                freed = freedBytes
             }, ct: ct);
 
             return new PurgeResult(
-                Success: false,
+                Success: true,
                 RunId: run.RunId,
-                Status: run.Status,
+                Status: ArchiveRunStatus.Completed,
                 MatchedCount: run.MatchedCount,
-                DeletedCount: 0,
-                FreedBytes: 0,
+                DeletedCount: deletedCount,
+                FreedBytes: freedBytes,
                 MissingMedia: run.MissingMedia,
                 ArchiveLocation: run.ArchiveLocation,
                 Sha256: run.Sha256,
-                Error: "Verification failed: arxiv o'zgartirilgan, SHA256 checksumi mos kelmadi.");
+                Error: null);
+        }
+        finally
+        {
+            if (stream != downloadStream)
+            {
+                await stream.DisposeAsync();
+            }
+
+            if (tempDownloadFile != null)
+            {
+                try
+                {
+                    if (File.Exists(tempDownloadFile)) File.Delete(tempDownloadFile);
+                }
+                catch
+                {
+                    // Tozalash xatosi e'tiborsiz qoldiriladi
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// K2 va Minor 11: 24 soatdan oshgan yetim bloblarni xavfsiz tozalash.
+    ///
+    /// Nega alohida tranzaksiya va nima uchun LOCK TABLE record_media IN SHARE MODE:
+    /// Yozuvlarni o'chirish tranzaksiyasi uzoqroq davom etishi mumkin. Agar LOCK TABLE
+    /// yozuvlar o'chirish tranzaksiyasi boshida olinsa, concurrent mijoz push'lari
+    /// uzoq vaqt kutib qolardi.
+    /// Shu sababli orphan sweep ALOHIDA, juda qisqa tranzaksiyada bajariladi.
+    /// Boshida `LOCK TABLE record_media IN SHARE MODE` chaqiriladi -- bu faqat
+    /// concurrent push'lar yangi record_media kiritishini bir necha millisoniyaga to'xtatib turadi,
+    /// lekin o'qish (SELECT) so'rovlarini to'smaydi.
+    /// O'chirish esa bitta atomar DELETE ... RETURNING so'rovi bilan bajariladi:
+    /// agar oradagi fursatda ExistsAsync chaqirilgan bo'lsa (orphaned_at NULL) yoki
+    /// yangi havola paydo bo'lsa (NOT EXISTS), blob o'chirilmaydi.
+    /// </summary>
+    public async Task<int> SweepOrphanedMediaAsync(DateTime now, CancellationToken ct = default)
+    {
+        var cutoff = now.AddHours(-24);
+        var connection = (NpgsqlConnection)_db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
         }
 
-        if (stream.CanSeek)
+        var filesToDelete = new List<string>();
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        try
         {
-            stream.Position = 0;
+            // Push'lar bilan poygani yopish uchun qisqa qulf
+            const string lockSql = "LOCK TABLE record_media IN SHARE MODE;";
+            await using (var cmd = new NpgsqlCommand(lockSql, connection, tx))
+            {
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            // 🔴 K2: Bitta atomar so'rov: shartlar DELETE paytida qayta tekshiriladi
+            const string deleteOldOrphansSql = """
+                DELETE FROM media_blobs mb
+                WHERE mb.orphaned_at IS NOT NULL
+                  AND mb.orphaned_at <= @cutoff
+                  AND NOT EXISTS (
+                      SELECT 1 FROM record_media rm WHERE rm.hash = mb.hash
+                  )
+                RETURNING mb.storage_path;
+                """;
+
+            await using (var cmd = new NpgsqlCommand(deleteOldOrphansSql, connection, tx))
+            {
+                cmd.Parameters.AddWithValue("cutoff", cutoff);
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    if (!reader.IsDBNull(0))
+                    {
+                        filesToDelete.Add(reader.GetString(0));
+                    }
+                }
+            }
+
+            await tx.CommitAsync(ct);
+            _db.ChangeTracker.Clear();
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
         }
 
-        // Arxivdan yozuvlarni o'qiymiz
-        var (_, records, _) = await CmxReader.ReadAsync(stream, readMedia: false, ct);
-        var targetKeys = records
-            .Select(r => new PurgeTargetKey(r.RecordId, r.ObservedAt, r.DeviceId))
-            .ToList();
-
-        // 3-banddagi shart bilan o'chiramiz
-        var (deletedCount, freedBytes) = await DeleteRecordsAndCleanMediaAsync(targetKeys, _clock(), ct);
-
-        run.Status = ArchiveRunStatus.Completed;
-        run.DeletedCount = deletedCount;
-        run.FreedBytes = freedBytes;
-        run.FinishedAt = _clock();
-        await _db.SaveChangesAsync(ct);
-
-        await _audit.WriteAsync("purge.confirmed", detail: new
+        // 🔴 4-band: Fayllar faqat tranzaksiya commit bo'lgandan KEYIN o'chiriladi
+        int deletedFilesCount = 0;
+        foreach (var file in filesToDelete)
         {
-            runId = run.RunId,
-            deleted = deletedCount,
-            freed = freedBytes
-        }, ct: ct);
+            try
+            {
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                    deletedFilesCount++;
+                }
+            }
+            catch
+            {
+                // Fayl tizimi xatosi e'tiborsiz qoldiriladi
+            }
+        }
 
-        return new PurgeResult(
-            Success: true,
-            RunId: run.RunId,
-            Status: ArchiveRunStatus.Completed,
-            MatchedCount: run.MatchedCount,
-            DeletedCount: deletedCount,
-            FreedBytes: freedBytes,
-            MissingMedia: run.MissingMedia,
-            ArchiveLocation: run.ArchiveLocation,
-            Sha256: run.Sha256,
-            Error: null);
+        return deletedFilesCount;
     }
 
     /// <summary>
@@ -865,7 +1191,6 @@ public class PurgeService
 
         var deletedIds = new List<string>();
         long freedBytes = 0;
-        var filesToDelete = new List<string>();
 
         await using var tx = await connection.BeginTransactionAsync(ct);
         try
@@ -946,44 +1271,6 @@ public class PurgeService
                 }
             }
 
-            // 🔴 4-band: Blob faqat orphaned_at 24 soatdan eski VA hali ham havolasiz bo'lsa o'chiriladi
-            var cutoff = now.AddHours(-24);
-            var oldOrphanHashes = new List<string>();
-            const string selectOldOrphansSql = """
-                SELECT hash, storage_path FROM media_blobs mb
-                WHERE mb.orphaned_at IS NOT NULL
-                  AND mb.orphaned_at <= @cutoff
-                  AND NOT EXISTS (
-                      SELECT 1 FROM record_media rm WHERE rm.hash = mb.hash
-                  );
-                """;
-            await using (var cmd = new NpgsqlCommand(selectOldOrphansSql, connection, tx))
-            {
-                cmd.Parameters.AddWithValue("cutoff", cutoff);
-                await using var reader = await cmd.ExecuteReaderAsync(ct);
-                while (await reader.ReadAsync(ct))
-                {
-                    oldOrphanHashes.Add(reader.GetString(0));
-                    if (!reader.IsDBNull(1))
-                    {
-                        filesToDelete.Add(reader.GetString(1));
-                    }
-                }
-            }
-
-            if (oldOrphanHashes.Count > 0)
-            {
-                // DB qatori tranzaksiya ichida o'chadi
-                const string deleteOldOrphansSql = """
-                    DELETE FROM media_blobs WHERE hash = ANY(@hashes::text[]);
-                    """;
-                await using (var cmd = new NpgsqlCommand(deleteOldOrphansSql, connection, tx))
-                {
-                    cmd.Parameters.AddWithValue("hashes", oldOrphanHashes.ToArray());
-                    await cmd.ExecuteNonQueryAsync(ct);
-                }
-            }
-
             await tx.CommitAsync(ct);
             _db.ChangeTracker.Clear();
         }
@@ -993,22 +1280,21 @@ public class PurgeService
             throw;
         }
 
-        // 🔴 4-band: Fayl — commit'dan KEYIN o'chiriladi
-        foreach (var path in filesToDelete)
-        {
-            try
-            {
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
-            }
-            catch
-            {
-                // Fayl o'chirishdagi I/O xatosi e'tiborsiz qoldiriladi
-            }
-        }
+        // 🔴 K2: 24 soatdan oshgan yetim bloblarni ALOHIDA qisqa tranzaksiyada tozalash
+        await SweepOrphanedMediaAsync(now, ct);
 
         return (deletedIds.Count, freedBytes);
+    }
+
+    /// <summary>
+    /// T3: Yuborishdan oldin mahalliy arxivdagi yozuvlar sonini solishtirish.
+    /// </summary>
+    public static void VerifyArchiveRecordCount(int actualCount, int expectedCount)
+    {
+        if (actualCount != expectedCount)
+        {
+            throw new InvalidDataException(
+                $"Verification failed: arxiv yozuvlar soni mos kelmadi ({actualCount} != {expectedCount}).");
+        }
     }
 }

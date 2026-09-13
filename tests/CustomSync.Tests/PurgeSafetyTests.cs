@@ -1,3 +1,4 @@
+using CustomSync.Core.Interchange;
 using System.Security.Cryptography;
 using CustomSync.Core.Contracts;
 using CustomSync.Data;
@@ -445,14 +446,22 @@ public class PurgeSafetyTests : IClassFixture<DatabaseFixture>, IDisposable
         var purge = new PurgeService(db, settingsService, mediaService, auditService, [target]);
         var result = await purge.ExecuteAsync(purgePolicy.PolicyId, target);
 
-        Assert.True(result.Success);
-        // Oddiy yozuv o'chirilgan bo'lishi kerak
-        var normalExists = await db.Records.AnyAsync(r => r.RecordId == recNormal.RecordId);
-        Assert.False(normalExists);
+        try
+        {
+            Assert.True(result.Success);
+            // Oddiy yozuv o'chirilgan bo'lishi kerak
+            var normalExists = await db.Records.AnyAsync(r => r.RecordId == recNormal.RecordId);
+            Assert.False(normalExists);
 
-        // 🔴 VIP yozuv never_delete himoyasi tufayli joyida qolishi SHART
-        var vipExists = await db.Records.AnyAsync(r => r.RecordId == recVip.RecordId);
-        Assert.True(vipExists);
+            // 🔴 VIP yozuv never_delete himoyasi tufayli joyida qolishi SHART
+            var vipExists = await db.Records.AnyAsync(r => r.RecordId == recVip.RecordId);
+            Assert.True(vipExists);
+        }
+        finally
+        {
+            db.RetentionPolicies.RemoveRange(purgePolicy, vipPolicy);
+            await db.SaveChangesAsync();
+        }
     }
 
     [Fact]
@@ -790,5 +799,323 @@ public class PurgeSafetyTests : IClassFixture<DatabaseFixture>, IDisposable
         // 🔴 Hech narsa o'chirilmasligi shart
         var stillExists = await db.Records.AnyAsync(r => r.RecordId == record.RecordId);
         Assert.True(stillExists);
+    }
+// ─────────────────────────────────────────────────────────────────────────────
+    // Tekshiruvdan chiqqan qo'shimcha xavfsizlik testlari (K1–K3, T1–T3)
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Test_K1_Confirm_re_evaluates_retention_protecting_newly_added_never_delete()
+    {
+        await using var db = _fixture.CreateContext();
+        var peerHash = Guid.NewGuid().ToString("N");
+        var record = MakeRecord(peerHash, daysAgo: 60);
+        db.Records.Add(record);
+
+        var policy = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_k1_test_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "K1 test policy",
+            Enabled = true,
+            Kind = "activity",
+            PeerHash = peerHash,
+            OlderThanDays = 30,
+            Action = RetentionActions.ArchiveThenDelete,
+            TargetId = "manual_download",
+            Priority = 10,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.RetentionPolicies.Add(policy);
+        await db.SaveChangesAsync();
+
+        var mediaRoot = Path.Combine(_tempDir, "media");
+        var mediaService = new MediaService(db, mediaRoot);
+        var settingsService = new SettingsService(db);
+        var auditService = new AuditService(db);
+        var target = new ManualDownloadTarget(Path.Combine(_tempDir, "manual-download-k1"));
+
+        var purge = new PurgeService(db, settingsService, mediaService, auditService, [target]);
+        var execResult = await purge.ExecuteAsync(policy.PolicyId, target);
+
+        Assert.True(execResult.Success);
+        Assert.Equal(ArchiveRunStatus.AwaitingConfirmation, execResult.Status);
+        Assert.Equal(0, execResult.DeletedCount);
+
+        // Operator bu peer uchun never_delete siyosatini qo'shadi
+        var neverDeletePolicy = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_k1_protect_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "K1 protect policy",
+            Enabled = true,
+            PeerHash = peerHash,
+            Action = RetentionActions.NeverDelete,
+            Priority = 1,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.RetentionPolicies.Add(neverDeletePolicy);
+        await db.SaveChangesAsync();
+
+        // Confirm chaqiriladi
+        var confirmResult = await purge.ConfirmAsync(execResult.RunId, target);
+        Assert.True(confirmResult.Success);
+        Assert.Equal(ArchiveRunStatus.Completed, confirmResult.Status);
+        Assert.Equal(0, confirmResult.DeletedCount); // never_delete tufayli 0 yozuv o'chadi
+
+        var stillExists = await db.Records.AnyAsync(r => r.RecordId == record.RecordId);
+        Assert.True(stillExists, "K1: never_delete qo'shilgan yozuv ConfirmAsync dan keyin ham o'chmasligi shart!");
+    }
+
+    [Fact]
+    public async Task Test_K2_Sweep_orphaned_media_atomic_not_exists_check()
+    {
+        await using var db = _fixture.CreateContext();
+        var mediaRoot = Path.Combine(_tempDir, "media");
+
+        // 25 soat oldin orphaned bo'lgan blob
+        var (blob, path) = MakeMediaBlob(mediaRoot, DateTime.UtcNow.AddDays(-60), orphanedAt: DateTime.UtcNow.AddHours(-25));
+        db.MediaBlobs.Add(blob);
+
+        // Shu blob'ga havola qiluvchi yangi yozuv
+        var peerHash = Guid.NewGuid().ToString("N");
+        var activeRec = MakeRecord(peerHash, daysAgo: 5);
+        db.Records.Add(activeRec);
+        db.RecordMedia.Add(new RecordMediaEntity { RecordId = activeRec.RecordId, Hash = blob.Hash });
+        await db.SaveChangesAsync();
+
+        var mediaService = new MediaService(db, mediaRoot);
+        var settingsService = new SettingsService(db);
+        var auditService = new AuditService(db);
+        var purge = new PurgeService(db, settingsService, mediaService, auditService, []);
+
+        // Sweep chaqiriladi
+        var deletedBlobs = await purge.SweepOrphanedMediaAsync(DateTime.UtcNow);
+
+        Assert.Equal(0, deletedBlobs);
+        Assert.True(File.Exists(path), "Yangi havola mavjud bo'lgan blob fayli o'chmasligi shart!");
+        var stillBlob = await db.MediaBlobs.FirstOrDefaultAsync(b => b.Hash == blob.Hash);
+        Assert.NotNull(stillBlob);
+    }
+
+    [Fact]
+    public async Task Test_K3_Candidate_starvation_keyset_skips_protected_and_deletes_eligible()
+    {
+        await using var db = _fixture.CreateContext();
+        var peerK3 = Guid.NewGuid().ToString("N");
+        var mediaRoot = Path.Combine(_tempDir, "media");
+
+        // 6 ta himoyalangan eski yozuv (received_at: 70 kun oldin) - bular media'ga ega
+        var protectedRecords = Enumerable.Range(0, 6)
+            .Select(i => MakeRecord(peerK3, daysAgo: 70))
+            .ToList();
+        db.Records.AddRange(protectedRecords);
+
+        foreach (var pr in protectedRecords)
+        {
+            var (blob, _) = MakeMediaBlob(mediaRoot, DateTime.UtcNow.AddDays(-70));
+            db.MediaBlobs.Add(blob);
+            db.RecordMedia.Add(new RecordMediaEntity { RecordId = pr.RecordId, Hash = blob.Hash });
+        }
+
+        // 1 ta yaroqli yangiroq yozuv (received_at: 50 kun oldin) - media'siz
+        var eligibleRecord = MakeRecord(peerK3, daysAgo: 50);
+        db.Records.Add(eligibleRecord);
+
+        // Media'li yozuvlar uchun never_delete (priority 100)
+        var protectPolicy = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_protect_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "Protect Media on Peer",
+            Enabled = true,
+            PeerHash = peerK3,
+            MediaOnly = true,
+            Action = RetentionActions.NeverDelete,
+            Priority = 100,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        // Shu peer'dagi barcha 30 kundan oshgan yozuvlarni o'chirish siyosati (priority 10)
+        var purgePolicy = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_eligible_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "Purge Older on Peer",
+            Enabled = true,
+            PeerHash = peerK3,
+            OlderThanDays = 30,
+            Action = RetentionActions.DeleteOnly,
+            Priority = 10,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.RetentionPolicies.AddRange(protectPolicy, purgePolicy);
+        await db.SaveChangesAsync();
+
+        var mediaService = new MediaService(db, mediaRoot);
+        var settingsService = new SettingsService(db);
+        var auditService = new AuditService(db);
+        var purge = new PurgeService(db, settingsService, mediaService, auditService, []);
+
+        try
+        {
+            // limit = 5 (eng eski 6 ta nomzod protected media'ga tegishli)
+            var result = await purge.ExecuteAsync(purgePolicy.PolicyId, limit: 5);
+
+            Assert.True(result.Success);
+            Assert.Equal(1, result.DeletedCount);
+
+            var eligibleExists = await db.Records.AnyAsync(r => r.RecordId == eligibleRecord.RecordId);
+            Assert.False(eligibleExists, "K3: Keyset pagination tufayli yaroqli yozuv topilib o'chirilishi shart!");
+        }
+        finally
+        {
+            db.RetentionPolicies.RemoveRange(protectPolicy, purgePolicy);
+            await db.SaveChangesAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Test_T1_Execute_policy_id_mismatch_never_deletes_record_won_by_higher_priority()
+    {
+        await using var db = _fixture.CreateContext();
+        var peerHash = Guid.NewGuid().ToString("N");
+        var record = MakeRecord(peerHash, daysAgo: 60);
+        db.Records.Add(record);
+
+        // Priority 20: archive_then_delete (A)
+        var policyA = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_high_archive_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "High Priority Archive Policy",
+            Enabled = true,
+            Kind = "activity",
+            PeerHash = peerHash,
+            OlderThanDays = 30,
+            Action = RetentionActions.ArchiveThenDelete,
+            TargetId = "working_target",
+            Priority = 20,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        // Priority 10: delete_only (B)
+        var policyB = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_low_delete_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "Low Priority Delete Policy",
+            Enabled = true,
+            Kind = "activity",
+            PeerHash = peerHash,
+            OlderThanDays = 30,
+            Action = RetentionActions.DeleteOnly,
+            Priority = 10,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        db.RetentionPolicies.AddRange(policyA, policyB);
+        await db.SaveChangesAsync();
+
+        var mediaRoot = Path.Combine(_tempDir, "media");
+        var mediaService = new MediaService(db, mediaRoot);
+        var settingsService = new SettingsService(db);
+        var auditService = new AuditService(db);
+        var target = new WorkingArchiveTarget();
+        var purge = new PurgeService(db, settingsService, mediaService, auditService, [target]);
+
+        // Siyosat B (delete_only) ishga tushiriladi
+        var result = await purge.ExecuteAsync(policyB.PolicyId);
+
+        // Evaluator da siyosat A yutadi (priority 20 > 10). Shuning uchun siyosat B hech narsa o'chirmasligi shart!
+        Assert.True(result.Success);
+        Assert.Equal(0, result.DeletedCount);
+
+        var stillExists = await db.Records.AnyAsync(r => r.RecordId == record.RecordId);
+        Assert.True(stillExists, "T1: Yuqori prioritetli siyosat yutgan yozuv quyi prioritetli siyosat tomonidan o'chirilmasligi shart!");
+    }
+
+    [Fact]
+    public async Task Test_T2_Archive_includes_referenced_media_blobs_and_counts_missing()
+    {
+        await using var db = _fixture.CreateContext();
+        var peerHash = Guid.NewGuid().ToString("N");
+        var record = MakeRecord(peerHash, daysAgo: 60);
+        db.Records.Add(record);
+
+        var mediaRoot = Path.Combine(_tempDir, "media");
+
+        // 1. Diskda mavjud bo'lgan blob
+        var (blob1, path1) = MakeMediaBlob(mediaRoot, DateTime.UtcNow.AddDays(-60));
+        db.MediaBlobs.Add(blob1);
+        db.RecordMedia.Add(new RecordMediaEntity { RecordId = record.RecordId, Hash = blob1.Hash });
+
+        // 2. Diskda MAVJUD BO'LMAGAN blob (missing media)
+        var missingHash = Guid.NewGuid().ToString("N");
+        var missingBlob = new MediaBlobEntity
+        {
+            Hash = missingHash,
+            Size = 100,
+            Nonce = new byte[12],
+            StoragePath = Path.Combine(mediaRoot, "non_existent_file"),
+            UploadedAt = DateTime.UtcNow.AddDays(-60),
+            UploadedByDeviceId = "dev-1"
+        };
+        db.MediaBlobs.Add(missingBlob);
+        db.RecordMedia.Add(new RecordMediaEntity { RecordId = record.RecordId, Hash = missingHash });
+
+        var policy = new RetentionPolicyEntity
+        {
+            PolicyId = "pol_t2_" + Guid.NewGuid().ToString("N")[..8],
+            Name = "T2 Media Archive Policy",
+            Enabled = true,
+            Kind = "activity",
+            PeerHash = peerHash,
+            OlderThanDays = 30,
+            Action = RetentionActions.ArchiveThenDelete,
+            TargetId = "working_target",
+            Priority = 10,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.RetentionPolicies.Add(policy);
+        await db.SaveChangesAsync();
+
+        var mediaService = new MediaService(db, mediaRoot);
+        var settingsService = new SettingsService(db);
+        var auditService = new AuditService(db);
+        var target = new WorkingArchiveTarget();
+        var purge = new PurgeService(db, settingsService, mediaService, auditService, [target]);
+
+        var result = await purge.ExecuteAsync(policy.PolicyId, target);
+
+        Assert.True(result.Success);
+        Assert.Equal(ArchiveRunStatus.Completed, result.Status);
+        Assert.Equal(1, result.DeletedCount);
+        Assert.Equal(1, result.MissingMedia); // Diskda yo'q blob MissingMedia = 1
+
+        // Target'dagi arxivni yuklab olib tekshiramiz
+        await using var archiveStream = await target.DownloadAsync(result.ArchiveLocation!);
+        Assert.NotNull(archiveStream);
+
+        var (manifest, syncRecords, mediaBytes) = await CmxReader.ReadAsync(archiveStream, readMedia: true);
+        Assert.Single(syncRecords);
+
+        // Arxiv ichida blob1 bo'lishi va baytlari mos kelishi shart
+        Assert.True(mediaBytes.ContainsKey(blob1.Hash), "Mavjud media blob arxiv ichida bo'lishi shart!");
+        var diskBytes = await File.ReadAllBytesAsync(path1);
+        Assert.Equal(diskBytes, mediaBytes[blob1.Hash]);
+
+        // RecordMedia dagi MediaRef.Size va Nonce media_blobs dan to'g'ri olingan
+        var ref1 = syncRecords[0].Media.FirstOrDefault(m => m.Hash == blob1.Hash);
+        Assert.NotNull(ref1);
+        Assert.Equal(blob1.Size, ref1.Size);
+        Assert.Equal(blob1.Nonce, ref1.Nonce);
+    }
+
+    [Fact]
+    public void Test_T3_VerifyArchiveRecordCount_throws_on_mismatch_and_succeeds_on_match()
+    {
+        // Mos kelmasa InvalidDataException tashlashi kerak
+        var ex = Assert.Throws<InvalidDataException>(
+            () => PurgeService.VerifyArchiveRecordCount(actualCount: 3, expectedCount: 4));
+        Assert.Contains("Verification failed: arxiv yozuvlar soni mos kelmadi", ex.Message);
+
+        // Mos kelsa xatosiz o'tishi kerak
+        PurgeService.VerifyArchiveRecordCount(actualCount: 5, expectedCount: 5);
     }
 }
