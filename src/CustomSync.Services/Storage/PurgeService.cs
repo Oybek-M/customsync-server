@@ -256,7 +256,10 @@ public class PurgeService
         // Eng eski nomzodlar never_delete yoki boshqa siyosatga tegishli bo'lsa ham,
         // undan yangiroq yaroqli yozuvlar och qolib ketmaydi (starvation yo'q).
         const int MaxScanLimit = 50_000;
-        int pageSize = Math.Clamp(limit, 100, 1000);
+        // Pastki chegara 1: aks holda kichik limit'li test (limit=5, 7 yozuv)
+        // bitta 100 lik sahifaga sig'ib, sahifalash sikli hech qachon
+        // sinalmasdi -- 'faqat birinchi sahifa' mutatsiyasi o'tib ketgan edi.
+        int pageSize = Math.Clamp(limit, 1, 1000);
         int totalScanned = 0;
         var matched = new List<RecordEntity>();
 
