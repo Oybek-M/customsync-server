@@ -310,10 +310,10 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | Server eksporti media bloblarni o'z ichiga olmaydi | Ataylab; spec §0.7 |
 | Revocation keshi bitta jarayonga tegishli | Plan 04/06 — `LISTEN/NOTIFY` |
 | `auth.wrap_rate_per_hour` da 0 ≠ cheksiz (xavfsiz standart 5) | Ataylab; kodda izohlangan |
-| 🔴 `RequiresExplicitConfirmation` hali hech kim tomonidan **qo'llanmaydi** — Task 3 faqat bayroqni qo'shdi | **Plan 04 Task 6** — tasdiqsiz qo'lda arxivdan keyin o'chirish rad etilishi SHART |
-| Staging papkasining o'zi cheksiz o'sadi; avtomatik tozalash ataylab yo'q (yuklab olinmagan arxiv — yagona nusxa) | Plan 04 Task 6 yoki 7 |
+| ✅ `RequiresExplicitConfirmation` Task 6 da **qo'llandi**: qo'lda target'da purge `AwaitingConfirmation` yozadi, audit'ga qayd qiladi va hech narsa o'chirmaydi (`PurgeService.cs`) | Hal qilindi (tekshirildi 2026-09-14); tasdiqdan keyin o'chirishni davom ettirish yo'li ham bor: `src/CustomSync.Services/Storage/PurgeService.cs:1003`, `src/CustomSync.Services/Storage/PurgeService.cs:173`, `src/CustomSync.Services/Storage/PurgeService.cs:896` |
+| Staging papkasining o'zi cheksiz o'sadi; avtomatik tozalash ataylab yo'q (yuklab olinmagan arxiv — yagona nusxa) | **Plan 04 Task 7** — Task 6 da ham qilinmadi, `DeleteStagedAsync` ning chaqiruvchisi hali yo'q |
 | `never_delete` siyosatida `OlderThanDays` endi ma'nosiz — formada yashirilmasa operator uni ishlayapti deb o'ylaydi | Plan 03 (UI) |
-| `SummaryAsync` agregatsiyasi `StorageAsync` bilan takrorlanadi | Plan 04 Task 6 ga qo'shib, bir qatorlik tozalash |
+| `SummaryAsync` agregatsiyasi `StorageAsync` bilan takrorlanadi | **Plan 04 Task 7** ga qo'shib, bir qatorlik tozalash (Task 6 da qilinmadi) |
 | `ArchiveTargetTests.Test1` SHA-256 ni asl kontentdan hisoblaydi — checksum diskdan emas, kirish oqimidan olinsa ham o'tadi | Buzilgan fayl tizimi simulyatsiyasi kerak; hozircha oqlanmaydi |
 
 ---
@@ -349,6 +349,20 @@ Connection string va `Jwt:SigningKey` —
 `src\CustomSync.Api\appsettings.Development.json` da (gitignore'da).
 `db-bootstrap.ps1` ni **qayta** ishga tushirish rolga yangi parol
 qo'yadi va faylni qayta yozadi.
+
+### 🔴 Boshqa kompyuterda davom ettirish (2026-09-14)
+
+Git bilan **ketmaydigan** narsalar va yangi mashinada nima qilish kerak:
+
+| Nima | Nega git'da yo'q | Yangi mashinada |
+|---|---|---|
+| `src\CustomSync.Api\appsettings.Development.json` | gitignore — ichida DB paroli va `Jwt:SigningKey` | Faylni **ko'chirmang**. PostgreSQL o'rnating va `scripts\db-bootstrap.ps1` ni ishga tushiring — u rolni yaratib, faylni o'zi yozadi. Usiz `dotnet test` darhol yiqiladi |
+| Claude xotira fayllari (4 ta qoida: faqat customsync-server, Co-Authored-By yo'q, faqat o'zbek tilida, server ishga tushirma) | `C:\Users\Oybek\.claude\projects\<papka>\memory\` — git'dan tashqarida | Papkani qo'lda ko'chiring. Papka nomi repo'ning **to'liq yo'lidan** hosil bo'ladi (belgilar `-` ga almashadi): shu laptopda `C--Users-Oybek-Documents-Projects-programming-Telegram-customsync-server`. Repo boshqa yo'lga clone qilinsa, nom ham boshqa bo'ladi |
+| tdesktop repo'si | alohida repo, **boshqa sessiya boshqaradi** | Faqat o'qish uchun kerak: spec, planlar, `STATUS.md`, `test-vectors.json` va plan 04 promptlari (`docs/superpowers/plans/04-task{1,2,3,6}-prompt.md`, `04-task6-fixes-prompt.md`). `CLAUDE.md` va shu fayl `C:\TBuild\tdesktop` yo'lini nazarda tutadi |
+| GitHub credential | har mashinada alohida | `gh auth login` yoki Git Credential Manager — aks holda push o'tmaydi |
+| `backups\` (DB dump) | gitignore | Faqat eski ma'lumot kerak bo'lsa ko'chiring; ishlab chiqish uchun shart emas |
+
+Task 7 uchun prompt hali yozilmagan — keyingi sessiya shundan boshlaydi (§2).
 
 ---
 
