@@ -6,9 +6,17 @@ score. The only output that counts is committed source code plus tests.
 
 ## REPOSITORY
 
-- Repo: `customsync-server`, branch `Oybek`. Push only to `origin Oybek`.
+- **Paths depend on the computer** (laptop and PC differ). First run
+  `hostname`, then take `<server>` and `<tdesktop>` from the table in
+  `<tdesktop>\docs\MACHINES.md` (find `<tdesktop>`: whichever of
+  `C:\TBuild\tdesktop` / `D:\Oybek\Telegram\tdesktop` exists; otherwise the
+  folder containing `custom_db.cpp`). Check every path exists before using
+  it; `git -C <server> remote -v` must show `Oybek-M/customsync-server`.
+  Never guess a path — if not found, stop and ask.
+- Repo: `<server>` (`customsync-server`), branch `Oybek`. Push only to
+  `origin Oybek`.
 - Plan text (READ-ONLY, another repo):
-  `C:\TBuild\tdesktop\docs\superpowers\plans\2026-07-29-multi-device-sync-04-storage-lifecycle.md`
+  `<tdesktop>\docs\superpowers\plans\2026-07-29-multi-device-sync-04-storage-lifecycle.md`
   §Task 7. **Do not copy the plan blindly** — the requirements below
   override it where they differ, and each difference says why.
 - Starting state: `dotnet build` 0 warnings, `dotnet test` 152/152.
@@ -45,7 +53,7 @@ report instead of silently doing something else.
   the body, **no `Co-Authored-By` trailer**.
 - Never run `dotnet run` or start any server. `dotnet build` / `dotnet test`
   only.
-- Do not touch `C:\TBuild\tdesktop` or `docs/sync-protocol/`.
+- Do not write to `<tdesktop>` or `docs/sync-protocol/`.
 - Do not change the purge safety logic in `PurgeService` (keyset loop,
   seq-conditioned delete, orphan quarantine, confirmation). Task 7 is a
   **caller** of it. If you believe `PurgeService` needs a change, stop and

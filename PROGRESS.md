@@ -204,7 +204,7 @@ ulashish oqimi, WebSocket bildirishnomasi.
 |---|---|---|
 | 1, 2, 3 | ✅ | yuqoridagi jadval |
 | 6 — ikki fazali o'chirish | ✅ | diskni to'lishdan saqlaydigan xavfsiz ikki fazali purge mexanizmi |
-| **7 — rejalashtirilgan ishlar** | ⚪ **KEYINGISI** | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
+| **7 — rejalashtirilgan ishlar** | 🟡 **prompt tayyor** (`docs/04-task7-prompt.md`, `6ecc8ce`) — Gemini implement qiladi, keyin Claude mustaqil tekshiradi | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
 | 4 — S3 / SFTP target | ⏸ keyinga | xavfsizlik qo'shmaydi, faqat manzil. Task 3 seam'i tufayli o'chirish oqimiga tegmasdan keyin qo'shiladi |
 | 5 — Telegram bot target | ⏸ keyinga | xuddi shu sabab |
 | 8 — Web UI | → plan 03 | Task 1-3 dagi kabi |
@@ -338,7 +338,7 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | .NET SDK | 8.0.405 **va** 10.0.400 → `global.json` 8.0.x ga qadaydi |
 | PostgreSQL | 17.2 ishlab turibdi (plan 16 deydi — muammo emas) |
 | `dotnet-ef` | global tool 9.0.1, EF Core 8 bilan ishlaydi |
-| `test-vectors.json` | `C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json` |
+| `test-vectors.json` | `<tdesktop>\docs\sync-protocol\test-vectors.json` (laptop: `C:\TBuild\tdesktop`) |
 | pg auth | `scram-sha-256` — parolsiz kirish yo'q |
 
 🔴 **Paket qo'shganda ALBATTA `--version 8.0.*`** — versiyasiz
@@ -352,17 +352,29 @@ qo'yadi va faylni qayta yozadi.
 
 ### 🔴 Boshqa kompyuterda davom ettirish (2026-09-14)
 
+**Yo'llar kompyuterga bog'liq.** Laptop (`DESKTOP-L2J53IK`) va PC'da
+yo'llar farq qiladi. Sessiya boshida `hostname` ni aniqlang va yo'llarni
+`<tdesktop>\docs\MACHINES.md` jadvalidan oling (topish tartibi
+`CLAUDE.md` da). Bu faylda, promptlarda va xotirada uchragan
+`C:\TBuild\...` / `C:\Users\Oybek\Documents\Projects programming\...`
+— laptop yo'llari: ishlatishdan oldin jadval orqali "tarjima" qiling va
+mavjudligini tekshiring. Yangi hujjatlarda nisbiy yozing: `<tdesktop>/...`,
+`<server>/...`. PC qatori `MACHINES.md` da hali ❓ — uni tdesktop
+sessiyasi to'ldiradi (bu sessiya tdesktop'ga yozmaydi); topilgan PC
+yo'llarini foydalanuvchiga ayting.
+
 Git bilan **ketmaydigan** narsalar va yangi mashinada nima qilish kerak:
 
 | Nima | Nega git'da yo'q | Yangi mashinada |
 |---|---|---|
 | `src\CustomSync.Api\appsettings.Development.json` | gitignore — ichida DB paroli va `Jwt:SigningKey` | Faylni **ko'chirmang**. PostgreSQL o'rnating va `scripts\db-bootstrap.ps1` ni ishga tushiring — u rolni yaratib, faylni o'zi yozadi. Usiz `dotnet test` darhol yiqiladi |
-| Claude xotira fayllari (4 ta qoida: faqat customsync-server, Co-Authored-By yo'q, faqat o'zbek tilida, server ishga tushirma) | `C:\Users\Oybek\.claude\projects\<papka>\memory\` — git'dan tashqarida | Papkani qo'lda ko'chiring. Papka nomi repo'ning **to'liq yo'lidan** hosil bo'ladi (belgilar `-` ga almashadi): shu laptopda `C--Users-Oybek-Documents-Projects-programming-Telegram-customsync-server`. Repo boshqa yo'lga clone qilinsa, nom ham boshqa bo'ladi |
-| tdesktop repo'si | alohida repo, **boshqa sessiya boshqaradi** | Faqat o'qish uchun kerak: spec, planlar, `STATUS.md`, `test-vectors.json` va plan 04 promptlari (`docs/superpowers/plans/04-task{1,2,3,6}-prompt.md`, `04-task6-fixes-prompt.md`). `CLAUDE.md` va shu fayl `C:\TBuild\tdesktop` yo'lini nazarda tutadi |
+| Claude xotira fayllari (4 ta qoida: faqat customsync-server, Co-Authored-By yo'q, faqat o'zbek tilida, server ishga tushirma) | `~\.claude\projects\<papka>\memory\` — git'dan tashqarida | `agent-sync pull` (`Oybek-M/agent-sync-vault`) tiklaydi. ⚠️ Papka nomi sessiya **ochilgan yo'ldan** hosil bo'ladi (belgilar `-` ga): laptopda `C--Users-Oybek-Documents-Projects-programming-Telegram-customsync-server`. PC'da repo boshqa yo'lda bo'lsa, Claude boshqa (bo'sh) papkaga qaraydi — o'shanda laptop papkasidagi `memory\` ni ustiga yozmay nusxalang. Xotira yo'qolsa ham ish to'xtamaydi: barcha qoidalar shu faylda va `CLAUDE.md` da ham bor |
+| tdesktop repo'si | alohida repo, **boshqa sessiya boshqaradi** | Faqat o'qish uchun kerak: spec, planlar, `STATUS.md`, `MACHINES.md`, `test-vectors.json` va plan 04 promptlari (`docs/superpowers/plans/04-task{1,2,3,6}-prompt.md`, `04-task6-fixes-prompt.md`). Yo'li — `MACHINES.md` jadvalidan |
 | GitHub credential | har mashinada alohida | `gh auth login` yoki Git Credential Manager — aks holda push o'tmaydi |
 | `backups\` (DB dump) | gitignore | Faqat eski ma'lumot kerak bo'lsa ko'chiring; ishlab chiqish uchun shart emas |
 
-Task 7 uchun prompt hali yozilmagan — keyingi sessiya shundan boshlaydi (§2).
+Task 7 prompti tayyor (`docs/04-task7-prompt.md`). Keyingi qadam:
+Gemini hisobotini olib, mustaqil tekshirish (§2).
 
 ---
 
