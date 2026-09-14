@@ -1,5 +1,13 @@
 # customsync-server — sessiya boshlanish yo'riqnomasi
 
+## 🖥️ Avval: qaysi kompyuterdasiz
+
+Bu loyiha laptop va PC'da olib boriladi. Pastdagi `C:\TBuild\tdesktop`
+va `Projects programming\...` yo'llari **laptop'niki**. `hostname` ni
+aniqlang va yo'llarni `<tdesktop>\docs\MACHINES.md` jadvalidan oling
+(`<tdesktop>` — shu kompyuterdagi tdesktop repo; topish tartibi o'sha
+faylda). Yo'l mavjudligini ishlatishdan oldin tekshiring.
+
 ## Ishni boshlashdan oldin SHU TARTIBDA o'qing
 
 ```
