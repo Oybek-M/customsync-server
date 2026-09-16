@@ -53,6 +53,11 @@ public class ArchiveJobTests : IClassFixture<DatabaseFixture>, IDisposable
         await db.RetentionPolicies.ExecuteDeleteAsync();
         await db.ArchiveRuns.ExecuteDeleteAsync();
         await db.ArchiveJobRuns.ExecuteDeleteAsync();
+
+        // Audit ham tozalanadi: aks holda test oldingi testning `dry_run` yoki
+        // `threshold_*` yozuvini ko'rib "o'tdi" deb xulosa qiladi (bu yerdagi
+        // testlar bitta bazani bo'lishadi).
+        await db.AuditLogs.ExecuteDeleteAsync();
     }
 
     private RecordEntity MakeRecord(
@@ -716,8 +721,14 @@ public class ArchiveJobTests : IClassFixture<DatabaseFixture>, IDisposable
         await using (var db = _fixture.CreateContext())
         {
             var runs = await db.ArchiveRuns.Where(r => r.PolicyId == policy.PolicyId).ToListAsync();
-            // Should have executed at most 2 batches
-            Assert.True(runs.Count <= 2);
+
+            // AYNAN ikkita partiya: pastki chegara sikl haqiqatan takrorlanishini
+            // ushlaydi (`<= 2` sikl butunlay yo'q bo'lsa ham o'tib ketardi),
+            // yuqori chegara esa jobs_max_batches hurmat qilinishini ushlaydi.
+            Assert.Equal(2, runs.Count);
+
+            // 15 yozuv, partiya 5, ikki partiya -> 10 o'chdi, 5 qoldi.
+            Assert.Equal(5, await db.Records.CountAsync(r => r.PeerHash == peer));
         }
     }
 
@@ -938,5 +949,176 @@ public class ArchiveJobTests : IClassFixture<DatabaseFixture>, IDisposable
                 Assert.False(await db.Records.AnyAsync(r => r.RecordId == record.RecordId));
             }
         }
+    }
+
+    // 14. Sozlamada buzuq qiymat: job to'xtamaydi, standart qiymatga qaytadi va
+    // buni audit'ga yozadi. Sozlama qiymatlari admin endpoint'i orqali HAR QANDAY
+    // matn bo'lishi mumkin (tip tekshiruvi yo'q), shuning uchun `int.Parse`
+    // butun fon xizmatini har daqiqada yiqitardi va retention jimgina to'xtardi.
+    [Fact]
+    public async Task Test14_Invalid_setting_value_falls_back_and_audits_instead_of_throwing()
+    {
+        await ResetStateAsync();
+        var peer = Guid.NewGuid().ToString("N");
+        await using (var db = _fixture.CreateContext())
+        {
+            db.Records.Add(MakeRecord(peer, kind: "activity", daysAgo: 60));
+            await db.SaveChangesAsync();
+        }
+
+        var (_, scopeFactory, _) = BuildServices();
+        using var scope = scopeFactory.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        await settings.EnsureDefaultsAsync();
+        await settings.SetAsync("storage.jobs_enabled", "true");
+        await settings.SetAsync("storage.jobs_dry_run", "false");
+        await settings.SetAsync("storage.warn_percent", "eighty");
+        await settings.SetAsync("storage.jobs_max_batches", "ko'p");
+        await settings.SetAsync("retention.activity_days", "30");
+
+        var runner = scope.ServiceProvider.GetRequiredService<ArchiveJobRunner>();
+        var report = await runner.RunOnceAsync(new DateTime(2026, 10, 1, 4, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(ArchiveJobRunStatus.Completed, report.Status);
+
+        await using (var db = _fixture.CreateContext())
+        {
+            var invalid = await db.AuditLogs
+                .Where(a => a.Action == "archive_job.config_invalid")
+                .ToListAsync();
+            Assert.NotEmpty(invalid);
+            Assert.Contains(invalid, a => a.Detail != null && a.Detail.Contains("storage.warn_percent"));
+            Assert.Contains(invalid, a => a.Detail != null && a.Detail.Contains("storage.jobs_max_batches"));
+
+            // Buzuq sozlama tozalashni to'xtatmasligi kerak.
+            Assert.False(await db.Records.AnyAsync(r => r.PeerHash == peer));
+        }
+    }
+
+    // 15. Chegaralar AYNAN chegara qiymatida. 85/95 bilan sinash `>=` ni `>` ga
+    // almashtirishni sezmaydi.
+    [Fact]
+    public async Task Test15_Thresholds_fire_exactly_at_the_configured_percent()
+    {
+        await ResetStateAsync();
+        const long total = 100L * 1024 * 1024 * 1024;
+        var probe = new FakeDiskProbe { Result = (total, total / 5) }; // aynan 80%
+        var (_, scopeFactory, _) = BuildServices(probe);
+
+        using var scope = scopeFactory.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        await settings.EnsureDefaultsAsync();
+        await settings.SetAsync("storage.jobs_enabled", "false");
+        await settings.SetAsync("storage.disk_capacity_mb", "0");
+        await settings.SetAsync("storage.warn_percent", "80");
+        await settings.SetAsync("storage.critical_percent", "92");
+
+        var runner = scope.ServiceProvider.GetRequiredService<ArchiveJobRunner>();
+        await runner.RunOnceAsync(new DateTime(2026, 10, 2, 4, 0, 0, DateTimeKind.Utc));
+
+        await using (var db = _fixture.CreateContext())
+        {
+            Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "storage.threshold_warning"));
+            Assert.False(await db.AuditLogs.AnyAsync(a => a.Action == "storage.threshold_critical"));
+        }
+
+        // Aynan 92% -> kritik.
+        probe.Result = (total, (long)(total * 0.08));
+        using (var scope2 = scopeFactory.CreateScope())
+        {
+            var runner2 = scope2.ServiceProvider.GetRequiredService<ArchiveJobRunner>();
+            await runner2.RunOnceAsync(new DateTime(2026, 10, 3, 4, 0, 0, DateTimeKind.Utc));
+        }
+
+        await using (var db = _fixture.CreateContext())
+        {
+            Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "storage.threshold_critical"));
+        }
+
+        // Chegaradan past -> hech qanday ogohlantirish yo'q.
+        await using (var db = _fixture.CreateContext())
+        {
+            await db.AuditLogs.ExecuteDeleteAsync();
+        }
+        probe.Result = (total, (long)(total * 0.21)); // 79%
+        using (var scope3 = scopeFactory.CreateScope())
+        {
+            var runner3 = scope3.ServiceProvider.GetRequiredService<ArchiveJobRunner>();
+            await runner3.RunOnceAsync(new DateTime(2026, 10, 4, 4, 0, 0, DateTimeKind.Utc));
+        }
+
+        await using (var db = _fixture.CreateContext())
+        {
+            Assert.False(await db.AuditLogs.AnyAsync(a => a.Action.StartsWith("storage.threshold_w")));
+            Assert.False(await db.AuditLogs.AnyAsync(a => a.Action == "storage.threshold_critical"));
+        }
+    }
+
+    // 16. Dry-run hisobotidagi `at_least` bayrog'i va staging hisoboti.
+    // Ikkalasi ham UI va operator uchun yagona ko'rinish manbayi.
+    [Fact]
+    public async Task Test16_Dry_run_marks_truncated_preview_and_reports_staging()
+    {
+        await ResetStateAsync();
+        var peer = Guid.NewGuid().ToString("N");
+        await using (var db = _fixture.CreateContext())
+        {
+            db.Records.AddRange(Enumerable.Range(0, 3)
+                .Select(_ => MakeRecord(peer, kind: "activity", daysAgo: 60)));
+            await db.SaveChangesAsync();
+        }
+
+        // Staging papkasida bitta "arxiv" bo'lsin.
+        await File.WriteAllTextAsync(Path.Combine(_stagingDir, "existing.cmx"), "xxxxx");
+
+        var (_, scopeFactory, _) = BuildServices();
+        using var scope = scopeFactory.CreateScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        await settings.EnsureDefaultsAsync();
+        await settings.SetAsync("storage.jobs_enabled", "true");
+        await settings.SetAsync("storage.jobs_dry_run", "true");
+        await settings.SetAsync("retention.activity_days", "30");
+
+        var runner = scope.ServiceProvider.GetRequiredService<ArchiveJobRunner>();
+        runner.BatchLimit = 2; // 3 yozuv -> preview kesiladi
+        await runner.RunOnceAsync(new DateTime(2026, 10, 5, 4, 0, 0, DateTimeKind.Utc));
+
+        await using (var db = _fixture.CreateContext())
+        {
+            var dryRun = await db.AuditLogs.FirstOrDefaultAsync(a => a.Action == "archive_job.dry_run");
+            Assert.NotNull(dryRun);
+            Assert.Contains("\"at_least\":true", dryRun!.Detail);
+
+            var staging = await db.AuditLogs.FirstOrDefaultAsync(a => a.Action == "archive_job.staging_report");
+            Assert.NotNull(staging);
+            Assert.Contains("\"count\":1", staging!.Detail);
+
+            // Dry-run hech narsa o'chirmaydi.
+            Assert.Equal(3, await db.Records.CountAsync(r => r.PeerHash == peer));
+        }
+    }
+
+    // 17. Jadval sozlamasini o'qish: buzuq yoki oraliqdan tashqari qiymat
+    // sababini aytib beradi (avval `IsDue` jimgina false qaytarardi va
+    // rejalashtirilgan tozalash sababsiz o'chib qolardi).
+    [Fact]
+    public void Test17_Schedule_resolution_reports_invalid_configuration()
+    {
+        Assert.True(ArchiveSchedule.TryResolve("3", "30", out var hour, out var minute, out var error));
+        Assert.Equal(3, hour);
+        Assert.Equal(30, minute);
+        Assert.Null(error);
+
+        Assert.False(ArchiveSchedule.TryResolve("25", "30", out _, out _, out error));
+        Assert.Contains("storage.jobs_hour", error);
+
+        Assert.False(ArchiveSchedule.TryResolve("3", "60", out _, out _, out error));
+        Assert.Contains("storage.jobs_minute", error);
+
+        Assert.False(ArchiveSchedule.TryResolve("uch", "30", out _, out _, out error));
+        Assert.Contains("storage.jobs_hour", error);
+
+        Assert.False(ArchiveSchedule.TryResolve(null, null, out _, out _, out error));
+        Assert.NotNull(error);
     }
 }

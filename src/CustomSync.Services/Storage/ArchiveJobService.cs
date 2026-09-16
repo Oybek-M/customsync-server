@@ -12,6 +12,10 @@ public class ArchiveJobService(
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(1);
 
+    // Buzuq jadval sozlamasi har daqiqada audit yozmasin: faqat qiymat
+    // o'zgarganda bir marta yoziladi.
+    private string? _lastReportedScheduleError;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Xost to'liq ishga tushishi va migratsiyalar o'tishini kutish
@@ -32,17 +36,43 @@ public class ArchiveJobService(
                 var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
                 var db = scope.ServiceProvider.GetRequiredService<SyncDbContext>();
 
-                int hour = 3;
-                int minute = 30;
+                string? hourRaw = null;
+                string? minuteRaw = null;
+                var settingsLoaded = true;
                 try
                 {
-                    hour = await settings.GetIntAsync("storage.jobs_hour", stoppingToken);
-                    minute = await settings.GetIntAsync("storage.jobs_minute", stoppingToken);
+                    hourRaw = await settings.GetStringAsync("storage.jobs_hour", stoppingToken);
+                    minuteRaw = await settings.GetStringAsync("storage.jobs_minute", stoppingToken);
                 }
                 catch (Exception)
                 {
-                    // Sozlamalar jadvali hali to'liq bo'lmasa standart qiymatda qoladi
+                    // Sozlamalar jadvali hali seed qilinmagan -- standart vaqt.
+                    settingsLoaded = false;
                 }
+
+                var hour = ArchiveSchedule.DefaultHour;
+                var minute = ArchiveSchedule.DefaultMinute;
+                if (settingsLoaded &&
+                    !ArchiveSchedule.TryResolve(hourRaw, minuteRaw, out hour, out minute, out var scheduleError))
+                {
+                    // Buzuq jadval bilan standart 03:30 da ishlab ketish kutilmagan
+                    // vaqtda o'chirish demakdir. Shuning uchun ish TO'XTATILADI va
+                    // sababi audit'ga yoziladi -- aks holda tozalash sababsiz o'chiq
+                    // qolardi va buni hech kim sezmasdi.
+                    if (_lastReportedScheduleError != scheduleError)
+                    {
+                        _lastReportedScheduleError = scheduleError;
+                        logger.LogError("Archive job jadvali noto'g'ri: {Error}", scheduleError);
+                        var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
+                        await audit.WriteAsync("archive_job.schedule_invalid",
+                            detail: new { error = scheduleError }, ct: stoppingToken);
+                    }
+
+                    await Task.Delay(PollInterval, stoppingToken);
+                    continue;
+                }
+
+                _lastReportedScheduleError = null;
 
                 DateOnly? lastRunDate = null;
                 try

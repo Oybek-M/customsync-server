@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using CustomSync.Core.Contracts;
 using CustomSync.Data;
@@ -33,6 +34,48 @@ public class ArchiveJobRunner(
 {
     public int BatchLimit { get; set; } = 5000;
 
+    /// <summary>
+    /// Sozlamani xom matndan o'qiydi. Qiymat buzuq bo'lsa istisno tashlamaydi:
+    /// standart qiymatga qaytadi va `archive_job.config_invalid` audit yozadi.
+    /// Sozlamalar admin endpoint'i orqali har qanday matn bo'lishi mumkin
+    /// (`SetAsync` tip tekshirmaydi), nazoratsiz ishlaydigan job esa bitta
+    /// xato harfdan butunlay to'xtab qolmasligi kerak. Standart qiymatlar
+    /// xavfsiz tomonga qaraydi: `jobs_enabled` -> false, `dry_run` -> true.
+    /// </summary>
+    private static async Task<int> ReadIntAsync(
+        SettingsService settings, AuditService audit, string key, int fallback, CancellationToken ct)
+    {
+        string raw;
+        try { raw = await settings.GetStringAsync(key, ct); }
+        catch (KeyNotFoundException) { return fallback; }
+
+        if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+        {
+            return value;
+        }
+
+        await audit.WriteAsync("archive_job.config_invalid",
+            detail: new { key, value = raw, usedFallback = fallback }, ct: ct);
+        return fallback;
+    }
+
+    private static async Task<bool> ReadBoolAsync(
+        SettingsService settings, AuditService audit, string key, bool fallback, CancellationToken ct)
+    {
+        string raw;
+        try { raw = await settings.GetStringAsync(key, ct); }
+        catch (KeyNotFoundException) { return fallback; }
+
+        if (bool.TryParse(raw, out var value))
+        {
+            return value;
+        }
+
+        await audit.WriteAsync("archive_job.config_invalid",
+            detail: new { key, value = raw, usedFallback = fallback }, ct: ct);
+        return fallback;
+    }
+
     private async Task CheckThresholdsAsync(CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
@@ -40,13 +83,9 @@ public class ArchiveJobRunner(
         var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
         var statsService = scope.ServiceProvider.GetRequiredService<StatsService>();
 
-        int diskCapacityMb = 0;
-        int warnPercent = 80;
-        int criticalPercent = 92;
-
-        try { diskCapacityMb = await settings.GetIntAsync("storage.disk_capacity_mb", ct); } catch (KeyNotFoundException) { }
-        try { warnPercent = await settings.GetIntAsync("storage.warn_percent", ct); } catch (KeyNotFoundException) { }
-        try { criticalPercent = await settings.GetIntAsync("storage.critical_percent", ct); } catch (KeyNotFoundException) { }
+        var diskCapacityMb  = await ReadIntAsync(settings, audit, "storage.disk_capacity_mb", 0, ct);
+        var warnPercent     = await ReadIntAsync(settings, audit, "storage.warn_percent", 80, ct);
+        var criticalPercent = await ReadIntAsync(settings, audit, "storage.critical_percent", 92, ct);
 
         // Chegaralarni tekshirish: 1 <= warn < critical <= 100
         if (warnPercent < 1 || warnPercent >= criticalPercent || criticalPercent > 100)
@@ -125,7 +164,9 @@ public class ArchiveJobRunner(
         var startedAt = nowUtc;
         logger?.LogInformation("Archive job started for date {RunDate}", runDate);
 
-        // 2. Kunlik qatorni atomar band qilish (atomic day claim) - BROKEN: replaced with in-memory _lastRunDate
+        // 2. Kunlik qatorni atomar band qilish (atomic day claim).
+        // Xotiradagi "oxirgi run" bayrog'i restartdan keyin ishni qayta
+        // yurgizardi; qo'lda target bilan bu har safar yangi arxiv degani.
         using var claimScope = scopeFactory.CreateScope();
         var db = claimScope.ServiceProvider.GetRequiredService<SyncDbContext>();
         var connection = (NpgsqlConnection)db.Database.GetDbConnection();
@@ -152,9 +193,8 @@ public class ArchiveJobRunner(
 
         // 3. jobs_enabled sozlamasini tekshirish
         var settingsService = claimScope.ServiceProvider.GetRequiredService<SettingsService>();
-        bool jobsEnabled = false;
-        try { jobsEnabled = await settingsService.GetBoolAsync("storage.jobs_enabled", ct); }
-        catch (KeyNotFoundException) { }
+        var claimAudit = claimScope.ServiceProvider.GetRequiredService<AuditService>();
+        var jobsEnabled = await ReadBoolAsync(settingsService, claimAudit, "storage.jobs_enabled", false, ct);
 
         if (!jobsEnabled)
         {
@@ -185,18 +225,12 @@ public class ArchiveJobRunner(
             }
         }
 
-        bool jobsDryRun = true;
-        try { jobsDryRun = await settingsService.GetBoolAsync("storage.jobs_dry_run", ct); }
-        catch (KeyNotFoundException) { }
+        var jobsDryRun = await ReadBoolAsync(settingsService, claimAudit, "storage.jobs_dry_run", true, ct);
 
-        int maxBatches = 10;
-        try { maxBatches = await settingsService.GetIntAsync("storage.jobs_max_batches", ct); }
-        catch (KeyNotFoundException) { }
+        var maxBatches = await ReadIntAsync(settingsService, claimAudit, "storage.jobs_max_batches", 10, ct);
         if (maxBatches < 1) maxBatches = 1;
 
-        int minDays = 30;
-        try { minDays = await settingsService.GetIntAsync("retention.min_days", ct); }
-        catch (KeyNotFoundException) { }
+        var minDays = await ReadIntAsync(settingsService, claimAudit, "retention.min_days", 30, ct);
         if (minDays <= 0) minDays = 30;
 
         // Deterministik siyosatlar ro'yxati (§3.3)
@@ -213,9 +247,7 @@ public class ArchiveJobRunner(
         foreach (var kind in RecordKind.All)
         {
             var key = $"retention.{kind}_days";
-            int days = 0;
-            try { days = await settingsService.GetIntAsync(key, ct); }
-            catch (KeyNotFoundException) { }
+            var days = await ReadIntAsync(settingsService, claimAudit, key, 0, ct);
 
             if (days > 0)
             {

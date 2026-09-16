@@ -3,6 +3,7 @@ using System.Globalization;
 using CustomSync.Data;
 using CustomSync.Data.Entities;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CustomSync.Services;
 
@@ -106,8 +107,15 @@ public class SettingsService(SyncDbContext db)
                 db.ServerSettings.AddRange(missing);
                 await db.SaveChangesAsync(ct);
             }
-            catch (DbUpdateException)
+            // 23505 = unique_violation
+            catch (DbUpdateException ex) when
+                ((ex.InnerException as PostgresException)?.SqlState == "23505")
             {
+                // Poyga: boshqa ishga tushish (yoki fon xizmati) ayni shu kalitni
+                // oradagi fursatda kiritib ulgurgan. Bu zararsiz -- keshni
+                // qayta o'qish yetarli. FAQAT shu holat yutiladi: sxema
+                // nomuvofiqligi kabi boshqa xatolar yuzaga chiqishi kerak,
+                // aks holda sozlamalar jimgina yo'q bo'lib qoladi.
                 db.ChangeTracker.Clear();
             }
         }
