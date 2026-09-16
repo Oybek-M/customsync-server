@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CustomSync.Api\CustomSync.Api.csproj" />
+    <ProjectReference Include="..\..\src\CustomSync.Capture\CustomSync.Capture.csproj" />
   </ItemGroup>
 
 </Project>

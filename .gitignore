@@ -486,6 +486,7 @@ $RECYCLE.BIN/
 
 # Lokal ishlab chiqish sozlamalari -- DB paroli shu yerda, gitga TUSHMAYDI.
 src/CustomSync.Api/appsettings.Development.json
+src/CustomSync.Capture/appsettings.Production.json
 
 # Lokal PostgreSQL dump'lari -- HECH QACHON commit qilinmaydi.
 # `Backup*/` faqat Windows'da (core.ignorecase=true) mos keladi;
