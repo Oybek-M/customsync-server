@@ -20,11 +20,11 @@ namespace CustomSync.Tests;
 /// Global son yoki "eng yangi qator" bo'yicha tekshirish vaqti-vaqti
 /// bilan yiqiladi — bu xato loyihada ikki marta takrorlandi.
 /// </summary>
-public class AuditTests : IClassFixture<WebApplicationFactory<Program>>
+public class AuditTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public AuditTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public AuditTests(CustomSyncWebApplicationFactory factory) => _factory = factory;
 
     // ----------------------------------------------------------------
     // Yordamchi: qurilmani ro'yxatdan o'tkazadi va token qaytaradi.

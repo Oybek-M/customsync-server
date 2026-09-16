@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,11 +15,11 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class NotifyTests : IClassFixture<WebApplicationFactory<Program>>
+public class NotifyTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public NotifyTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public NotifyTests(CustomSyncWebApplicationFactory factory) => _factory = factory;
 
     private async Task<(HttpClient Client, string DeviceId, string Token)> EnrolDeviceAsync(string role = "device")
     {

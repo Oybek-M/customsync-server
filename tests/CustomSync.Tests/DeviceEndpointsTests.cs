@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Json;
 using CustomSync.Services;
@@ -7,11 +8,11 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class DeviceEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
+public class DeviceEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public DeviceEndpointsTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public DeviceEndpointsTests(CustomSyncWebApplicationFactory factory) => _factory = factory;
 
     private async Task<(HttpClient Client, string Code)> CreateClientAndCodeAsync()
     {

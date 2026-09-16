@@ -69,6 +69,14 @@ public class SettingsService(SyncDbContext db)
         New("storage.quota_total_mb",       "0", "int", "storage", "Umumiy media hajmi chegarasi, MB (0 = cheksiz)"),
         New("storage.quota_per_device_mb",  "0", "int", "storage", "Qurilma bo'yicha media hajmi chegarasi, MB (0 = cheksiz)"),
         New("storage.growth_window_days",   "7", "int", "storage", "Xotira o'sishini hisoblash oynasi (kun). Qisqaroq oyna tasodifiy kunlarga sezgir, uzunroq oyna esa yaqinda boshlangan o'sishni yashiradi"),
+        New("storage.jobs_enabled",          "false", "bool", "storage", "Avtomatik rejalashtirilgan tozalash yoqilganligi"),
+        New("storage.jobs_dry_run",          "true",  "bool", "storage", "Faqat preview va audit qilish, hech narsa o'chirmaslik"),
+        New("storage.jobs_hour",             "3",     "int",  "storage", "Rejalashtirilgan tozalash UTC soati (0..23)"),
+        New("storage.jobs_minute",           "30",    "int",  "storage", "Rejalashtirilgan tozalash UTC daqiqasi (0..59)"),
+        New("storage.jobs_max_batches",      "10",    "int",  "storage", "Har bir siyosat uchun bitta run'da ExecuteAsync takrorlanishlar soni"),
+        New("storage.disk_capacity_mb",      "0",     "int",  "storage", "Disk sig'imi MB (0 = diskdan avtomatik aniqlash)"),
+        New("storage.warn_percent",          "80",    "int",  "storage", "Xotira to'lishi ogohlantirish chegarasi foizda"),
+        New("storage.critical_percent",      "92",    "int",  "storage", "Xotira to'lishi kritik chegarasi foizda"),
 
         // Plan 06 -- releases
         New("releases.mirrors",              "[]",    "json", "releases", "Relizlarni tarqatish mirror'lari ro'yxati"),
@@ -93,8 +101,15 @@ public class SettingsService(SyncDbContext db)
         var missing = CreateDefaults().Where(d => !existing.Contains(d.Key)).ToList();
         if (missing.Count > 0)
         {
-            db.ServerSettings.AddRange(missing);
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                db.ServerSettings.AddRange(missing);
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+            }
         }
 
         await ReloadCacheAsync(ct);

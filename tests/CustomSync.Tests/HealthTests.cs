@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -5,11 +6,11 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class HealthTests : IClassFixture<WebApplicationFactory<Program>>
+public class HealthTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public HealthTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public HealthTests(CustomSyncWebApplicationFactory factory) => _factory = factory;
 
     [Fact]
     public async Task Health_returns_ok_with_version()

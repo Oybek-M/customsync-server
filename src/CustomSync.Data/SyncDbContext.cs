@@ -19,6 +19,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
     public DbSet<UploadSessionEntity>  UploadSessions  => Set<UploadSessionEntity>();
     public DbSet<RetentionPolicyEntity> RetentionPolicies => Set<RetentionPolicyEntity>();
     public DbSet<ArchiveRunEntity>     ArchiveRuns       => Set<ArchiveRunEntity>();
+    public DbSet<ArchiveJobRunEntity>  ArchiveJobRuns    => Set<ArchiveJobRunEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -126,6 +127,12 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
             e.Property(x => x.RunId).ValueGeneratedOnAdd();
             e.HasIndex(x => x.StartedAt);
             e.HasIndex(x => x.PolicyId);
+        });
+
+        b.Entity<ArchiveJobRunEntity>(e =>
+        {
+            e.ToTable("archive_job_runs");
+            e.HasKey(x => x.RunDate);
         });
     }
 }

@@ -50,13 +50,18 @@ public class StatsService(SyncDbContext db, SettingsService? settings = null)
 
     public async Task<StorageStat> StorageAsync(CancellationToken ct = default)
     {
+        return await GetStorageCountsAndBytesAsync(ct);
+    }
+
+    private async Task<StorageStat> GetStorageCountsAndBytesAsync(CancellationToken ct)
+    {
         var recordCount = await db.Records.LongCountAsync(ct);
         var recordBytes = recordCount == 0
-            ? 0
+            ? 0L
             : await db.Records.SumAsync(r => (long)r.PayloadSize, ct);
         var mediaCount  = await db.MediaBlobs.LongCountAsync(ct);
         var mediaBytes  = mediaCount == 0
-            ? 0
+            ? 0L
             : await db.MediaBlobs.SumAsync(m => m.Size, ct);
 
         return new StorageStat(recordCount, recordBytes, mediaCount, mediaBytes);
@@ -142,16 +147,8 @@ public class StatsService(SyncDbContext db, SettingsService? settings = null)
     public async Task<StorageSummary> SummaryAsync(
         long? diskCapacityBytes = null, CancellationToken ct = default)
     {
-        var recordCount = await db.Records.LongCountAsync(ct);
-        var recordBytes = recordCount == 0
-            ? 0L
-            : await db.Records.SumAsync(r => (long)r.PayloadSize, ct);
-        var mediaCount  = await db.MediaBlobs.LongCountAsync(ct);
-        var mediaBytes  = mediaCount == 0
-            ? 0L
-            : await db.MediaBlobs.SumAsync(m => m.Size, ct);
-
-        var totalBytes = recordBytes + mediaBytes;
+        var stats = await GetStorageCountsAndBytesAsync(ct);
+        var totalBytes = stats.RecordBytes + stats.MediaBytes;
         var growth = await DailyGrowthAsync(ct);
 
         int? daysUntilFull = null;
@@ -179,10 +176,10 @@ public class StatsService(SyncDbContext db, SettingsService? settings = null)
         }
 
         return new StorageSummary(
-            recordCount,
-            recordBytes,
-            mediaCount,
-            mediaBytes,
+            stats.RecordCount,
+            stats.RecordBytes,
+            stats.MediaCount,
+            stats.MediaBytes,
             totalBytes,
             growth,
             daysUntilFull);

@@ -14,11 +14,11 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class InterchangeTests : IClassFixture<WebApplicationFactory<Program>>
+public class InterchangeTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public InterchangeTests(WebApplicationFactory<Program> factory) => _factory = factory;
+    public InterchangeTests(CustomSyncWebApplicationFactory factory) => _factory = factory;
 
     private async Task<(HttpClient Client, string DeviceId, string Token)> EnrolDeviceAsync(string role = "admin")
     {

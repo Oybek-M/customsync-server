@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -12,12 +13,12 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class ReleaseUploadTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public class ReleaseUploadTests : IClassFixture<CustomSyncWebApplicationFactory>, IDisposable
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly string _tempStorageRoot;
 
-    public ReleaseUploadTests(WebApplicationFactory<Program> factory)
+    public ReleaseUploadTests(CustomSyncWebApplicationFactory factory)
     {
         _tempStorageRoot = Path.Combine(Path.GetTempPath(), "cs-rel-test-" + Guid.NewGuid().ToString("N"));
         _factory = factory.WithWebHostBuilder(builder =>

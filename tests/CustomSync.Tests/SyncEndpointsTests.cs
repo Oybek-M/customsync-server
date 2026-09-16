@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -21,11 +22,11 @@ namespace CustomSync.Tests;
 /// vaqti-vaqti bilan yiqiladi — bu xato ushbu loyihada uch marta
 /// takrorlandi.
 /// </summary>
-public class SyncEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
+public class SyncEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly CustomSyncWebApplicationFactory _factory;
 
-    public SyncEndpointsTests(WebApplicationFactory<Program> factory)
+    public SyncEndpointsTests(CustomSyncWebApplicationFactory factory)
         => _factory = factory;
 
     // ----------------------------------------------------------------

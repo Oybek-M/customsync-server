@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-14**
+Oxirgi yangilanish: **2026-09-16**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **152 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **165 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -95,7 +95,7 @@ o'rtasida uzish, so'ng `GET` yarim sonni qaytarishini va keyingi
 | 8 — Platformalararo vektorlar | `d1afa39` | Beshala oila .NET da tekshiriladi |
 | 9 — Deployment | `2ee8970` + `.gitattributes` | systemd `Type=exec`, nginx WS `map`, deploy README |
 
-### Plan 04 — Storage lifecycle 🟡 JARAYONDA (4/6)
+### Plan 04 — Storage lifecycle 🟡 JARAYONDA (5/6)
 
 Har task Gemini'ga prompt bilan berildi va hisobotiga ishonilmasdan
 qayta tekshirildi: `dotnet test` mustaqil yurgizildi, har
@@ -108,6 +108,7 @@ testlar bo'sh emasligi isbotlandi. To'rtala task'da ham xato topildi va tuzatild
 | 2 — Retention siyosatlari | `9f9b7e6` + `88b635d` | `RetentionPolicyEntity` + migratsiya; sof `RetentionEvaluator`; `retention.min_days` = 30 pol | `never_delete` himoyasi o'z **yosh oynasiga** bog'langan edi — keng qoida himoyalangan peer'ning 90–365 kunlik arxivini jimgina o'chirardi |
 | 3 — Arxiv target seam | `146e58d` + `338ce0c` | `IArchiveTarget` + `RequiresExplicitConfirmation`; `ManualDownloadTarget` | `DeleteStagedAsync` ro'yxatda ko'rinmaydigan pastki papkalarga yetardi; `ValidateRoots` media↔staging joylashuvini faqat bir tomondan tekshirardi |
 | 6 — Ikki fazali xavfsiz o'chirish | `ce9a032` + `388d6f4` + `620214e` | `ArchiveRunEntity` + migratsiya; `PurgeService` (`PreviewAsync`, `ExecuteAsync`, `ConfirmAsync`, `SweepOrphanedMediaAsync`); yetim media 24h karantini; 17 ta xavfsizlik testi | 1) Plandagi xavfli `RetentionScope` o'rniga har bir yozuv `RetentionEvaluator.Evaluate` dan o'tkaziladi (`never_delete` buzilmaydi); 2) `tombstone` qatorlar mutlaqo o'chirilmaydi; 3) Faqat aynan arxivlangan versiya `(record_id, observed_at, device_id)` o'chiriladi (superseded push o'chib ketmaydi); 4) Yetim media nomzodlari faqat o'chgan yozuvlardan olinadi, `orphaned_at` 24h saqlanadi, `ExistsAsync` bayroqni tozalaydi, fayllar tranzaksiya commit'idan keyin o'chadi; 5) Arxiv diskdagi temp `.cmx` faylga yoziladi, xotirani to'ldirmaydi; 6) `RequiresExplicitConfirmation` targetlar faqat tasdiqdan keyin o'chiriladi; 7) Tekshiruvdagi K1-K3 va T1-T3 to'liq tuzatildi |
+| 7 — Rejalashtirilgan arxiv joblari, dry-run va disk chegaralari | (hozirgi) | `ArchiveSchedule`, `IDiskProbe` + `SystemDiskProbe`, `archive_job_runs` jadvali + migratsiya, `ArchiveJobRunner`, `ArchiveJobService`, `CustomSyncWebApplicationFactory`; 13 ta test | 1) Test isolation: `CustomSyncWebApplicationFactory` orqali `ArchiveJobService` test muhitidan olib tashlandi; 2) Siyosatlar uchun alohida `IServiceScope` orqali nosozlik izolatsiyasi; 3) `disk_capacity_mb` int to'lib ketishidan himoyalandi; 4) Bekor qilish (cancellation) xatolik sifatida loglanmasligi ta'minlandi; 5) 6 ta ataylab buzish (breaks a–f) sinovdan o'tdi |
 
 Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
 `tdesktop/docs/superpowers/plans/04-task{1,2,3}-prompt.md`):
@@ -148,6 +149,15 @@ Planning o'zidan chetlashishlar (sabablari prompt fayllarida:
     - **T2:** Arxivga yozuvga bog'langan media bloblar kiritilishi, ularning baytlari, hajmi va nonce'lari mosligi hamda diskda yo'q media'lar `MissingMedia` sifatida to'g'ri sanalishi sinovdan o'tkazildi (`Test_T2`).
     - **T3:** Arxivdagi yozuvlar sonini solishtiruvchi `VerifyArchiveRecordCount` alohida ajratilib, nomuvofiqlikda `InvalidDataException` tashlashi unit test bilan qamrab olindi (`Test_T3`).
     - **Qo'shimcha:** `ConfirmAsync` da stream seek qilib bo'lmasa temp faylga ko'chirish, `UPDATE archive_runs` dagi atomar status tekshiruvi, `ExecuteAsync` dagi xatoliklarni `failed_verification`/`failed_upload` qilib saqlash va testlardagi global siyosatlarni `finally` da tozalash amalga oshirildi.
+- **Task 7:**
+  - **Fayllar bo'linishi:** BackgroundService ichidagi taymerni to'g'ridan-to'g'ri ishonchli testlab bo'lmaydi. Shu sababli sof reja mantiqi (`ArchiveSchedule.cs`), disk o'lchov interfeysi (`IDiskProbe.cs` + `SystemDiskProbe.cs`), to'liq testlanadigan runner (`ArchiveJobRunner.cs`) va yengil xost xizmati (`ArchiveJobService.cs`) alohida yaratildi.
+  - **Qayta yuklash va ikki nusxadan atomar himoya:** In-memory bayroq har restartdan keyin qayta yurgizib yuborardi. Yangi `archive_job_runs` jadvali va `INSERT INTO archive_job_runs ... ON CONFLICT (run_date) DO NOTHING` atomar zaxiralash mexanizmi joriy qilindi.
+  - **`disk_capacity_mb` (bayt emas):** Plandagi `disk_capacity_bytes int` ~2 GiB da integer overflow berardi. U mavjud `storage.quota_total_mb` ga mos ravishda megabaytlarda olindi.
+  - **`storage.jobs_dry_run` sukut bo'yicha true:** Avval audit logda nimalar o'chirilishini ko'rish, real o'chirish uchun esa ikkinchi ongli qaror bilan sozlash imkoniyati berildi.
+  - **`storage.jobs_max_batches`:** Bir siyosat bo'yicha cheksiz siklga kirib qolmaslik uchun har yurgizishda partiyalar soni chegaralandi.
+  - **Implicit siyosatlar:** `retention.<kind>_days` bo'yicha ko'rsatilgan kunlar avtomatik ravishda pastki prioritetli siyosat sifatida deterministic ro'yxatga qo'shildi.
+  - **Staged fayllar o'chirilmaydi:** Tasdiqlangan arxiv foydalanuvchi tomonidan yuklab olinganiga kafolat yo'qligi sababli, `DeleteStagedAsync` avtomatik chaqirilmaydi; bu qaror Plan 03 Web UI doirasida qoldirildi.
+  - **StatsService optimallashtirish:** `SummaryAsync` va `StorageAsync` dagi takroriy agregatsiya umumiy `GetStorageCountsAndBytesAsync` metodiga birlashtirildi.
 
 ### Task 6 tekshiruvi (2026-09-14) — qanday qabul qilindi
 
@@ -204,7 +214,7 @@ ulashish oqimi, WebSocket bildirishnomasi.
 |---|---|---|
 | 1, 2, 3 | ✅ | yuqoridagi jadval |
 | 6 — ikki fazali o'chirish | ✅ | diskni to'lishdan saqlaydigan xavfsiz ikki fazali purge mexanizmi |
-| **7 — rejalashtirilgan ishlar** | 🟡 **prompt tayyor** (`docs/04-task7-prompt.md`, `6ecc8ce`) — Gemini implement qiladi, keyin Claude mustaqil tekshiradi | usiz retention o'z-o'zidan hech qachon ishga tushmaydi |
+| **7 — rejalashtirilgan ishlar** | ✅ | ArchiveSchedule, ArchiveJobRunner, ArchiveJobService, archive_job_runs jadvali, 13 test (jami 165 ta test) |
 | 4 — S3 / SFTP target | ⏸ keyinga | xavfsizlik qo'shmaydi, faqat manzil. Task 3 seam'i tufayli o'chirish oqimiga tegmasdan keyin qo'shiladi |
 | 5 — Telegram bot target | ⏸ keyinga | xuddi shu sabab |
 | 8 — Web UI | → plan 03 | Task 1-3 dagi kabi |
@@ -403,6 +413,10 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     bo'sh `RequireAuthorization()` edi).
 14. **Rate limiter qurilma bo'yicha partitsiyalangan** (planda
     partitsiyasiz, ya'ni hammaga bitta chelak edi).
+15. **`archive_job_runs` jadvali va atomar claim (`INSERT ... ON CONFLICT (run_date) DO NOTHING`)** — in-memory bayroq restartda qayta yurgizib yuborardi.
+16. **`ArchiveJobRunner` va `ArchiveJobService` ajratilishi** — taymerli BackgroundService unit testlar uchun mos emas, alohida testlanadigan runner va sof `ArchiveSchedule` ga ajratildi.
+17. **`storage.disk_capacity_mb` (bayt emas)** — int 2 GiB da overflow bo'lmasligi uchun MB da olindi.
+18. **`CustomSyncWebApplicationFactory`** — integratsiya testlarida `ArchiveJobService` tasodifan ishlab test bazasiga ta'sir qilmasligi uchun test xostidan chiqarildi.
 
 ---
 

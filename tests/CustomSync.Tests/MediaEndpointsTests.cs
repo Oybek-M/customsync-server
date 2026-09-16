@@ -1,3 +1,4 @@
+using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,12 +14,12 @@ using Xunit;
 
 namespace CustomSync.Tests;
 
-public class MediaEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public class MediaEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory>, IDisposable
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly string _tempMediaRoot;
 
-    public MediaEndpointsTests(WebApplicationFactory<Program> factory)
+    public MediaEndpointsTests(CustomSyncWebApplicationFactory factory)
     {
         _tempMediaRoot = Path.Combine(Path.GetTempPath(), $"cs-media-test-{Guid.NewGuid():N}");
         _factory = factory.WithWebHostBuilder(builder =>

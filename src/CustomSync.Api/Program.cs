@@ -86,6 +86,10 @@ builder.Services.AddScoped(sp => new CustomSync.Services.Releases.ReleaseService
 builder.Services.AddSingleton<DeviceRevocationCache>();
 builder.Services.AddSingleton<CustomSync.Api.Realtime.NotifyHub>();
 
+builder.Services.AddSingleton<IDiskProbe, SystemDiskProbe>();
+builder.Services.AddScoped<ArchiveJobRunner>();
+builder.Services.AddHostedService<ArchiveJobService>();
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("keywrap", context =>

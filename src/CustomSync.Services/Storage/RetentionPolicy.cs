@@ -236,6 +236,9 @@ public static class RetentionEvaluator
 
 public static class RetentionPolicy
 {
+    public static string? GetValidationError(RetentionPolicyEntity policy, int minDays) =>
+        policy.GetValidationError(minDays);
+
     public static RetentionDecision Evaluate(
         RetentionCandidate candidate,
         IReadOnlyList<RetentionPolicyEntity> policies,
