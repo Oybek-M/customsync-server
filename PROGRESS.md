@@ -271,35 +271,60 @@ orqali ishlaydi — bu `activity` uchun maqbul (mijoz 30, server 90 kun
 saqlaydi). Avtomatik `archive_then_delete` kerak bo'lsa — Task 4 majburiy,
 chunki arxiv serverdan tashqariga chiqishi kerak.
 
-### 🔴 Plan 05 ga kelganda hal qilinadigan: `libtdjson`
+### ✅ `libtdjson` — qaror qabul qilindi (2026-09-16)
 
-Qaror KEYINGA qoldirildi (2026-09-09), lekin tahlil qilingan:
+**Lokal Docker'da build qilinadi, tayyor `.so` VPS'ga ko'chiriladi.**
+Foydalanuvchi qarori.
 
-**Windows build KERAK EMAS.** Capture xizmati VPS'da (Ubuntu)
-ishlaydi, ya'ni `libtdjson.so` (linux-x64) kerak. Laptopda build
-qilinsa `tdjson.dll` chiqadi — u faqat lokal ishlab chiqishga
-yaraydi, deploy'ga emas.
+Nega shu yo'l: to'g'ri `linux-x64` artefakt chiqadi (Windows build'dan
+chiqadigan `tdjson.dll` deploy'ga yaramaydi), ishlab turgan VPS'da 8 GB
+lik build va OOM xavfi yo'q, va akkauntga ulanadigan kutubxona uchun
+uchinchi tomon binarysiga ishonish shart emas. Rad etilgan variantlar:
+VPS'da swap bilan build (ishlab turgan serverda og'ir), tayyor native
+NuGet paketi (nashr qiluvchiga ishonish talab qiladi).
 
-Build og'irligi: ~8 GB RAM, `-j2` bilan 30-60+ daqiqa. Bu
-foydalanuvchining og'ir-build taqig'iga tushadi.
+Buni **foydalanuvchi o'zi bajaradi** — og'ir build agentlarga taqiqlangan:
 
-Uchta yo'l, arzonidan boshlab:
+```bash
+git clone https://github.com/tdlib/td.git
+cd td
+git checkout <tag>          # versiya QADALSIN, commit hash yozib qo'yilsin
+docker run --rm -v "$PWD":/src -w /src --memory=8g --cpus=2 ubuntu:22.04 bash -c "
+  apt-get update && apt-get install -y cmake g++ make zlib1g-dev libssl-dev gperf &&
+  mkdir -p build && cd build &&
+  cmake -DCMAKE_BUILD_TYPE=Release .. &&
+  cmake --build . --target tdjson -- -j2"
+# natija: build/libtdjson.so -> VPS'ga ko'chiriladi
+```
 
-1. **Tayyor native NuGet paketi** — agar `linux-x64` ni qoplasa,
-   build umuman kerak emas. Ishlatishdan oldin nashr qiluvchisi va
-   versiyasi tekshirilsin: bu akkauntga ulanadigan kutubxona.
-2. **VPS'da build** — swap qo'shib. Sekin, lekin to'g'ri artefakt
-   darhol kerakli joyda chiqadi va laptopga tegmaydi.
-3. **Docker'da build** (mashinada Docker bor) — Linux `.so` ni
-   laptopda olish, konteynerga CPU/RAM chegarasi bilan.
+Ko'chirgandan keyin: `.so` **repoga commit qilinmaydi**, yo'li
+`Telegram:TdJsonPath` sozlamasidan olinadi, va `sha256` i yozib
+qo'yilsin (keyin qayta build qilinsa nima o'zgarganini bilish uchun).
 
-Yana ikkita to'siq, ikkalasini ham FOYDALANUVCHI hal qiladi:
-`api_id`/`api_hash` (my.telegram.org, repoga commit qilinmaydi) va
-telefon -> kod -> 2FA login. Agent bularni bajarmaydi.
+**`api_id` / `api_hash`:** foydalanuvchida bor, o'zida saqlanadi.
+Repoga ham, chatga ham tushmaydi — faqat VPS'dagi
+`appsettings.Production.json` da (u `.gitignore` da).
 
-TDLib faqat ishga tushganda kerak (P/Invoke runtime'da bog'lanadi),
-kompilyatsiya uchun emas — ya'ni Task 1 ning skeleti va interop
-qatlami `.so` siz ham yozilishi mumkin.
+**Login (telefon -> kod -> 2FA):** faqat foydalanuvchi, bir marta,
+VPS'da `--login` rejimida. Agent bajarmaydi.
+
+TDLib faqat ishga tushganda kerak (P/Invoke runtime'da bog'lanadi), ya'ni
+Task 1-2 ning kodi va testlari `.so` siz yoziladi va tekshiriladi.
+
+### 🔴 Plan 05 ga qo'shiladigan alohida vazifa: sessiya himoyasi
+
+Foydalanuvchi qarori (2026-09-16): **alohida vazifa qilib qo'shiladi.**
+
+Sabab: capture xizmati VPS'da TO'LIQ Telegram sessiyasini saqlaydi —
+u o'g'irlansa akkauntga to'liq kirish demakdir, va bu parol yoki 2FA
+bilan to'xtatilmaydi. Qamrovi (prompt/checklist alohida yoziladi):
+systemd cheklovlari (`ProtectSystem`, `PrivateTmp`, `NoNewPrivileges`,
+alohida foydalanuvchi), TDLib bazasi papkasining ruxsatlari,
+`appsettings.Production.json` ruxsatlari, zaxira nusxalarida sessiya
+qanday saqlanishi (yoki umuman saqlanmasligi) va sessiyani bekor qilish
+tartibi.
+
+Deploy'dan OLDIN bajariladi.
 
 ### Serverda qolgan, planga bog'liq bo'lmagan ish
 
