@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-16**
+Oxirgi yangilanish: **2026-09-17**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **184 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **190 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -227,17 +227,57 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
   tmpfs (RAM); deploy'da staging diskiga ko'chirishni o'ylang.
 - `SweepOrphanedMediaAsync` public — Task 7 uni purge'dan mustaqil
   chaqirishi kerak (aks holda karantindagi bloblar faqat mos yozuv
-  ### Plan 05 — Always-on capture service 🟡 JARAYONDA (2/10)
+  topilgan run'da tozalanadi). ✅ Task 7 da bajarildi.
+
+---
+
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (2/10)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
 | 1 — TDLib interop va TdClient | `2fca499` | `CustomSync.Capture` worker service, `TdJsonInterop`, `NativeLibrary.SetDllImportResolver`, `ITdTransport`, `TdClient` (@extra correlation, timeout cleanup, TDLib error handling); 5 test | Native library mavjud bo'lmaganda ham build/test o'tishi ta'minlandi; timeout'da pending so'rovlar tozalanadi |
-| 2 — Autentifikatsiya, preflight va redaction | (hozirgi) | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi |
+| 2 — Autentifikatsiya, preflight va redaction | `02c3a9d` + `8fb237c` | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi. **Tekshiruvda topilgan (2026-09-17):** `TdRedactor` ishlab chiqarish kodida umuman chaqirilmasdi (o'lik himoya); xizmat avtorizatsiyani hech qachon tekshirmasdi va nol kod bilan chiqardi; qabul sikli xatoda kechikishsiz aylanardi; marshalling qatlami butunlay sinovsiz edi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
 > 2) `api_id` va `api_hash` ni `appsettings.Production.json` ga kiritish;
 > 3) VPS konsolida bir martalik `dotnet run --project src/CustomSync.Capture -- --login` orqali autentifikatsiyadan o'tish.
+
+---
+
+### Plan 05 Task 1–2 tekshiruvi (2026-09-17) — qanday qabul qilindi
+
+Testlar mustaqil yurgizildi (184/184 tasdiqlandi), so'ng Gemini'nikidan
+**boshqa** oltita mutatsiya qilindi — oltalasi ham ushlandi. Lekin kod
+o'qishda to'rtta kamchilik chiqdi (`8fb237c` da tuzatildi):
+
+1. **`TdRedactor` o'lik kod edi.** U faqat o'z testlaridan chaqirilardi;
+   ishlab chiqarish kodi umuman payload loglamasdi. Ya'ni himoya bor
+   ko'rinardi, lekin ulanmagandi — Task 3/4 da qo'yiladigan birinchi
+   `LogDebug(raw)` `api_hash`, telefon raqami, kirish kodi va 2FA
+   parolini journal'ga yozardi. Endi `TdClient` yuborilgan va kelgan
+   har bir payload'ni redaktor orqali loglaydi.
+2. **Xizmat avtorizatsiyani hech qachon tekshirmasdi.** `Worker`
+   preflight'dan keyin "muvaffaqiyatli ishga tushdi" deb bo'sh
+   aylanardi; `TdAuthenticator` DI'da ro'yxatdan o'tgan, lekin hech kim
+   chaqirmasdi. Ya'ni avtorizatsiya qilinmagan deploy sog'lom ko'rinardi.
+   Yangi `AuthorizationGate` `updateAuthorizationState` oqimini
+   boshqaradi va tayyor bo'lmasa xizmat to'xtaydi.
+3. **Chiqish kodi doim 0 edi.** systemd nol kodni "muvaffaqiyat" deb
+   biladi: `Restart=on-failure` ishlamaydi va monitoring jim turadi.
+   Ikkala nosozlik yo'li ham endi `ExitCode = 1` qo'yadi. Shu bilan
+   birga `ITdClient` faqat preflight o'tgandan keyin olinadi — uni
+   yaratish preflight tekshiradigan kutubxonaga P/Invoke qiladi.
+4. **Marshalling qatlami butunlay sinovsiz edi.** Promptdagi UTF-8
+   talabi (lotin bo'lmagan matnni saqlaydi) hech qanday test bilan
+   bog'lanmagandi. `TdMarshal` ajratildi (P/Invoke'siz) va
+   `ANSI` ga almashtirish endi testni yiqitadi.
+
+Qo'shimcha: qabul sikli xatoda kechikishsiz qayta urinardi — kutubxona
+uzilganda 24/7 jarayon protsessorni 100% band qilardi.
+
+Ochiq qolgan, ongli qaror: `AuthorizationGate` ni faqat soxta klient
+bilan sinaymiz; haqiqiy TDLib bilan uchi-uchiga sinov plan 05 Task 10 da.
 
 ---
 
