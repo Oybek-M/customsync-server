@@ -17,6 +17,7 @@ public class TdClient : ITdClient
     private readonly ITdTransport _transport;
     private readonly ILogger<TdClient>? _logger;
     private readonly TimeSpan _defaultTimeout;
+    private readonly TimeSpan _errorBackoff;
     private readonly ConcurrentDictionary<string, PendingRequest> _pendingRequests = new();
     private readonly CancellationTokenSource _stopCts = new();
     private readonly Thread _receiveThread;
@@ -30,11 +31,13 @@ public class TdClient : ITdClient
     public TdClient(
         ITdTransport transport,
         ILogger<TdClient>? logger = null,
-        TimeSpan? defaultTimeout = null)
+        TimeSpan? defaultTimeout = null,
+        TimeSpan? errorBackoff = null)
     {
         _transport = transport;
         _logger = logger;
         _defaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        _errorBackoff = errorBackoff ?? TimeSpan.FromSeconds(1);
         _clientId = _transport.CreateClientId();
 
         _receiveThread = new Thread(ReceiveLoop)
@@ -92,6 +95,10 @@ public class TdClient : ITdClient
             }
         }))
         {
+            // Log HAR DOIM redaktor orqali: TDLib JSON ichida api_hash,
+            // telefon raqami, kirish kodi va 2FA paroli ochiq turadi va
+            // journal'da login'dan keyin ham qolib ketadi.
+            _logger?.LogDebug("TDLib -> {Payload}", TdRedactor.Redact(payload));
             _transport.Send(_clientId, payload);
             return await tcs.Task;
         }
@@ -115,6 +122,7 @@ public class TdClient : ITdClient
                     continue;
                 }
 
+                _logger?.LogDebug("TDLib <- {Payload}", TdRedactor.Redact(raw));
                 HandleIncoming(raw);
             }
             catch (Exception ex)
@@ -122,6 +130,10 @@ public class TdClient : ITdClient
                 if (!_stopCts.IsCancellationRequested && !_disposed)
                 {
                     _logger?.LogError(ex, "Error in TDLib receive loop");
+
+                    // Kechikishsiz uzluksiz xato (masalan kutubxona uzilgan)
+                    // 24/7 jarayonda protsessorni 100% band qiladi.
+                    _stopCts.Token.WaitHandle.WaitOne(_errorBackoff);
                 }
             }
         }

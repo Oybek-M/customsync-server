@@ -56,22 +56,11 @@ internal static class TdJsonInterop
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr td_execute(IntPtr request);
 
-    public static IntPtr StringToUtf8Ptr(string str)
-    {
-        return Marshal.StringToCoTaskMemUTF8(str);
-    }
+    // Marshalling TdMarshal'da: u P/Invoke'siz, ya'ni native kutubxonasiz
+    // sinaladi. Bu yerda faqat qayta yo'naltirish qoladi.
+    public static IntPtr StringToUtf8Ptr(string str) => TdMarshal.StringToUtf8Ptr(str);
 
-    public static void FreeUtf8Ptr(IntPtr ptr)
-    {
-        if (ptr != IntPtr.Zero)
-        {
-            Marshal.FreeCoTaskMem(ptr);
-        }
-    }
+    public static void FreeUtf8Ptr(IntPtr ptr) => TdMarshal.FreeUtf8Ptr(ptr);
 
-    public static string? PtrToUtf8String(IntPtr ptr)
-    {
-        if (ptr == IntPtr.Zero) return null;
-        return Marshal.PtrToStringUTF8(ptr);
-    }
+    public static string? PtrToUtf8String(IntPtr ptr) => TdMarshal.PtrToUtf8String(ptr);
 }
