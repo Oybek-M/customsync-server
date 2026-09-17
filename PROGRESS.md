@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-16**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **169 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **184 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -227,11 +227,21 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
   tmpfs (RAM); deploy'da staging diskiga ko'chirishni o'ylang.
 - `SweepOrphanedMediaAsync` public — Task 7 uni purge'dan mustaqil
   chaqirishi kerak (aks holda karantindagi bloblar faqat mos yozuv
-  topilgan run'da tozalanadi).
+  ### Plan 05 — Always-on capture service 🟡 JARAYONDA (2/10)
+
+| Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
+|---|---|---|---|
+| 1 — TDLib interop va TdClient | `2fca499` | `CustomSync.Capture` worker service, `TdJsonInterop`, `NativeLibrary.SetDllImportResolver`, `ITdTransport`, `TdClient` (@extra correlation, timeout cleanup, TDLib error handling); 5 test | Native library mavjud bo'lmaganda ham build/test o'tishi ta'minlandi; timeout'da pending so'rovlar tozalanadi |
+| 2 — Autentifikatsiya, preflight va redaction | (hozirgi) | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi |
+
+> ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
+> 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
+> 2) `api_id` va `api_hash` ni `appsettings.Production.json` ga kiritish;
+> 3) VPS konsolida bir martalik `dotnet run --project src/CustomSync.Capture -- --login` orqali autentifikatsiyadan o'tish.
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 3 (MessageCache)
 
 ### Kelishilgan tartib (2026-09-09)
 
@@ -486,6 +496,9 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 16. **`ArchiveJobRunner` va `ArchiveJobService` ajratilishi** — taymerli BackgroundService unit testlar uchun mos emas, alohida testlanadigan runner va sof `ArchiveSchedule` ga ajratildi.
 17. **`storage.disk_capacity_mb` (bayt emas)** — int 2 GiB da overflow bo'lmasligi uchun MB da olindi.
 18. **`CustomSyncWebApplicationFactory`** — integratsiya testlarida `ArchiveJobService` tasodifan ishlab test bazasiga ta'sir qilmasligi uchun test xostidan chiqarildi.
+19. **`ITdTransport` ajratilishi** — P/Invoke'ni to'g'ridan-to'g'ri chaqirish o'rniga transport interfeysi qo'yildi; bu barcha TDLib klient va autentifikatsiya testlarini native `libtdjson`siz va tarmoqsiz ishonchli yurgizish imkonini berdi.
+20. **`NativeLibrary.SetDllImportResolver`** — `Telegram:TdJsonPath` orqali native kutubxona joylashuvini ixtiyoriy papkadan yoki muhitdan yuklash imkoniyati yaratildi.
+21. **`TdRedactor` orqali maxfiy ma'lumotlarni yashirish** — loglarga `api_hash`, `phone_number`, `code`, `password` va h.k. chiqib ketishining oldini olish uchun yagona tozalovchi kiritildi.
 
 ---
 
