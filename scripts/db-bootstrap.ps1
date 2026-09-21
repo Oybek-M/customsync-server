@@ -42,29 +42,34 @@ finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
 # RandomNumberGenerator::Create() ATAYLAB ishlatiladi: ::Fill() faqat
 # .NET Core'da bor, Windows PowerShell 5.1 esa .NET Framework 4.x da
 # ishlaydi. ::Create() ikkalasida ham mavjud.
-$alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-$length   = 32
+function New-RandomSecret {
+    param([int] $Length = 32)
 
-# 256 alphabet uzunligiga bo'linmaydi, shuning uchun oxirgi to'liq
-# blokdan katta baytlar rad etiladi -- aks holda birinchi harflar
-# boshqalaridan ko'proq chiqardi.
-$limit = [byte](256 - (256 % $alphabet.Length))
+    $alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
-$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-try {
-    $chars  = New-Object System.Collections.Generic.List[char]
-    $buffer = New-Object byte[] 64
-    while ($chars.Count -lt $length) {
-        $rng.GetBytes($buffer)
-        foreach ($b in $buffer) {
-            if ($chars.Count -ge $length) { break }
-            if ($b -lt $limit) { $chars.Add($alphabet[$b % $alphabet.Length]) }
+    # 256 alphabet uzunligiga bo'linmaydi, shuning uchun oxirgi to'liq
+    # blokdan katta baytlar rad etiladi -- aks holda birinchi harflar
+    # boshqalaridan ko'proq chiqardi.
+    $limit = [byte](256 - (256 % $alphabet.Length))
+
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $chars  = New-Object System.Collections.Generic.List[char]
+        $buffer = New-Object byte[] 64
+        while ($chars.Count -lt $Length) {
+            $rng.GetBytes($buffer)
+            foreach ($b in $buffer) {
+                if ($chars.Count -ge $Length) { break }
+                if ($b -lt $limit) { $chars.Add($alphabet[$b % $alphabet.Length]) }
+            }
         }
     }
-}
-finally { $rng.Dispose() }
+    finally { $rng.Dispose() }
 
-$rolePassword = -join $chars
+    return (-join $chars)
+}
+
+$rolePassword = New-RandomSecret -Length 32
 
 # --- 3. Rol va bazani yaratish (idempotent) --------------------------------
 # Parol SQL'ga literal sifatida kiradi -- alnum bo'lgani uchun xavfsiz.
@@ -115,8 +120,38 @@ finally {
 $connection = "Host=$DbHost;Port=$Port;Database=$Database;Username=$Role;Password=$rolePassword"
 $devSettingsPath = Join-Path $repo 'src\CustomSync.Api\appsettings.Development.json'
 
+# Jwt:SigningKey ham SHU YERDA yoziladi. Avval yozilmasdi va fayl har
+# safar butunlay qayta yozilardi, natijada skript "muvaffaqiyatli"
+# tugagandan keyin ham API "Jwt:SigningKey sozlanmagan" deb ishga
+# tushmasdi (Program.cs:129). PROGRESS.md esa "skript faylni o'zi
+# yozadi" deb va'da qilardi -- shu bo'shliq yopildi.
+#
+# Mavjud kalit SAQLANADI: skriptni qayta ishga tushirish (masalan parolni
+# almashtirish uchun) allaqachon berilgan tokenlarni bekor qilmasin.
+$signingKey = $null
+if (Test-Path $devSettingsPath) {
+    try {
+        $existing = Get-Content $devSettingsPath -Raw | ConvertFrom-Json
+        if ($existing.PSObject.Properties.Name -contains 'Jwt' -and $existing.Jwt) {
+            $candidate = $existing.Jwt.SigningKey
+            if ($candidate -and $candidate.Length -ge 32) { $signingKey = $candidate }
+        }
+    }
+    catch {
+        Write-Warning "Eski $devSettingsPath o'qilmadi, yangi kalit yaratiladi."
+    }
+}
+if (-not $signingKey) {
+    $signingKey = New-RandomSecret -Length 48
+    Write-Host '-> yangi Jwt:SigningKey yaratildi'
+}
+else {
+    Write-Host '-> mavjud Jwt:SigningKey saqlab qolindi'
+}
+
 $devSettings = [ordered]@{
     ConnectionStrings = [ordered]@{ Postgres = $connection }
+    Jwt               = [ordered]@{ SigningKey = $signingKey }
 }
 $devSettings | ConvertTo-Json -Depth 5 | Set-Content -Path $devSettingsPath -Encoding utf8
 Write-Host "-> yozildi: $devSettingsPath (gitignore'da)"
