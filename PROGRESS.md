@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-17**
+Oxirgi yangilanish: **2026-09-27**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **205 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **212 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -330,7 +330,16 @@ Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 ## 2. 🔴 KEYINGI QADAM — plan 05 Task 4 (update handler'lar)
 
 Task 3 tugadi va tekshirildi (`b456dae` + `4280548`, 212 test).
-Keyingi ish: Task 4 uchun delegate prompt yozish.
+Delegate prompt tayyor: `docs/05-task4-prompt.md` (2026-09-27) — Gemini
+bajargach mustaqil tekshiruv. Promptdagi plandan chetlanishlar:
+- Task **4a** = deleted + edited; `activity` alohida **4b** ga ko'chirildi
+  (tdesktop status kodlash va shovqin filtri aniq ko'chirilishi kerak).
+- `_sync.Enqueue...` o'rniga lokal `capture_outbox` (kesh bilan bitta
+  SQLite faylda, bitta tranzaksiyada). tdesktop kalit yo'qligida hodisani
+  **tashlab yuboradi** — bu yerda tashlanmaydi.
+- TDLib id → tdesktop id: `peer_id` tip bitlari (`<< 48`),
+  `msg_id = tdlib_id >> 20`; `occurred_at` = asl yuborilgan sana.
+- Scope Task 5 gacha **fail-closed** placeholder.
 
 ### Task 4 promptiga majburiy kiritiladigan shartlar
 
