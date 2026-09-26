@@ -28,6 +28,20 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Keshni ochish va tozalash sikli. Ro'yxat to'liq bo'lmasa bu
+        // yiqiladi — keshsiz ishlash ma'lumot yo'qotish demak.
+        try
+        {
+            _ = CustomSync.Capture.Capture.CaptureCacheStartup.Start(
+                _services, _services.GetService<ILogger<Worker>>(), stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Message cache could not be started.");
+            Fail();
+            return;
+        }
+
         var preflight = CapturePreflight.Check(_configuration);
         if (!preflight.Success)
         {
@@ -38,16 +52,6 @@ public class Worker : BackgroundService
 
             Fail();
             return;
-        }
-
-        // Initialize message cache and start periodic pruning
-        var cache = _services.GetService<CustomSync.Capture.Capture.MessageCache>();
-        cache?.Initialize();
-
-        var pruner = _services.GetService<CustomSync.Capture.Capture.PeriodicCachePruner>();
-        if (pruner != null)
-        {
-            _ = Task.Run(() => pruner.RunLoopAsync(stoppingToken), stoppingToken);
         }
 
         // ITdClient FAQAT preflight o'tgandan keyin olinadi: uni yaratish

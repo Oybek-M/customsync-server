@@ -1,4 +1,5 @@
 using CustomSync.Capture;
+using CustomSync.Capture.Capture;
 using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,30 +22,7 @@ builder.Services.AddSingleton(sp => new TdAuthenticator(
     isInteractiveLogin,
     sp.GetService<ILogger<TdAuthenticator>>()));
 
-builder.Services.AddSingleton(sp =>
-{
-    var cacheDbPath = builder.Configuration["Capture:CacheDatabasePath"] ?? "/var/lib/customsync-capture/message-cache.db";
-    return new CustomSync.Capture.Capture.MessageCache(cacheDbPath);
-});
-builder.Services.AddSingleton(sp =>
-{
-    var cache = sp.GetRequiredService<CustomSync.Capture.Capture.MessageCache>();
-    int retentionDays = 30;
-    if (int.TryParse(builder.Configuration["Capture:CacheRetentionDays"], out var rDays) && rDays > 0)
-    {
-        retentionDays = rDays;
-    }
-    int pruneIntervalHours = 6;
-    if (int.TryParse(builder.Configuration["Capture:CachePruneIntervalHours"], out var pHours) && pHours > 0)
-    {
-        pruneIntervalHours = pHours;
-    }
-    return new CustomSync.Capture.Capture.PeriodicCachePruner(
-        cache,
-        retentionDays,
-        TimeSpan.FromHours(pruneIntervalHours),
-        sp.GetService<ILogger<CustomSync.Capture.Capture.PeriodicCachePruner>>());
-});
+builder.Services.AddMessageCache(builder.Configuration);
 
 builder.Services.AddHostedService<Worker>();
 

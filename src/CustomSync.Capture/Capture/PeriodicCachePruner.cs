@@ -43,6 +43,11 @@ public class PeriodicCachePruner
     {
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Ishga tushishda darhol tozalaymiz. Avval intervalni kutardi,
+            // ya'ni tez-tez qayta ishga tushadigan xizmatda (standart
+            // interval 6 soat) kesh hech qachon tozalanmasligi mumkin edi.
+            PruneOnce();
+
             try
             {
                 await _delay(_interval, stoppingToken);
@@ -51,8 +56,14 @@ public class PeriodicCachePruner
             {
                 break;
             }
-
-            PruneOnce();
+            catch (Exception ex)
+            {
+                // Kutish mexanizmi buzilgan. Jimgina davom etsak sikl
+                // to'xtovsiz aylanib protsessorni yeydi, shuning uchun
+                // xatoni yozib chiqib ketamiz.
+                _logger?.LogError(ex, "Cache prune loop stopped: the delay failed.");
+                break;
+            }
         }
     }
 }

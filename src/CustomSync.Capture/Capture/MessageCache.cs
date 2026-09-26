@@ -233,10 +233,17 @@ public class MessageCache
             cmd.CommandText = "SELECT COUNT(*) FROM message_cache;";
             long rowCount = Convert.ToInt64(cmd.ExecuteScalar());
 
+            // WAL rejimida yangi yozuvlar `-wal` faylida turadi va u MB
+            // larga yetishi mumkin. Faqat asosiy faylni sanash diskdagi
+            // haqiqiy hajmni kam ko'rsatadi (Task 9 dagi kvota shu
+            // raqamga tayanadi).
             long fileSizeBytes = 0;
-            if (File.Exists(_databasePath))
+            foreach (var part in new[] { _databasePath, _databasePath + "-wal", _databasePath + "-shm" })
             {
-                fileSizeBytes = new FileInfo(_databasePath).Length;
+                if (File.Exists(part))
+                {
+                    fileSizeBytes += new FileInfo(part).Length;
+                }
             }
 
             return new CacheStats(rowCount, fileSizeBytes);
