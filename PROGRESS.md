@@ -231,7 +231,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (3/10)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (3/10 — Task 3 tekshirildi)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -327,7 +327,31 @@ Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 3 (MessageCache)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 4 (update handler'lar)
+
+Task 3 tugadi va tekshirildi (`b456dae` + `4280548`, 212 test).
+Keyingi ish: Task 4 uchun delegate prompt yozish.
+
+### Task 4 promptiga majburiy kiritiladigan shartlar
+
+1. **`CachedMessage.CachedAt` ni TDLib ma'lumotidan olmaslik.** Bu
+   maydon chaqiruvchiga soatni chetlab o'tish imkonini beradi (Test07
+   shunga tayanadi), ya'ni TDLib'dan kelgan `date` ni unga berish
+   retention'ni buzadi: eski xabar darhol tozalanib ketishi mumkin.
+   Vaqt faqat `TimeProvider` dan olinadi.
+2. **Keshga `GetMany` va `Delete` qo'shiladi.** `messageDeleted` bir
+   nechta id bilan keladi, ya'ni har biriga alohida `Get` + o'chirish
+   noatomar bo'ladi. Ikkalasi ham bitta tranzaksiyada.
+3. **`edited` payload = `{old_text, new_text, is_out}`** (spec §0.8).
+   `old_text` faqat keshdan keladi; kesh bo'sh bo'lsa nima yozilishi
+   promptda aniq yozilishi kerak (jimgina `null` emas).
+4. **Manfiy `msg_id`** (avatar/story, spec §0.6) va **media yo'llari
+   yozilmasligi** (faqat `media_id`) saqlanadi.
+5. **Har bir himoya ulangan bo'lishi shart.** Uch task ketma-ket bir xil
+   xato bilan keldi: himoya yozilgan, lekin chaqirilmagan yoki faqat
+   test o'z nusxasini sinagan (`TdRedactor`, avtorizatsiya, kesh
+   ulanishi). Promptda: ishlab chiqarish yo'li orqali o'tadigan test
+   talab qilinadi, qo'lda yasalgan `ServiceCollection` nusxasi emas.
 
 ### Kelishilgan tartib (2026-09-09)
 
