@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-17**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **190 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **205 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -231,12 +231,13 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (2/10)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (3/10)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
 | 1 — TDLib interop va TdClient | `2fca499` | `CustomSync.Capture` worker service, `TdJsonInterop`, `NativeLibrary.SetDllImportResolver`, `ITdTransport`, `TdClient` (@extra correlation, timeout cleanup, TDLib error handling); 5 test | Native library mavjud bo'lmaganda ham build/test o'tishi ta'minlandi; timeout'da pending so'rovlar tozalanadi |
 | 2 — Autentifikatsiya, preflight va redaction | `02c3a9d` + `8fb237c` | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi. **Tekshiruvda topilgan (2026-09-17):** `TdRedactor` ishlab chiqarish kodida umuman chaqirilmasdi (o'lik himoya); xizmat avtorizatsiyani hech qachon tekshirmasdi va nol kod bilan chiqardi; qabul sikli xatoda kechikishsiz aylanardi; marshalling qatlami butunlay sinovsiz edi |
+| 3 — Mahalliy xabarlar keshi (MessageCache) | <pending> | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), `PeriodicCachePruner` Worker'da to'g'ridan-to'g'ri ishga tushiriladi, matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -539,6 +540,12 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 19. **`ITdTransport` ajratilishi** — P/Invoke'ni to'g'ridan-to'g'ri chaqirish o'rniga transport interfeysi qo'yildi; bu barcha TDLib klient va autentifikatsiya testlarini native `libtdjson`siz va tarmoqsiz ishonchli yurgizish imkonini berdi.
 20. **`NativeLibrary.SetDllImportResolver`** — `Telegram:TdJsonPath` orqali native kutubxona joylashuvini ixtiyoriy papkadan yoki muhitdan yuklash imkoniyati yaratildi.
 21. **`TdRedactor` orqali maxfiy ma'lumotlarni yashirish** — loglarga `api_hash`, `phone_number`, `code`, `password` va h.k. chiqib ketishining oldini olish uchun yagona tozalovchi kiritildi.
+22. **`Put` avvalgi qatorni qaytarishi (read-and-replace atomar tranzaksiyasi)** — Plandagi `INSERT OR REPLACE` eski matnni yo'q qilardi. Ammo `updateMessageContent` hodisasida `edited` yozuvi `{old_text, new_text, is_out}` talab qilgani uchun `old_text` saqlanib qolishi shart. Shuning uchun `Put` almashtirilgan eski satrni qaytaradi.
+23. **WAL va busy_timeout sozlamalari** — SQLite doimiy xizmat rejimida `Prune` va parallel yozuvchilar to'qnashuvida `database is locked` xatoligi chiqmasligi uchun `PRAGMA journal_mode = WAL` va `PRAGMA busy_timeout = 5000` o'rnatildi.
+24. **Sxema versiyasi (`PRAGMA user_version = 1`)** — Kelgusi vazifalarda migratsiyalarni aniq boshqarish uchun sxema versiyasi belgilandi.
+25. **Injectable clock (`TimeProvider`)** — Vaqt o'tishi va `Prune` tozalash chegaralarini 30 kun kutmasdan aniq sinovdan o'tkazish uchun keshga vaqt provayderi ulandi.
+26. **`PeriodicCachePruner` ajratilishi va Worker'da ulanishi** — `Prune` o'lik kod bo'lib qolmasligi uchun alohida fon komponenti sifatida Worker'da sozlanuvchi interval (`Capture:CachePruneIntervalHours`, default 6) va retention (`Capture:CacheRetentionDays`, default 30) bilan ishga tushirildi.
+27. **`CacheStats Stats()` metodi** — Monitoring uchun keshdagi qatorlar soni va diskdagi SQLite fayl hajmini qaytaruvchi metod kiritildi.
 
 ---
 

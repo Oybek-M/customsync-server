@@ -64,6 +64,34 @@ public static class CapturePreflight
         CheckDirectory(config["Telegram:DatabaseDirectory"], "DatabaseDirectory", errors);
         CheckDirectory(config["Telegram:FilesDirectory"], "FilesDirectory", errors);
 
+        // 4. Cache database directory check
+        var cacheDbPath = config["Capture:CacheDatabasePath"];
+        if (string.IsNullOrWhiteSpace(cacheDbPath))
+        {
+            cacheDbPath = "/var/lib/customsync-capture/message-cache.db";
+        }
+        var cacheDir = Path.GetDirectoryName(cacheDbPath);
+        if (string.IsNullOrWhiteSpace(cacheDir))
+        {
+            cacheDir = ".";
+        }
+
+        try
+        {
+            if (!Directory.Exists(cacheDir))
+            {
+                Directory.CreateDirectory(cacheDir);
+            }
+
+            var testFile = Path.Combine(cacheDir, $".preflight_test_{Guid.NewGuid():N}");
+            File.WriteAllText(testFile, "test");
+            File.Delete(testFile);
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"Capture:CacheDatabasePath directory '{cacheDir}' cannot be created or is not writable: {ex.Message}");
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
     }
 

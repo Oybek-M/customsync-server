@@ -40,6 +40,16 @@ public class Worker : BackgroundService
             return;
         }
 
+        // Initialize message cache and start periodic pruning
+        var cache = _services.GetService<CustomSync.Capture.Capture.MessageCache>();
+        cache?.Initialize();
+
+        var pruner = _services.GetService<CustomSync.Capture.Capture.PeriodicCachePruner>();
+        if (pruner != null)
+        {
+            _ = Task.Run(() => pruner.RunLoopAsync(stoppingToken), stoppingToken);
+        }
+
         // ITdClient FAQAT preflight o'tgandan keyin olinadi: uni yaratish
         // native kutubxonaga P/Invoke qiladi, ya'ni kutubxona yo'q mashinada
         // konstruktor inyeksiyasi preflight'gacha xostni yiqitardi.
