@@ -23,6 +23,7 @@ builder.Services.AddSingleton(sp => new TdAuthenticator(
     sp.GetService<ILogger<TdAuthenticator>>()));
 
 builder.Services.AddMessageCache(builder.Configuration);
+builder.Services.AddCaptureHandlers();
 
 builder.Services.AddHostedService<Worker>();
 

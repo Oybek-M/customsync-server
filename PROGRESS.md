@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-27**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **212 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **229 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -231,13 +231,14 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (3/10 — Task 3 tekshirildi)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (4/10 — Task 4a yakunlandi)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
 | 1 — TDLib interop va TdClient | `2fca499` | `CustomSync.Capture` worker service, `TdJsonInterop`, `NativeLibrary.SetDllImportResolver`, `ITdTransport`, `TdClient` (@extra correlation, timeout cleanup, TDLib error handling); 5 test | Native library mavjud bo'lmaganda ham build/test o'tishi ta'minlandi; timeout'da pending so'rovlar tozalanadi |
 | 2 — Autentifikatsiya, preflight va redaction | `02c3a9d` + `8fb237c` | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi. **Tekshiruvda topilgan (2026-09-17):** `TdRedactor` ishlab chiqarish kodida umuman chaqirilmasdi (o'lik himoya); xizmat avtorizatsiyani hech qachon tekshirmasdi va nol kod bilan chiqardi; qabul sikli xatoda kechikishsiz aylanardi; marshalling qatlami butunlay sinovsiz edi |
 | 3 — Mahalliy xabarlar keshi (MessageCache) | `b456dae` + `4280548` | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan. **Tekshiruvda topilgan (2026-09-26):** `Get` ning chat izolyatsiyasi sinovsiz edi; `Worker` keshni `GetService` + `?.` bilan ulardi (ro'yxat yo'qolsa jimgina keshsiz ishlardi) va bu butunlay sinovsiz edi; tozalash sikli kuzatuvsiz `Task.Run` edi; `Stats` `-wal` faylini sanamasdi; tozalash birinchi marta faqat 6 soatdan keyin ishga tushardi. 7 yangi test, jami 212 |
+| 4a — O'chirilgan va tahrirlangan xabarlarni saqlash (outbox) | (ushbu commit) | `capture_outbox` jadvali (SQLite, durativ outbox), `TdIdMapper` (peer << 48, msg_id >> 20), `PayloadBuilder` (BuildDeleted/BuildEdited UTF-8 mosligi, non-ASCII/emojilar saqlanadi), `NoneCaptureScope` (fail-closed placeholder), atomar delete+outbox tranzaksiyasi (`DeleteMessagesAndRecordOutbox`), ketma-ket qayta ishlash navbati va early queue; `AddCaptureHandlers` ishlab chiqarish simi; 17 yangi test (jami 229 test) | 9 ta ataylab buzish (a–i) to'liq tekshirildi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -327,19 +328,19 @@ Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 4 (update handler'lar)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 4b (activity capture) yoki Task 5 (Scope)
 
-Task 3 tugadi va tekshirildi (`b456dae` + `4280548`, 212 test).
-Delegate prompt tayyor: `docs/05-task4-prompt.md` (2026-09-27) — Gemini
-bajargach mustaqil tekshiruv. Promptdagi plandan chetlanishlar:
-- Task **4a** = deleted + edited; `activity` alohida **4b** ga ko'chirildi
-  (tdesktop status kodlash va shovqin filtri aniq ko'chirilishi kerak).
-- `_sync.Enqueue...` o'rniga lokal `capture_outbox` (kesh bilan bitta
-  SQLite faylda, bitta tranzaksiyada). tdesktop kalit yo'qligida hodisani
-  **tashlab yuboradi** — bu yerda tashlanmaydi.
-- TDLib id → tdesktop id: `peer_id` tip bitlari (`<< 48`),
-  `msg_id = tdlib_id >> 20`; `occurred_at` = asl yuborilgan sana.
-- Scope Task 5 gacha **fail-closed** placeholder.
+Task 4a tugadi va tekshirildi (229 test).
+Qilingan ishlar (Task 4a):
+- `capture_outbox` jadvali (SQLite, durativ plaintext outbox).
+- `TdIdMapper`: TDLib chat_id va message_id larini tdesktop standartiga keltirish (`peer_id` << 48 bitlar, `msg_id = tdlib_id >> 20`).
+- `PayloadBuilder`: tdesktop BuildDeleted/BuildEdited mos keluvchi ixcham JSON serializatsiya (UTF-8, emoji va lotin bo'lmagan belgilar escape qilinmaydi).
+- `NoneCaptureScope`: fail-closed placeholder (Task 5 gacha hamma chatlarni rad etadi).
+- `MessageCache.DeleteMessagesAndRecordOutbox`: atomar delete va outbox tranzaksiyasi.
+- `CaptureUpdateHandler`: ketma-ket qayta ishlash navbati va early updates buferi.
+- `CaptureHandlerRegistration.AddCaptureHandlers`: ishlab chiqarish DI ulanishi va test orqali tasdiqlangan.
+
+Keyingi qadam: Task 4b (activity: updateUserStatus, updateUser) yoki Task 5 (CaptureScope).
 
 ### Task 4 promptiga majburiy kiritiladigan shartlar
 
@@ -624,6 +625,10 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 25. **Injectable clock (`TimeProvider`)** — Vaqt o'tishi va `Prune` tozalash chegaralarini 30 kun kutmasdan aniq sinovdan o'tkazish uchun keshga vaqt provayderi ulandi.
 26. **`PeriodicCachePruner` ajratilishi va Worker'da ulanishi** — `Prune` o'lik kod bo'lib qolmasligi uchun alohida fon komponenti sifatida Worker'da sozlanuvchi interval (`Capture:CachePruneIntervalHours`, default 6) va retention (`Capture:CacheRetentionDays`, default 30) bilan ishga tushirildi.
 27. **`CacheStats Stats()` metodi** — Monitoring uchun keshdagi qatorlar soni va diskdagi SQLite fayl hajmini qaytaruvchi metod kiritildi.
+28. **`_sync.Enqueue` o'rniga durativ `capture_outbox` jadvali** — Task 6 gacha sinxronizatsiya mijozi, kalitlar va shifrlash yo'q. tdesktop kalit yo'qligida hodisani tashlab yuboradi (`if (!KeysAvailable()) return;`), lekin capture xizmatida bu ma'lumot yo'qolishiga olib kelishi sababli xabarlar SQLite fayldagi `capture_outbox` jadvaliga durativ saqlanadi.
+29. **`TdIdMapper` orqali identifikatorlar moslashtirilishi** — TDLib va tdesktop identifikatorlari tubdan farq qiladi: `peer_id` tdesktop kabi tip bitlari (`<< 48`) bilan, server `msg_id` esa faqat quyi 20 biti 0 bo'lganda `tdlib_id >> 20` orqali olinadi. Maxfiy chatlar (secret chats) qamrab olinmaydi (`null`).
+30. **`NoneCaptureScope` fail-closed xavfsizlik** — Task 5 doirasida haqiqiy scope joriy qilinguncha xizmat hech narsani saqlamaydigan placeholder bilan xavfsiz holatda (fail-closed) turadi.
+31. **`activity` alohida Task 4b ga ajratilishi** — `updateUserStatus` va `updateUser` hodisalarini qayta ishlash, status kodlash hamda tdesktop shovqin filtrini aniq ko'chirish alohida topshiriq sifatida ajratildi.
 
 ---
 
