@@ -237,7 +237,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 |---|---|---|---|
 | 1 — TDLib interop va TdClient | `2fca499` | `CustomSync.Capture` worker service, `TdJsonInterop`, `NativeLibrary.SetDllImportResolver`, `ITdTransport`, `TdClient` (@extra correlation, timeout cleanup, TDLib error handling); 5 test | Native library mavjud bo'lmaganda ham build/test o'tishi ta'minlandi; timeout'da pending so'rovlar tozalanadi |
 | 2 — Autentifikatsiya, preflight va redaction | `02c3a9d` + `8fb237c` | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi. **Tekshiruvda topilgan (2026-09-17):** `TdRedactor` ishlab chiqarish kodida umuman chaqirilmasdi (o'lik himoya); xizmat avtorizatsiyani hech qachon tekshirmasdi va nol kod bilan chiqardi; qabul sikli xatoda kechikishsiz aylanardi; marshalling qatlami butunlay sinovsiz edi |
-| 3 — Mahalliy xabarlar keshi (MessageCache) | <pending> | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), `PeriodicCachePruner` Worker'da to'g'ridan-to'g'ri ishga tushiriladi, matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan |
+| 3 — Mahalliy xabarlar keshi (MessageCache) | `b456dae` + `4280548` | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan. **Tekshiruvda topilgan (2026-09-26):** `Get` ning chat izolyatsiyasi sinovsiz edi; `Worker` keshni `GetService` + `?.` bilan ulardi (ro'yxat yo'qolsa jimgina keshsiz ishlardi) va bu butunlay sinovsiz edi; tozalash sikli kuzatuvsiz `Task.Run` edi; `Stats` `-wal` faylini sanamasdi; tozalash birinchi marta faqat 6 soatdan keyin ishga tushardi. 7 yangi test, jami 212 |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -279,6 +279,51 @@ uzilganda 24/7 jarayon protsessorni 100% band qilardi.
 
 Ochiq qolgan, ongli qaror: `AuthorizationGate` ni faqat soxta klient
 bilan sinaymiz; haqiqiy TDLib bilan uchi-uchiga sinov plan 05 Task 10 da.
+
+---
+
+### Plan 05 Task 3 tekshiruvi (2026-09-26) — qanday qabul qilindi
+
+Testlar mustaqil yurgizildi (205/205 tasdiqlandi, build 0 ogohlantirish),
+so'ng Gemini'nikidan **boshqa** beshta mutatsiya qilindi. Uchtasi
+ushlandi (`BEGIN IMMEDIATE` -> `BEGIN`, `Prune` ning `cached_at` o'rniga
+`date`, `Put` ning qaytish qiymati), **ikkitasi o'tib ketdi** — ikkalasi
+ham jiddiy:
+
+1. **`Get` `chat_id` ni e'tiborsiz qoldirsa ham hamma test o'tardi.**
+   Turli chatlarda bir xil `message_id` bo'lishi normal holat, ya'ni
+   Task 4 boshqa chatning matnini o'chirilgan xabar matni deb yozib
+   qo'yardi. Chat izolyatsiyasi testi qo'shildi.
+2. **`Worker` keshni umuman ulamasa ham hamma test o'tardi.** Kod
+   `GetService` + `cache?.Initialize()` ishlatardi: ro'yxatdan o'tmagan
+   xizmat xatosiz "kesh yo'q" holatiga olib kelardi, ya'ni xabarlar
+   keshlanmasdi va `old_text` yo'qolardi. Delegate testi esa o'zining
+   qo'lda yasagan `ServiceCollection` nusxasini sinardi, `Program.cs` ni
+   emas — `TdRedactor` bilan aynan bir xil "ulanmagan himoya" xatosi.
+
+Tuzatishlar:
+
+- `CaptureCacheStartup` ajratildi: `GetRequiredService` bilan baland
+  ovozda yiqiladi, `Worker` nosozlikda `ExitCode = 1` bilan to'xtaydi.
+- Ro'yxatga olish `Program.cs` dan `CaptureCacheRegistration` ga
+  ko'chirildi, endi haqiqiy ro'yxat (sozlama kalitlari bilan birga)
+  sinaladi.
+- Kesh preflight'dan **oldin** ulanadi (TDLib ga bog'liq emas) — shu
+  tartib ulanishni preflight yiqilgan holatda ham sinash imkonini beradi.
+- Tozalash sikli endi kuzatuvsiz emas: xatosi log'ga tushadi.
+- `RunLoopAsync` ishga tushishda darhol tozalaydi (avval 6 soat kutardi,
+  ya'ni tez-tez qayta ishga tushadigan xizmatda kesh hech tozalanmasligi
+  mumkin edi) va kutish mexanizmi buzilsa aylanib ketmaydi.
+- `Stats().FileSizeBytes` `-wal` va `-shm` ni ham sanaydi. WAL rejimida
+  yangi yozuvlar `-wal` da turadi, ya'ni Task 9 dagi kvota diskdagi
+  haqiqiy hajmni kam ko'rsatardi.
+
+So'ngra sakkizta mutatsiya qayta yurgizildi — sakkiztasi ham ushlandi.
+Jami 212 test.
+
+Kelasi task uchun eslatma: `CachedMessage.CachedAt` ni chaqiruvchi
+o'zi berib soatni chetlab o'tishi mumkin (Test07 shunga tayanadi).
+Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 
 ---
 
