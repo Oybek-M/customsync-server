@@ -26,7 +26,8 @@ internal static class TestVectors
             ?? throw new InvalidOperationException(
                 $"test-vectors.json topilmadi. {EnvVar} muhit o'zgaruvchisiga " +
                 "to'liq yo'lni bering, masalan:\n" +
-                @"  set CUSTOMSYNC_TEST_VECTORS=C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json");
+                @"  set CUSTOMSYNC_TEST_VECTORS=<tdesktop>\docs\sync-protocol\test-vectors.json " +
+                @"(C:\TBuild\tdesktop yoki D:\TBuild\tdesktop)");
 
         using var stream = File.OpenRead(path);
         return JsonDocument.Parse(stream).RootElement.Clone();
@@ -38,8 +39,13 @@ internal static class TestVectors
         if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv))
             return fromEnv;
 
-        // tdesktop build daraxtining hujjatlashtirilgan joyi (CLAUDE.md).
-        const string documented = @"C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json";
-        return File.Exists(documented) ? documented : null;
+        // tdesktop build daraxtining ma'lum joylari: laptopda C:, PC'da D:
+        // (docs/MACHINES.md). Birinchi mavjudi olinadi.
+        string[] documented =
+        {
+            @"C:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json",
+            @"D:\TBuild\tdesktop\docs\sync-protocol\test-vectors.json",
+        };
+        return documented.FirstOrDefault(File.Exists);
     }
 }
