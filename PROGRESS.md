@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-27**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **247 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **249 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -239,7 +239,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 2 — Autentifikatsiya, preflight va redaction | `02c3a9d` + `8fb237c` | `TdAuthenticator` (interaktiv va xizmat rejimlari), `CapturePreflight`, `TdRedactor` (maxfiy ma'lumotlarni yashirish); 10 test (jami 15 ta capture testi, 184 umumiy test) | 1) `waitRegistration` va notanish holatlarda xatolik bilan to'xtash; 2) `use_secret_chats = false`; 3) maxfiy qiymatlarni loglarda hech qachon chiqarmaslik; 4) 7 ta ataylab buzish (a–g) tekshirildi. **Tekshiruvda topilgan (2026-09-17):** `TdRedactor` ishlab chiqarish kodida umuman chaqirilmasdi (o'lik himoya); xizmat avtorizatsiyani hech qachon tekshirmasdi va nol kod bilan chiqardi; qabul sikli xatoda kechikishsiz aylanardi; marshalling qatlami butunlay sinovsiz edi |
 | 3 — Mahalliy xabarlar keshi (MessageCache) | `b456dae` + `4280548` | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan. **Tekshiruvda topilgan (2026-09-26):** `Get` ning chat izolyatsiyasi sinovsiz edi; `Worker` keshni `GetService` + `?.` bilan ulardi (ro'yxat yo'qolsa jimgina keshsiz ishlardi) va bu butunlay sinovsiz edi; tozalash sikli kuzatuvsiz `Task.Run` edi; `Stats` `-wal` faylini sanamasdi; tozalash birinchi marta faqat 6 soatdan keyin ishga tushardi. 7 yangi test, jami 212 |
 | 4a — O'chirilgan va tahrirlangan xabarlarni saqlash (outbox) | `7d9b98f` + tekshiruv tuzatishlari | `capture_outbox` jadvali (SQLite, durativ outbox), `TdIdMapper` (peer << 48, msg_id >> 20), `PayloadBuilder` (BuildDeleted/BuildEdited UTF-8 mosligi, non-ASCII/emojilar saqlanadi), `NoneCaptureScope` (fail-closed placeholder), atomar delete+outbox tranzaksiyasi (`DeleteMessagesAndRecordOutbox`), ketma-ket qayta ishlash navbati va early queue; `AddCaptureHandlers` ishlab chiqarish simi; 17+8 test (jami 236) | 9 ta buzish (a–i) + 14 ta mustaqil mutatsiya; 6 ta nuqson tuzatildi |
-| 5 — Capture scope: chatlar saralanishi (cache, delete, edit) | joriy commit | 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced snapshot > DefaultEnabled); tdesktop zanjiriga mos 3 qaror (ShouldCache, ShouldAntiDelete, ShouldAntiEdit); ScopeSettingsSnapshot va ISyncedScopeSettingsSource choki; CapturePreflight decimal int64 va kesishtirmaslik tekshiruvi; privacy loglar (hech qanday peer_id loglanmaydi); 11 test (jami 247) | 10 ta ataylab buzish (a–j) ushlandi; DI da factory lambda orqali konstruktor noaniqligi bartaraf etildi; tdesktop background-edit nomuvofiqligi qayd etildi (server ShouldAntiEdit ga qaraydi) |
+| 5 — Capture scope: chatlar saralanishi (cache, delete, edit) | `640066e` + tekshiruv tuzatishlari | 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced snapshot > DefaultEnabled); tdesktop zanjiriga mos 3 qaror (ShouldCache, ShouldAntiDelete, ShouldAntiEdit); ScopeSettingsSnapshot va ISyncedScopeSettingsSource choki; CapturePreflight decimal int64 va kesishtirmaslik tekshiruvi; privacy loglar (hech qanday peer_id loglanmaydi); 11 test (jami 247) | 10 ta ataylab buzish (a–j) ushlandi; DI da factory lambda orqali konstruktor noaniqligi bartaraf etildi; tdesktop background-edit nomuvofiqligi qayd etildi (server ShouldAntiEdit ga qaraydi) |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -327,6 +327,30 @@ Kelasi task uchun eslatma: `CachedMessage.CachedAt` ni chaqiruvchi
 o'zi berib soatni chetlab o'tishi mumkin (Test07 shunga tayanadi).
 Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 
+### Plan 05 Task 5 tekshiruvi (2026-09-27) — qanday qabul qilindi
+
+Delegate hisoboti (247/247 x3, 10 buzish) mustaqil tasdiqlandi. Zanjir
+tdesktop'niki bilan mos. Topilgan va tuzatilgan:
+
+1. **Preflight "son"ni tekshirardi, evaluator esa satrni aniq
+   solishtiradi.** `-1002827825432` (TDLib/Bot API chat_id — eng
+   ehtimoliy xato), `"0123"`, `" 123"`, `"+123"` preflight'dan o'tardi,
+   lekin hech qachon mos kelmasdi: Block yozuvi jimgina ishlamay, chat
+   ushlanaverardi. Endi faqat kanonik musbat tdesktop peer id
+   (`IsCanonicalPeerId`), xato matnida to'g'ri shakl aytiladi.
+2. **`Capture:Scope:DefaultEnabled` xato yozilsa** (`"ture"`) jimgina
+   `false` bo'lardi. Endi preflight xatosi.
+3. **DI'dagi sinxron manba e'tiborsiz qolishi testlanmagan edi** (o'z
+   mutatsiyam tirik qoldi). Task 6 aynan shu manbani qo'yadi. Test10b —
+   manba `AddCaptureHandlers` dan oldin ham, keyin ham ro'yxatga olinsa
+   ishlatiladi.
+4. `CaptureClientTests.Test2` mutatsiya yuklamasida 2 s kutishga
+   sig'masdi — 10 s.
+
+O'z mutatsiyalarim: 7 ta; N5 (WL kategoriyada `!exactBL` sharti) — teng
+kuchli mutant: aniq BL zanjirda WL'dan oldin `false` qaytaradi.
+Natija: 249/249 x3, build 0 ogohlantirish.
+
 ### Plan 05 Task 4a tekshiruvi (2026-09-27) — qanday qabul qilindi
 
 Delegate hisoboti: "229/229, 9 ta buzish ushlandi, promptdan chetlanish
@@ -379,7 +403,7 @@ Qilingan ishlar (Task 5):
 
 ### Plan 05 navbati (2026-09-27 kelishildi)
 
-1. **Task 5 — scope.** ✅ YAKUNLANDI (commit joriy).
+1. **Task 5 — scope.** ✅ YAKUNLANDI va tekshirildi (`640066e` + tuzatish, 249 test).
 2. **Task 4b — activity** (`updateUserStatus`/`updateUser`). ⚠️ UNUTILMASIN.
    tdesktop `custom_activity_history.cpp` status kodlash + shovqin
    filtri aynan ko'chiriladi; scope — `ShouldTrackActivity`

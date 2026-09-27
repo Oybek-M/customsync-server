@@ -259,6 +259,46 @@ public class CaptureScopeTests
     }
 
     [Fact]
+    public void Test05b_Preflight_rejects_entries_that_parse_but_can_never_match()
+    {
+        // Evaluator satrlarni ANIQ solishtiradi. long.TryParse o'tkazadigan,
+        // lekin TdIdMapper hech qachon chiqarmaydigan shakl Block'da turib,
+        // chatni jimgina ushlatib yuboradi. Eng ehtimoliy xato — TDLib /
+        // Bot API chat_id (-100...) ni yozish.
+        foreach (var bad in new[] { "-1002827825432", "0123", " 7053823996", "7053823996 ", "+7053823996", "0" })
+        {
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Telegram:ApiId"] = "12345",
+                ["Telegram:ApiHash"] = "hash",
+                ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:Scope:Block:0"] = bad
+            }).Build();
+
+            var report = CapturePreflight.Check(config, nativeLibChecker: _ => true);
+            Assert.False(report.Success, $"'{bad}' must be rejected");
+            Assert.Contains(report.Errors, e => e.Contains("Capture:Scope:Block"));
+        }
+
+        foreach (var bad in new[] { "ture", "1", "yes" })
+        {
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Telegram:ApiId"] = "12345",
+                ["Telegram:ApiHash"] = "hash",
+                ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:Scope:DefaultEnabled"] = bad
+            }).Build();
+
+            var report = CapturePreflight.Check(config, nativeLibChecker: _ => true);
+            Assert.False(report.Success, $"DefaultEnabled '{bad}' must be rejected");
+            Assert.Contains(report.Errors, e => e.Contains("Capture:Scope:DefaultEnabled"));
+        }
+    }
+
+    [Fact]
     public void Test05_Preflight_validation_scope_configuration()
     {
         // 1. Malformed entry in Block
@@ -568,6 +608,36 @@ public class CaptureScopeTests
         // Fail-closed default config: nothing cached, nothing written to outbox
         Assert.Null(cache.Get(chatId, 400L));
         Assert.Empty(cache.GetOutboxRows());
+    }
+
+    [Fact]
+    public void Test10b_Production_wiring_uses_the_registered_synced_settings_source()
+    {
+        // Task 6 haqiqiy manbani DI'ga qo'yadi. Registratsiya uni e'tiborsiz
+        // qoldirsa, egasining tdesktop sozlamalari jimgina ishlamay qoladi.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:CacheDatabasePath"] = CreateTempDbPath()
+        }).Build();
+
+        foreach (var registerFirst in new[] { true, false })
+        {
+            var source = new DirectSnapshotSource(new ScopeSettingsSnapshot(
+                whitelist: new HashSet<string> { ChannelPeerId }));
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddMessageCache(config);
+            services.AddSingleton<ITdTransport>(new FakeTdTransport());
+            services.AddSingleton<ITdClient, TdClient>();
+            if (registerFirst) services.AddSingleton<ISyncedScopeSettingsSource>(source);
+            services.AddCaptureHandlers();
+            if (!registerFirst) services.AddSingleton<ISyncedScopeSettingsSource>(source);
+
+            using var sp = services.BuildServiceProvider();
+            var scope = sp.GetRequiredService<ICaptureScope>();
+            Assert.True(scope.ShouldAntiDelete(ChannelPeerId), $"registerFirst={registerFirst}");
+            Assert.False(scope.ShouldAntiDelete(UserPeerId), $"registerFirst={registerFirst}");
+        }
     }
 
     [Fact]

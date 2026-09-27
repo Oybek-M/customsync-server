@@ -23,11 +23,19 @@ public static class ScopeConfigReader
         return new List<string>();
     }
 
-    public static bool IsValidDecimalInt64(string value)
+    /// <summary>
+    /// TdIdMapper chiqaradigan AYNAN shakl: musbat, belgisiz, bo'shliqsiz,
+    /// boshida nolsiz o'nlik son. Evaluator satrlarni aniq solishtiradi —
+    /// "0123", " 123" yoki TDLib chat_id (-100...) "son" bo'lib o'tsa ham
+    /// hech qachon mos kelmaydi, ya'ni Block yozuvi jimgina ishlamay qoladi.
+    /// </summary>
+    public static bool IsCanonicalPeerId(string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrEmpty(value))
             return false;
 
-        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _);
+        return long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
+            && parsed > 0
+            && parsed.ToString(CultureInfo.InvariantCulture) == value;
     }
 }

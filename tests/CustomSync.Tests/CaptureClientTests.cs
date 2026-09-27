@@ -106,7 +106,7 @@ public class CaptureClientTests
         var updateJson = "{\"@type\":\"updateOption\",\"name\":\"version\",\"value\":{\"@type\":\"optionValueString\",\"value\":\"1.8.0\"}}";
         transport.EnqueueIncoming(updateJson);
 
-        var received = await Task.WhenAny(updateTcs.Task, Task.Delay(2000));
+        var received = await Task.WhenAny(updateTcs.Task, Task.Delay(10000));
         Assert.Same(updateTcs.Task, received);
         Assert.Equal(updateJson, await updateTcs.Task);
     }

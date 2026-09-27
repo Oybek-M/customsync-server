@@ -100,9 +100,9 @@ public static class CapturePreflight
         bool hasBlockError = false;
         foreach (var entry in blockList)
         {
-            if (!ScopeConfigReader.IsValidDecimalInt64(entry))
+            if (!ScopeConfigReader.IsCanonicalPeerId(entry))
             {
-                errors.Add("Capture:Scope:Block contains an invalid entry that is not a decimal int64.");
+                errors.Add("Capture:Scope:Block contains an entry that is not a tdesktop peer id (positive decimal, no spaces or leading zeros; TDLib chat ids such as -100... are not accepted).");
                 hasBlockError = true;
                 break;
             }
@@ -111,9 +111,9 @@ public static class CapturePreflight
         bool hasAllowError = false;
         foreach (var entry in allowList)
         {
-            if (!ScopeConfigReader.IsValidDecimalInt64(entry))
+            if (!ScopeConfigReader.IsCanonicalPeerId(entry))
             {
-                errors.Add("Capture:Scope:Allow contains an invalid entry that is not a decimal int64.");
+                errors.Add("Capture:Scope:Allow contains an entry that is not a tdesktop peer id (positive decimal, no spaces or leading zeros; TDLib chat ids such as -100... are not accepted).");
                 hasAllowError = true;
                 break;
             }
@@ -127,6 +127,14 @@ public static class CapturePreflight
             {
                 errors.Add("Capture:Scope:Block and Capture:Scope:Allow contain overlapping peer entries.");
             }
+        }
+
+        // Xato yozilgan qiymat jimgina `false` bo'lsa, egasi "yoqdim" deb
+        // o'ylaydi-yu, xizmat hech narsa ushlamaydi.
+        var defaultEnabled = config["Capture:Scope:DefaultEnabled"];
+        if (!string.IsNullOrEmpty(defaultEnabled) && !bool.TryParse(defaultEnabled, out _))
+        {
+            errors.Add("Capture:Scope:DefaultEnabled must be 'true' or 'false'.");
         }
 
         return new PreflightReport(errors.Count == 0, errors);
