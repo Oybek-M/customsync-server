@@ -404,7 +404,12 @@ Qilingan ishlar (Task 5):
 ### Plan 05 navbati (2026-09-27 kelishildi)
 
 1. **Task 5 — scope.** ✅ YAKUNLANDI va tekshirildi (`640066e` + tuzatish, 249 test).
-2. **Task 4b — activity** (`updateUserStatus`/`updateUser`). ⚠️ UNUTILMASIN.
+2. **Task 4b — activity** (`updateUserStatus`/`updateUser`). Prompt tayyor:
+   `docs/05-task4b-prompt.md` (2026-09-27). Protokoldagi ochiq savollar
+   (tdesktop sessiyasi hal qiladi): (a) activity `msg_id` — spec §3.1
+   `SHA256(field)[0:8]`, §3.2 jadvali va `test-vectors.json` esa `0`;
+   (b) activity Include/Exclude/TrackAllContacts uchun `setting`
+   kalitlari yo'q (§3.2.1 faqat xabar scope'i).
    tdesktop `custom_activity_history.cpp` status kodlash + shovqin
    filtri aynan ko'chiriladi; scope — `ShouldTrackActivity`
    (Exclude > Include > trackAllContacts && isContact), Task 5 dagi
