@@ -85,9 +85,17 @@ public class CaptureCacheVerificationTests : IDisposable
         var cache = new MessageCache(dbPath);
         cache.Initialize();
 
-        // Ochiq ulanish WAL ni checkpoint qilib yuborishiga yo'l qo'ymaydi.
+        // Checkpoint'ni FAOL o'qish tranzaksiyasi to'xtatadi — shunchaki ochiq
+        // ulanish emas (yuklama ostida avto-checkpoint testni flaky qilardi).
         using var holdOpen = new SqliteConnection($"Data Source={dbPath}");
         holdOpen.Open();
+        using var readTx = holdOpen.BeginTransaction(deferred: true);
+        using (var pin = holdOpen.CreateCommand())
+        {
+            pin.Transaction = readTx;
+            pin.CommandText = "SELECT COUNT(*) FROM message_cache;";
+            pin.ExecuteScalar();
+        }
 
         for (var i = 0; i < 300; i++)
         {

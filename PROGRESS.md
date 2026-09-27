@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-27**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **261 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **265 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -240,7 +240,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 3 — Mahalliy xabarlar keshi (MessageCache) | `b456dae` + `4280548` | SQLite mahalliy kesh (`MessageCache`), `CachedMessage` (manfiy message_id, null text qo'llab-quvvatlaydi), `CacheStats`, `MessageCacheException`, `PeriodicCachePruner` (har 6 soatda tozalash, 30 kun retention), `CapturePreflight` kesh katalogi tekshiruvi; 15 test (jami 205 test) | Atomar `Put` avvalgi qatorni qaytaradi (`old_text` saqlanishi uchun), WAL va busy_timeout (5000ms), `PRAGMA user_version = 1`, `TimeProvider` (injectable clock), matn xavfsizligi (loglar va istisnolarda private text yo'qligi) kafolatlangan. **Tekshiruvda topilgan (2026-09-26):** `Get` ning chat izolyatsiyasi sinovsiz edi; `Worker` keshni `GetService` + `?.` bilan ulardi (ro'yxat yo'qolsa jimgina keshsiz ishlardi) va bu butunlay sinovsiz edi; tozalash sikli kuzatuvsiz `Task.Run` edi; `Stats` `-wal` faylini sanamasdi; tozalash birinchi marta faqat 6 soatdan keyin ishga tushardi. 7 yangi test, jami 212 |
 | 4a — O'chirilgan va tahrirlangan xabarlarni saqlash (outbox) | `7d9b98f` + tekshiruv tuzatishlari | `capture_outbox` jadvali (SQLite, durativ outbox), `TdIdMapper` (peer << 48, msg_id >> 20), `PayloadBuilder` (BuildDeleted/BuildEdited UTF-8 mosligi, non-ASCII/emojilar saqlanadi), `NoneCaptureScope` (fail-closed placeholder), atomar delete+outbox tranzaksiyasi (`DeleteMessagesAndRecordOutbox`), ketma-ket qayta ishlash navbati va early queue; `AddCaptureHandlers` ishlab chiqarish simi; 17+8 test (jami 236) | 9 ta buzish (a–i) + 14 ta mustaqil mutatsiya; 6 ta nuqson tuzatildi |
 | 5 — Capture scope: chatlar saralanishi (cache, delete, edit) | `640066e` + tekshiruv tuzatishlari | 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced snapshot > DefaultEnabled); tdesktop zanjiriga mos 3 qaror (ShouldCache, ShouldAntiDelete, ShouldAntiEdit); ScopeSettingsSnapshot va ISyncedScopeSettingsSource choki; CapturePreflight decimal int64 va kesishtirmaslik tekshiruvi; privacy loglar (hech qanday peer_id loglanmaydi); 11 test (jami 247) | 10 ta ataylab buzish (a–j) ushlandi; DI da factory lambda orqali konstruktor noaniqligi bartaraf etildi; tdesktop background-edit nomuvofiqligi qayd etildi (server ShouldAntiEdit ga qaraydi) |
-| 4b — Activity capture (status, name, username) | bu commit | Activity kuzatuvi (`updateUser`, `updateUserStatus`); tdesktop bilan baytma-bayt moslik (status holatlari, `langFullName`, username, discriminator SHA256[0:8]); 60s offline shovqin filtri; `activity_latest` kesh jadvali; 4 qatlamli `IActivityScope` va preflight Check 6; 12 yangi test (jami 261 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; discriminator CustomSync.Capture ichida tdesktop bilan 100% mos qilindi; boshlang'ich kuzatuvda bo'sh qiymatlar tashlanadi |
+| 4b — Activity capture (status, name, username) | `457b92f` + tekshiruv tuzatishlari | Activity kuzatuvi (`updateUser`, `updateUserStatus`); tdesktop bilan baytma-bayt moslik (status holatlari, `langFullName`, username, discriminator SHA256[0:8]); 60s offline shovqin filtri; `activity_latest` kesh jadvali; 4 qatlamli `IActivityScope` va preflight Check 6; 12 yangi test (jami 261 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; discriminator CustomSync.Capture ichida tdesktop bilan 100% mos qilindi; boshlang'ich kuzatuvda bo'sh qiymatlar tashlanadi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -328,6 +328,36 @@ Kelasi task uchun eslatma: `CachedMessage.CachedAt` ni chaqiruvchi
 o'zi berib soatni chetlab o'tishi mumkin (Test07 shunga tayanadi).
 Task 4 da bu qiymat TDLib'dan kelgan ma'lumotdan **olinmasligi** kerak.
 
+### Plan 05 Task 4b tekshiruvi (2026-09-27) — qanday qabul qilindi
+
+Delegate hisoboti (261/261 x3, 10 buzish) mustaqil tasdiqlandi.
+tdesktop bilan moslik delegate o'qishiga tayanadi — bu sessiya
+tdesktop kodini o'qimaydi (egasi qarori). Protokol fayli bilan tekshirildi:
+`DiscriminatorFor("scope.whitelist")` = test-vectors'dagi
+`3528686638094831585` (big-endian; hisobotdagi "LittleEndian" so'zi xato,
+kod to'g'ri). Topilgan va tuzatilgan:
+
+1. **Scope fail-open bo'lib qolgan edi.** Delegate `ICaptureScope` ni
+   ixtiyoriy qilib `_scope is not null && !...` yozgan: scope berilmasa
+   HAMMA xabar ushlanardi. Endi `null` → `NoneCaptureScope` /
+   `NoneActivityScope` (Test13).
+2. **Activity sinxron manbasi DI'da e'tiborsiz qolishi testlanmagan**
+   (Task 5 dagi bo'shliqning aynan o'zi, o'z mutatsiyam tirik qoldi).
+   Test16.
+3. **Atomiklik testi yo'q edi** (hisobotda (c) buzish uchun test nomi
+   yo'q). Test14: outbox'ga INSERT trigger bilan yiqitiladi —
+   `activity_latest` o'zgarmay qolishi shart, aks holda o'zgarish abadiy
+   yo'qoladi.
+4. Discriminator protokol vektoriga bog'landi (Test15).
+5. `CaptureCacheVerificationTests.Test17` (Task 3): ochiq ulanish
+   checkpoint'ni to'xtatmaydi, faol o'qish tranzaksiyasi to'xtatadi —
+   yuklama ostida bir marta yiqildi, tuzatildi.
+
+O'z mutatsiyalarim: 8 ta (Q1–Q8), hammasi ushlanadi.
+Natija: 265/265 x5, build 0 ogohlantirish.
+Hisobotda yo'q edi (promptda so'ralgan): tdesktop bilan moslik jadvali
+file:line bilan va qamrab olinmagan maydonlar ro'yxati.
+
 ### Plan 05 Task 5 tekshiruvi (2026-09-27) — qanday qabul qilindi
 
 Delegate hisoboti (247/247 x3, 10 buzish) mustaqil tasdiqlandi. Zanjir
@@ -393,7 +423,7 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ## 2. 🔴 KEYINGI QADAM — plan 05 Task 4c (edit_date) yoki Task 6 (synced scope settings)
 
-Task 4b tugadi va tekshirildi (261 test).
+Task 4b tugadi va tekshirildi (265 test; tekshiruv bo'limi yuqorida).
 Qilingan ishlar (Task 4b):
 - `ActivityMapper`: status kodlash (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`, `empty`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`).
 - 60 soniyalik last-seen shovqin filtri (`|oldAge - newAge| < 60`) tdesktop `custom_activity_history.cpp` mantiqiga to'liq moslandi.
@@ -406,7 +436,19 @@ Qilingan ishlar (Task 4b):
 ### Plan 05 navbati (2026-09-27 kelishildi)
 
 1. **Task 5 — scope.** ✅ YAKUNLANDI va tekshirildi (`640066e` + tuzatish, 249 test).
-2. **Task 4b — activity.** ✅ YAKUNLANDI va tekshirildi (bu commit, 261 test).
+2. **Task 4b — activity.** ✅ YAKUNLANDI va tekshirildi (`457b92f` + tuzatish,
+   265 test). **Ochiq savollar (tdesktop sessiyasi):**
+   (a) activity `msg_id`: delegate'ga ko'ra tdesktop `DiscriminatorFor(field)`
+   ishlatadi (`custom_db.cpp:3972`) — demak spec §3.2 jadvalidagi `0` va
+   `test-vectors.json` dagi `msg_id: 0` li activity holatlari ESKIRGAN;
+   discriminator'li activity vektori kerak.
+   (b) activity Include/Exclude/TrackAllContacts uchun `setting` kalitlari
+   yo'q (§3.2.1 faqat xabar scope'i).
+   (c) ⚠️ `long_ago`: delegate PROGRESS'ga status qiymatlari qatoriga
+   `long_ago` ni yozgan, lekin `ActivityMapper` uni hech qachon
+   chiqarmaydi (`userStatusEmpty` → `empty`). tdesktop MTProto
+   `userStatusEmpty` ni `long_ago` deb yozsa — yozuvlar birlashmaydi.
+   tdesktop kodidan tasdiqlash kerak (bu sessiya tdesktop'ni o'qimaydi).
 3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Egasi qarori:
    oraliq tahrir versiyalari ham saqlanadi. Taklif:
    `docs/proposal-edited-edit-date.md`. **Blok ochildi (2026-09-27):**

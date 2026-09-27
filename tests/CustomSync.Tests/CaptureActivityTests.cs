@@ -695,4 +695,102 @@ public class CaptureActivityTests : IDisposable
             Assert.DoesNotContain(watchedPeerId, entry.Message);
         }
     }
+
+    [Fact]
+    public void Test13_Missing_scopes_capture_nothing()
+    {
+        // Scope — maxfiylik boshqaruvi. U berilmagan bo'lsa "hammasini ushla"
+        // emas, "hech narsani ushlama" bo'lishi shart (fail-closed).
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var handler = new CaptureUpdateHandler(cache, scope: null, activityScope: null, accountId: "7053823996");
+
+        long chatId = 7053823996L;
+        long tdlibMsgId = 5L << 20;
+        handler.HandleUpdate($@"{{ ""@type"": ""updateNewMessage"", ""message"": {{
+            ""id"": {tdlibMsgId}, ""chat_id"": {chatId},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 1 }},
+            ""is_outgoing"": false, ""date"": 1787000000,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""x"" }} }} }} }}");
+        handler.HandleUpdate(@"{ ""@type"": ""updateUser"", ""user"": { ""id"": 666,
+            ""first_name"": ""Bek"", ""last_name"": """", ""is_contact"": true } }");
+
+        Assert.Null(cache.Get(chatId, 5L));
+        Assert.Empty(cache.GetOutboxRows());
+    }
+
+    [Fact]
+    public void Test14_Outbox_failure_leaves_last_known_value_unchanged()
+    {
+        // activity_latest yangilanib, outbox yozuvi tushmasa — o'zgarish abadiy
+        // yo'qoladi: keyingi update uni "o'zgarmagan" deb ko'radi.
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        Assert.True(cache.RecordActivity("7053823996", "666", "name", "Bek", 1787000000));
+
+        using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"CREATE TRIGGER fail_outbox BEFORE INSERT ON capture_outbox
+                BEGIN SELECT RAISE(ABORT, 'injected'); END;";
+            cmd.ExecuteNonQuery();
+        }
+
+        Assert.ThrowsAny<Exception>(() => cache.RecordActivity("7053823996", "666", "name", "Bekzod", 1787000100));
+
+        using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT value FROM activity_latest WHERE peer_id = '666' AND field = 'name';";
+            Assert.Equal("Bek", cmd.ExecuteScalar() as string);
+            cmd.CommandText = "DROP TRIGGER fail_outbox;";
+            cmd.ExecuteNonQuery();
+        }
+
+        // Keyingi urinish o'zgarishni baribir yozadi
+        Assert.True(cache.RecordActivity("7053823996", "666", "name", "Bekzod", 1787000200));
+    }
+
+    [Fact]
+    public void Test16_Production_wiring_uses_the_registered_synced_activity_source()
+    {
+        // Task 6 haqiqiy manbani DI'ga qo'yadi; registratsiya uni e'tiborsiz
+        // qoldirsa, egasining activity sozlamalari jimgina ishlamaydi.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:CacheDatabasePath"] = CreateTempDbPath()
+        }).Build();
+
+        foreach (var registerFirst in new[] { true, false })
+        {
+            var source = new TestActivitySnapshotSource(new ActivityScopeSettingsSnapshot(
+                Exclude: new HashSet<string>(), Include: new HashSet<string> { "666" }, TrackAllContacts: false));
+            var services = new ServiceCollection();
+            services.AddSingleton<IConfiguration>(config);
+            services.AddMessageCache(config);
+            services.AddSingleton<ITdTransport>(new FakeTdTransport());
+            services.AddSingleton<ITdClient, TdClient>();
+            if (registerFirst) services.AddSingleton<ISyncedActivityScopeSettingsSource>(source);
+            services.AddCaptureHandlers();
+            if (!registerFirst) services.AddSingleton<ISyncedActivityScopeSettingsSource>(source);
+
+            using var sp = services.BuildServiceProvider();
+            var scope = sp.GetRequiredService<IActivityScope>();
+            Assert.True(scope.ShouldTrackActivity("666", isContact: false), $"registerFirst={registerFirst}");
+            Assert.False(scope.ShouldTrackActivity("777", isContact: true), $"registerFirst={registerFirst}");
+        }
+    }
+
+    [Fact]
+    public void Test15_Discriminator_matches_the_protocol_test_vector()
+    {
+        // test-vectors.json: setting "scope.whitelist" -> msg_id 3528686638094831585
+        // (generate-vectors.py: big-endian, eng yuqori bit tozalangan). Bir xil
+        // funksiya activity maydonlari uchun ham ishlatiladi.
+        Assert.Equal(3528686638094831585L, ActivityMapper.DiscriminatorFor("scope.whitelist"));
+    }
 }

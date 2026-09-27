@@ -14,8 +14,8 @@ namespace CustomSync.Capture.Capture;
 public class CaptureUpdateHandler
 {
     private readonly MessageCache _cache;
-    private readonly ICaptureScope? _scope;
-    private readonly IActivityScope? _activityScope;
+    private readonly ICaptureScope _scope;
+    private readonly IActivityScope _activityScope;
     private readonly ConcurrentDictionary<string, bool> _contactMap = new();
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CaptureUpdateHandler>? _logger;
@@ -52,8 +52,10 @@ public class CaptureUpdateHandler
         string? accountId = null)
     {
         _cache = cache;
-        _scope = scope;
-        _activityScope = activityScope;
+        // Scope berilmasa — hech narsa ushlanmaydi (fail-closed). null'ni
+        // "cheklov yo'q" deb o'qish maxfiylik boshqaruvini teskari qiladi.
+        _scope = scope ?? new NoneCaptureScope();
+        _activityScope = activityScope ?? new NoneActivityScope();
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _accountId = accountId;
@@ -278,7 +280,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope BEFORE caching
-        if (_scope is not null && !_scope.ShouldCache(peerId))
+        if (!_scope.ShouldCache(peerId))
             return;
 
         (string text, bool isMedia) = msg.TryGetProperty("content", out var contentProp)
@@ -333,7 +335,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope at emit time
-        if (_scope is not null && !_scope.ShouldAntiDelete(peerId))
+        if (!_scope.ShouldAntiDelete(peerId))
             return;
 
         var serverMsgIds = new List<long>();
@@ -375,10 +377,10 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope: if not even cached, ignore completely (no cache update, no baseline fetch, no outbox)
-        if (_scope is not null && !_scope.ShouldCache(peerId))
+        if (!_scope.ShouldCache(peerId))
             return;
 
-        bool shouldAntiEdit = _scope?.ShouldAntiEdit(peerId) ?? false;
+        bool shouldAntiEdit = _scope.ShouldAntiEdit(peerId);
 
         if (!root.TryGetProperty("new_content", out var newContent))
             return;
@@ -453,7 +455,7 @@ public class CaptureUpdateHandler
             isContact = existingContact;
         }
 
-        if (_activityScope == null || !_activityScope.ShouldTrackActivity(peerId, isContact))
+        if (!_activityScope.ShouldTrackActivity(peerId, isContact))
             return;
 
         if (string.IsNullOrEmpty(_accountId))
@@ -499,7 +501,7 @@ public class CaptureUpdateHandler
 
         bool isContact = _contactMap.TryGetValue(peerId, out var c) && c;
 
-        if (_activityScope == null || !_activityScope.ShouldTrackActivity(peerId, isContact))
+        if (!_activityScope.ShouldTrackActivity(peerId, isContact))
             return;
 
         if (string.IsNullOrEmpty(_accountId))
