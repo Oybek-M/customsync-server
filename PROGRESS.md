@@ -365,7 +365,7 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 4b (activity capture) yoki Task 5 (Scope)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 5 (scope), keyin 4b, 4c
 
 Task 4a tugadi va tekshirildi (236 test, yuqoridagi tekshiruv bo'limi).
 Qilingan ishlar (Task 4a):
@@ -377,7 +377,38 @@ Qilingan ishlar (Task 4a):
 - `CaptureUpdateHandler`: ketma-ket qayta ishlash navbati va early updates buferi.
 - `CaptureHandlerRegistration.AddCaptureHandlers`: ishlab chiqarish DI ulanishi va test orqali tasdiqlangan.
 
-Keyingi qadam: Task 4b (activity: updateUserStatus, updateUser) yoki Task 5 (CaptureScope).
+### Plan 05 navbati (2026-09-27 kelishildi)
+
+1. **Task 5 — scope.** Prompt tayyor: `docs/05-task5-prompt.md`.
+   Plandan farqi: tdesktop'dagi haqiqiy zanjir (Blocklist > Whitelist,
+   aniq yozuv kategoriyadan ustun, per-peer override, global bayroq) va
+   uchta alohida qaror (cache / deleted / edited). Server ro'yxatlari
+   (`Capture:Scope:*`) ustun. Sinxronlangan sozlamalar uchun faqat "teshik"
+   (snapshot interfeysi) — **tdesktop hali birorta `setting` yozuvi
+   yubormaydi**, kalitlar protokolda yo'q.
+2. **Task 4b — activity** (`updateUserStatus`/`updateUser`). ⚠️ UNUTILMASIN.
+   tdesktop `custom_activity_history.cpp` status kodlash + shovqin
+   filtri aynan ko'chiriladi; scope — `ShouldTrackActivity`
+   (Exclude > Include > trackAllContacts && isContact), Task 5 dagi
+   zanjirdan ALOHIDA.
+3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Egasi qarori:
+   oraliq tahrir versiyalari ham saqlanadi. Taklif:
+   `docs/proposal-edited-edit-date.md`. **Bloklangan:** avval tdesktop
+   sessiyasi spec + `CHANGELOG.md` + `test-vectors.json` ni yangilaydi,
+   keyin capture tomoni (`updateMessageContent` + `updateMessageEdited`
+   juftlash).
+4. Task 6 (sync klienti) va keyingilari.
+
+**tdesktop sessiyasiga uzatiladigan ishlar** (bu sessiya u yerga
+yozmaydi):
+- `edited` protokol o'zgarishi — `docs/proposal-edited-edit-date.md`.
+- Scope ro'yxatlari uchun `setting` kalitlari va qiymat formati (WL, BL,
+  kategoriyalar, AntiDelete/AntiEdit per-peer va global) — ular
+  bo'lmasa capture foydalanuvchining tdesktop sozlamalarini ko'rmaydi.
+- Topilgan nomuvofiqlik: fon tahrir yo'li (`updateEditedMessage` →
+  `RecordBackgroundEdit`) faqat `ShouldBackgroundCache` ni tekshiradi,
+  AntiEdit o'chiq chatda ham tahrir yozadi; xotiradagi yo'l
+  (`history_item.cpp`) esa `ShouldAntiEdit` ni tekshiradi.
 
 ### Task 4 promptiga majburiy kiritiladigan shartlar
 
