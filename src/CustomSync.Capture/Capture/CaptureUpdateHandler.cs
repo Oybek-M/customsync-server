@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.Logging;
 
 namespace CustomSync.Capture.Capture;
@@ -18,6 +19,7 @@ public class CaptureUpdateHandler
     private readonly object _lock = new();
     private readonly Queue<string> _earlyQueue = new();
     private string? _accountId;
+    private ITdClient? _client;
 
     private long _uncachedDeleteCount;
     private long _uncachedEditCount;
@@ -40,6 +42,17 @@ public class CaptureUpdateHandler
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _accountId = accountId;
+    }
+
+    /// <summary>
+    /// Handler'ni mijozga ulaydi: update'larga obuna bo'ladi va keshda
+    /// yo'q xabar yoki noma'lum account_id uchun TDLib'dan so'rov yuboradi.
+    /// Production'da buni AddCaptureHandlers ITdClient yaratilganda chaqiradi.
+    /// </summary>
+    public void Attach(ITdClient client)
+    {
+        _client = client;
+        client.UpdateReceived += HandleUpdate;
     }
 
     public void SetAccountId(string accountId)
@@ -83,9 +96,20 @@ public class CaptureUpdateHandler
                     return;
                 }
 
+                if (updateType == "updateAuthorizationState")
+                {
+                    ProcessAuthorizationState(root);
+                    return;
+                }
+
                 if (string.IsNullOrEmpty(_accountId))
                 {
-                    _earlyQueue.Enqueue(rawJson);
+                    // Faqat ushlanadigan turlar buferlanadi: TDLib ishga
+                    // tushishda minglab updateUser/updateChat* yuboradi.
+                    if (IsCapturedType(updateType))
+                    {
+                        _earlyQueue.Enqueue(rawJson);
+                    }
                     return;
                 }
 
@@ -123,6 +147,62 @@ public class CaptureUpdateHandler
         }
     }
 
+    private static bool IsCapturedType(string? type) =>
+        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent";
+
+    // Zaxira yo'l: my_id odatda updateOption bilan keladi, lekin u kelmasa
+    // yoki obunadan oldin kelib qolsa, bufer cheksiz o'sadi va hech narsa
+    // yozilmaydi. Avtorizatsiya tayyor bo'lganda getMe bilan so'raymiz.
+    private void ProcessAuthorizationState(JsonElement root)
+    {
+        if (!string.IsNullOrEmpty(_accountId) || _client is null)
+            return;
+
+        if (!root.TryGetProperty("authorization_state", out var state)
+            || !state.TryGetProperty("@type", out var stateType)
+            || stateType.GetString() != "authorizationStateReady")
+            return;
+
+        _ = FetchAccountIdAsync(_client);
+    }
+
+    private async Task FetchAccountIdAsync(ITdClient client)
+    {
+        try
+        {
+            var response = await client.SendAsync("{\"@type\":\"getMe\"}");
+            using var doc = JsonDocument.Parse(response);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("@type", out var t) && t.GetString() == "user"
+                && root.TryGetProperty("id", out var idProp))
+            {
+                var id = idProp.ValueKind == JsonValueKind.String
+                    ? idProp.GetString()
+                    : idProp.GetInt64().ToString(CultureInfo.InvariantCulture);
+                if (!string.IsNullOrEmpty(id))
+                {
+                    lock (_lock)
+                    {
+                        if (string.IsNullOrEmpty(_accountId))
+                        {
+                            SetAccountId(id);
+                        }
+                    }
+                    return;
+                }
+            }
+
+            Interlocked.Increment(ref _errorCount);
+            _logger?.LogError("getMe did not return a user; account_id is still unknown and captured updates stay buffered.");
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _errorCount);
+            _logger?.LogError("getMe failed ({ErrorType}); account_id is still unknown and captured updates stay buffered.",
+                ex.GetType().Name);
+        }
+    }
+
     private void ProcessUpdateElement(JsonElement root, string? type)
     {
         switch (type)
@@ -144,6 +224,12 @@ public class CaptureUpdateHandler
         if (!root.TryGetProperty("message", out var msg) || msg.ValueKind != JsonValueKind.Object)
             return;
 
+        CacheMessage(msg, addOnly: false);
+    }
+
+    // addOnly: getMessage javobi uchun — bor qator ustiga yozilmaydi.
+    private void CacheMessage(JsonElement msg, bool addOnly)
+    {
         if (!msg.TryGetProperty("chat_id", out var chatProp) || !msg.TryGetProperty("id", out var idProp))
             return;
 
@@ -185,7 +271,14 @@ public class CaptureUpdateHandler
             Date: date,
             CachedAt: null);
 
-        _cache.Put(cached);
+        if (addOnly)
+        {
+            _cache.TryAdd(cached);
+        }
+        else
+        {
+            _cache.Put(cached);
+        }
     }
 
     private void HandleDeleteMessages(JsonElement root)
@@ -259,9 +352,40 @@ public class CaptureUpdateHandler
 
         long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
         var result = _cache.UpdateMessageContent(chatId, peerId, _accountId!, serverMsgId.Value, newText, now);
-        if (result == EditResult.BaselineCreated)
+        if (result == EditResult.NotCached)
         {
+            // Hodisa yozilmaydi ("oldin" matni noma'lum). Keyingi tahrir
+            // uchun asos kerak — to'liq xabarni (sana, yuboruvchi, is_out)
+            // TDLib'dan so'raymiz; qo'lda to'qilgan qator yozilmaydi.
             Interlocked.Increment(ref _uncachedEditCount);
+            if (_client is not null)
+            {
+                _ = FetchBaselineAsync(_client, chatId, tdlibId);
+            }
+        }
+    }
+
+    private async Task FetchBaselineAsync(ITdClient client, long chatId, long tdlibId)
+    {
+        try
+        {
+            var response = await client.SendAsync(string.Create(CultureInfo.InvariantCulture,
+                $"{{\"@type\":\"getMessage\",\"chat_id\":{chatId},\"message_id\":{tdlibId}}}"));
+            using var doc = JsonDocument.Parse(response);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("@type", out var t) || t.GetString() != "message")
+                return;
+
+            lock (_lock)
+            {
+                CacheMessage(root, addOnly: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _errorCount);
+            _logger?.LogError("getMessage for edit baseline failed ({ErrorType}) chat {ChatId} message {MessageId}",
+                ex.GetType().Name, chatId, tdlibId);
         }
     }
 

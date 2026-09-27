@@ -486,61 +486,158 @@ public class CaptureUpdateHandlerTests : IDisposable
         Assert.Empty(cache.GetOutboxRows());
     }
 
+    // FakeTdTransport'ga TDLib javobini beradi: so'rovning @extra'si
+    // javobga ko'chiriladi, aks holda TdClient uni kutgan so'rovga bog'lamaydi.
+    private static void RespondTo(FakeTdTransport transport, string requestType, Func<JsonObject, string> response)
+    {
+        var previous = transport.OnSend;
+        transport.OnSend = (clientId, json) =>
+        {
+            previous?.Invoke(clientId, json);
+            var req = JsonNode.Parse(json)!.AsObject();
+            if (req["@type"]!.GetValue<string>() != requestType) return;
+            var resp = JsonNode.Parse(response(req))!.AsObject();
+            resp["@extra"] = req["@extra"]!.GetValue<string>();
+            transport.EnqueueIncoming(resp.ToJsonString());
+        };
+    }
+
+    private static async Task<T> WaitFor<T>(Func<T> probe, Func<T, bool> done)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var value = probe();
+        while (!done(value) && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+            value = probe();
+        }
+        return value;
+    }
+
     [Fact]
-    public void Test10_Edit_with_cache_miss_stores_baseline_and_following_edit_emits_row()
+    public async Task Test10_Edit_with_cache_miss_fetches_full_message_and_following_edit_emits_row()
     {
         var dbPath = CreateTempDbPath();
         var timeProvider = new TestTimeProvider(DateTimeOffset.FromUnixTimeSeconds(1787000100));
         var cache = new MessageCache(dbPath, timeProvider);
         cache.Initialize();
 
-        var scope = new AllowAllCaptureScope();
-        var handler = new CaptureUpdateHandler(cache, scope, timeProvider, accountId: "7053823996");
+        var handler = new CaptureUpdateHandler(cache, new AllowAllCaptureScope(), timeProvider, accountId: "7053823996");
+        var transport = new FakeTdTransport();
+        using var client = new TdClient(transport);
+        handler.Attach(client);
 
         long chatId = -1002827825432L;
         long srvMsgId = 500L;
 
-        // 1. First edit: message is NOT in cache
-        var edit1 = $@"{{
+        // getMessage javobi: asl sana, chiquvchi, yuboruvchi — updateMessageContent'da yo'q maydonlar
+        RespondTo(transport, "getMessage", req => $@"{{
+            ""@type"": ""message"",
+            ""id"": {req["message_id"]!.GetValue<long>()},
+            ""chat_id"": {req["chat_id"]!.GetValue<long>()},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 7053823996 }},
+            ""is_outgoing"": true,
+            ""date"": 1786000000,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""Boshlang'ich noma'lum matn"" }} }}
+        }}");
+
+        transport.EnqueueIncoming($@"{{
             ""@type"": ""updateMessageContent"",
             ""chat_id"": {chatId},
             ""message_id"": {srvMsgId << 20},
-            ""new_content"": {{
-                ""@type"": ""messageText"",
-                ""text"": {{ ""text"": ""Boshlang'ich noma'lum matn"" }}
-            }}
-        }}";
+            ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""Boshlang'ich noma'lum matn"" }} }}
+        }}");
 
-        handler.HandleUpdate(edit1);
-
-        // No outbox row emitted
+        var cached = await WaitFor(() => cache.Get(chatId, srvMsgId), c => c is not null);
+        Assert.NotNull(cached);
         Assert.Empty(cache.GetOutboxRows());
         Assert.Equal(1, handler.UncachedEditCount);
+        Assert.Equal(1786000000, cached!.Date);
+        Assert.True(cached.IsOut);
+        Assert.Equal("7053823996", cached.SenderId);
+        Assert.Equal(1787000100, cached.CachedAt);
 
-        // But baseline text is now stored in cache!
-        var cached = cache.Get(chatId, srvMsgId);
-        Assert.NotNull(cached);
-        Assert.Equal("Boshlang'ich noma'lum matn", cached.Text);
-
-        // 2. Following edit arrives:
-        var edit2 = $@"{{
+        transport.EnqueueIncoming($@"{{
             ""@type"": ""updateMessageContent"",
             ""chat_id"": {chatId},
             ""message_id"": {srvMsgId << 20},
-            ""new_content"": {{
-                ""@type"": ""messageText"",
-                ""text"": {{ ""text"": ""Ikkinchi tahrir matni"" }}
-            }}
-        }}";
+            ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""Ikkinchi tahrir matni"" }} }}
+        }}");
 
-        handler.HandleUpdate(edit2);
-
-        // Now an outbox row is emitted with old_text = "Boshlang'ich noma'lum matn"
-        var rows = cache.GetOutboxRows();
+        var rows = await WaitFor(() => cache.GetOutboxRows(), r => r.Count > 0);
         Assert.Single(rows);
+        Assert.Equal(1786000000, rows[0].OccurredAt);
         var payload = JsonNode.Parse(rows[0].PayloadJson)!.AsObject();
         Assert.Equal("Boshlang'ich noma'lum matn", payload["old_text"]!.GetValue<string>());
         Assert.Equal("Ikkinchi tahrir matni", payload["new_text"]!.GetValue<string>());
+        Assert.True(payload["is_out"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void Test10b_Edit_with_cache_miss_never_writes_a_fabricated_row()
+    {
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var handler = new CaptureUpdateHandler(cache, new AllowAllCaptureScope(), accountId: "7053823996");
+
+        long chatId = -1002827825432L;
+        long srvMsgId = 501L;
+        handler.HandleUpdate($@"{{
+            ""@type"": ""updateMessageContent"",
+            ""chat_id"": {chatId},
+            ""message_id"": {srvMsgId << 20},
+            ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""x"" }} }}
+        }}");
+
+        // Sana/yuboruvchi/is_out noma'lum qator keyingi `deleted` ga yolg'on maydon beradi
+        Assert.Null(cache.Get(chatId, srvMsgId));
+        Assert.Empty(cache.GetOutboxRows());
+        Assert.Equal(1, handler.UncachedEditCount);
+    }
+
+    [Fact]
+    public async Task Test10c_Late_getMessage_reply_does_not_overwrite_a_newer_row()
+    {
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var handler = new CaptureUpdateHandler(cache, new AllowAllCaptureScope(), accountId: "7053823996");
+        var transport = new FakeTdTransport();
+        using var client = new TdClient(transport);
+        handler.Attach(client);
+
+        long chatId = 7053823996L;
+        long srvMsgId = 502L;
+        var reply = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
+        transport.OnSend = (_, json) =>
+        {
+            var r = JsonNode.Parse(json)!.AsObject();
+            if (r["@type"]!.GetValue<string>() == "getMessage") reply.TrySetResult(r);
+        };
+
+        transport.EnqueueIncoming($@"{{
+            ""@type"": ""updateMessageContent"", ""chat_id"": {chatId}, ""message_id"": {srvMsgId << 20},
+            ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""eski"" }} }}
+        }}");
+        var req = await reply.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Javob kelguncha xabar boshqa yo'l bilan keshga tushdi
+        cache.Put(new CachedMessage(chatId, srvMsgId, "yangi", "7053823996", false, false, null, 1786000000));
+
+        transport.EnqueueIncoming($@"{{
+            ""@type"": ""message"", ""@extra"": ""{req["@extra"]!.GetValue<string>()}"",
+            ""id"": {srvMsgId << 20}, ""chat_id"": {chatId},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 1 }},
+            ""is_outgoing"": true, ""date"": 1,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""eski"" }} }}
+        }}");
+        await WaitFor(() => client.PendingRequestCount, n => n == 0);
+        await Task.Delay(200);
+
+        var cached = cache.Get(chatId, srvMsgId)!;
+        Assert.Equal("yangi", cached.Text);
+        Assert.Equal(1786000000, cached.Date);
     }
 
     [Fact]
@@ -928,5 +1025,141 @@ public class CaptureUpdateHandlerTests : IDisposable
 
         var payload = JsonNode.Parse(rows[0].PayloadJson)!.AsObject();
         Assert.Equal("Early message", payload["text"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Test18_Resolving_only_ITdClient_attaches_the_handler()
+    {
+        // Worker faqat ITdClient'ni oladi — ulash shunga bog'liq bo'lishi kerak
+        var dbPath = CreateTempDbPath();
+        var transport = new FakeTdTransport();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:CacheDatabasePath"] = dbPath
+        }).Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<ITdTransport>(transport);
+        services.AddSingleton<ITdClient, TdClient>();
+        services.AddMessageCache(config);
+        services.AddCaptureHandlers();
+        services.AddSingleton<ICaptureScope>(new AllowAllCaptureScope());
+        using var sp = services.BuildServiceProvider();
+        var cache = sp.GetRequiredService<MessageCache>();
+        cache.Initialize();
+
+        _ = sp.GetRequiredService<ITdClient>();
+
+        long chatId = 7053823996L;
+        long tdlibMsgId = 42L << 20;
+        // TDLib int64 ni JSON'da satr qilib yuboradi
+        transport.EnqueueIncoming(@"{ ""@type"": ""updateOption"", ""name"": ""my_id"",
+            ""value"": { ""@type"": ""optionValueInteger"", ""value"": ""7053823996"" } }");
+        transport.EnqueueIncoming($@"{{ ""@type"": ""updateNewMessage"", ""message"": {{
+            ""id"": {tdlibMsgId}, ""chat_id"": {chatId},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 7053823996 }},
+            ""is_outgoing"": true, ""date"": 1787000000,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""salom"" }} }} }} }}");
+        transport.EnqueueIncoming($@"{{ ""@type"": ""updateDeleteMessages"", ""chat_id"": {chatId},
+            ""message_ids"": [{tdlibMsgId}], ""is_permanent"": true, ""from_cache"": false }}");
+
+        var rows = await WaitFor(() => cache.GetOutboxRows(), r => r.Count > 0);
+        Assert.Single(rows);
+        Assert.Equal("7053823996", rows[0].AccountId);
+        Assert.Equal("7053823996", rows[0].PeerId);
+        Assert.Equal(42L, rows[0].MsgId);
+    }
+
+    [Fact]
+    public void Test16b_Payload_with_quotes_backslashes_and_control_chars_is_valid_json_and_round_trips()
+    {
+        // PayloadBuilder qo'lda yozilgan serializer: har bir maxsus belgi
+        // noto'g'ri escape qilinsa, yozuv Task 6 da o'qib bo'lmaydigan bo'ladi.
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var handler = new CaptureUpdateHandler(cache, new AllowAllCaptureScope(), accountId: "7053823996");
+
+        long chatId = 7053823996L;
+        long srvMsgId = 223L;
+        const string tricky = "u \"dedi\" C:\\yo'l\\fayl\nikkinchi\tqator\r\u0001\u001f 📌 </script> \u2028";
+        cache.Put(new CachedMessage(chatId, srvMsgId, tricky, "7053823996", false, false, null, 1787000000));
+
+        handler.HandleUpdate($@"{{ ""@type"": ""updateDeleteMessages"", ""chat_id"": {chatId},
+            ""message_ids"": [{srvMsgId << 20}], ""is_permanent"": true, ""from_cache"": false }}");
+
+        var rows = cache.GetOutboxRows();
+        Assert.Single(rows);
+        var payload = JsonNode.Parse(rows[0].PayloadJson)!.AsObject();
+        Assert.Equal(tricky, payload["text"]!.GetValue<string>());
+        Assert.Equal(new[] { "account_id", "peer_id", "text", "sender_id", "is_out", "is_media" },
+            payload.Select(p => p.Key).ToArray());
+    }
+
+    [Fact]
+    public void Test16c_Delete_after_peer_left_scope_emits_nothing()
+    {
+        // Task 5 da chat scope'dan chiqarilishi mumkin; keshda qolgan eski
+        // xabarlar ham shundan keyin yozilmasligi kerak.
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        bool inScope = true;
+        var handler = new CaptureUpdateHandler(cache, new FilterCaptureScope(_ => inScope), accountId: "7053823996");
+
+        long chatId = 7053823996L;
+        long tdlibMsgId = 224L << 20;
+        handler.HandleUpdate($@"{{ ""@type"": ""updateNewMessage"", ""message"": {{
+            ""id"": {tdlibMsgId}, ""chat_id"": {chatId},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 1 }},
+            ""is_outgoing"": false, ""date"": 1787000000,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""a"" }} }} }} }}");
+        Assert.NotNull(cache.Get(chatId, 224L));
+
+        inScope = false;
+        handler.HandleUpdate($@"{{ ""@type"": ""updateMessageContent"", ""chat_id"": {chatId}, ""message_id"": {tdlibMsgId},
+            ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""b"" }} }} }}");
+        handler.HandleUpdate($@"{{ ""@type"": ""updateDeleteMessages"", ""chat_id"": {chatId},
+            ""message_ids"": [{tdlibMsgId}], ""is_permanent"": true, ""from_cache"": false }}");
+
+        Assert.Empty(cache.GetOutboxRows());
+    }
+
+    [Fact]
+    public void Test18b_AddCaptureHandlers_without_ITdClient_fails_loudly()
+    {
+        var services = new ServiceCollection();
+        Assert.Throws<InvalidOperationException>(() => services.AddCaptureHandlers());
+    }
+
+    [Fact]
+    public async Task Test19_Missing_my_id_falls_back_to_getMe_when_authorized()
+    {
+        var dbPath = CreateTempDbPath();
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var handler = new CaptureUpdateHandler(cache, new AllowAllCaptureScope(), accountId: null);
+        var transport = new FakeTdTransport();
+        using var client = new TdClient(transport);
+        handler.Attach(client);
+        RespondTo(transport, "getMe", _ => @"{ ""@type"": ""user"", ""id"": 7053823996 }");
+
+        long chatId = -1002827825432L;
+        long tdlibMsgId = 77L << 20;
+        transport.EnqueueIncoming($@"{{ ""@type"": ""updateNewMessage"", ""message"": {{
+            ""id"": {tdlibMsgId}, ""chat_id"": {chatId},
+            ""sender_id"": {{ ""@type"": ""messageSenderUser"", ""user_id"": 1 }},
+            ""is_outgoing"": false, ""date"": 1787000000,
+            ""content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""erta"" }} }} }} }}");
+        transport.EnqueueIncoming($@"{{ ""@type"": ""updateDeleteMessages"", ""chat_id"": {chatId},
+            ""message_ids"": [{tdlibMsgId}], ""is_permanent"": true, ""from_cache"": false }}");
+        transport.EnqueueIncoming(@"{ ""@type"": ""updateAuthorizationState"",
+            ""authorization_state"": { ""@type"": ""authorizationStateReady"" } }");
+
+        var rows = await WaitFor(() => cache.GetOutboxRows(), r => r.Count > 0);
+        Assert.Single(rows);
+        Assert.Equal("7053823996", rows[0].AccountId);
+        Assert.Equal("7053823996", handler.AccountId);
     }
 }

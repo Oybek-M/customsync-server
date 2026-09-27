@@ -11,16 +11,20 @@ public class MessageCache
     public MessageCache(string databasePath, TimeProvider? timeProvider = null)
     {
         _databasePath = databasePath;
-        _connectionString = $"Data Source={databasePath};Default Timeout=5;";
+        _connectionString = $"Data Source={databasePath};Default Timeout=30;";
         _timeProvider = timeProvider;
     }
 
+    // Kutish 30 soniya: yozuvchi bitta (update handler) + pruner. Qulf
+    // band bo'lsa uzoqroq kutish arzon, "database is locked" bilan yiqilgan
+    // o'chirish tranzaksiyasi esa hodisani butunlay yo'qotadi — Telegram
+    // updateDeleteMessages ni qayta yubormaydi.
     private SqliteConnection OpenConnection()
     {
         var conn = new SqliteConnection(_connectionString);
         conn.Open();
         using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PRAGMA busy_timeout = 5000;";
+        cmd.CommandText = "PRAGMA busy_timeout = 30000;";
         cmd.ExecuteNonQuery();
         return conn;
     }
@@ -178,6 +182,39 @@ public class MessageCache
         catch (Exception ex) when (ex is not MessageCacheException)
         {
             throw new MessageCacheException("Failed to put message into cache.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Qator yo'q bo'lsagina qo'shadi; bor qatorni hech qachon yangilamaydi.
+    /// Kechikib kelgan getMessage javobi yangiroq ma'lumot ustiga yozmasligi
+    /// uchun.
+    /// </summary>
+    public virtual bool TryAdd(CachedMessage message)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT INTO message_cache (chat_id, message_id, text, sender_id, is_out, is_media, media_id, date, cached_at)
+                VALUES (@chat_id, @message_id, @text, @sender_id, @is_out, @is_media, @media_id, @date, @cached_at)
+                ON CONFLICT (chat_id, message_id) DO NOTHING;";
+            cmd.Parameters.AddWithValue("@chat_id", message.ChatId);
+            cmd.Parameters.AddWithValue("@message_id", message.MessageId);
+            cmd.Parameters.AddWithValue("@text", (object?)message.Text ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@sender_id", (object?)message.SenderId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@is_out", message.IsOut ? 1 : 0);
+            cmd.Parameters.AddWithValue("@is_media", message.IsMedia ? 1 : 0);
+            cmd.Parameters.AddWithValue("@media_id", (object?)message.MediaId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@date", message.Date);
+            cmd.Parameters.AddWithValue("@cached_at",
+                message.CachedAt ?? (_timeProvider ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds());
+            return cmd.ExecuteNonQuery() > 0;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to add message to cache.", ex);
         }
     }
 
@@ -417,23 +454,13 @@ public class MessageCache
 
                 if (cached is null)
                 {
-                    // Baseline stored so the next edit has a baseline
-                    using (var insCmd = conn.CreateCommand())
-                    {
-                        insCmd.Transaction = tx;
-                        insCmd.CommandText = @"
-                            INSERT INTO message_cache (chat_id, message_id, text, sender_id, is_out, is_media, media_id, date, cached_at)
-                            VALUES (@chat_id, @message_id, @text, NULL, 0, 0, NULL, 0, @cached_at)
-                            ON CONFLICT (chat_id, message_id) DO UPDATE SET text = excluded.text;";
-                        insCmd.Parameters.AddWithValue("@chat_id", chatId);
-                        insCmd.Parameters.AddWithValue("@message_id", serverMsgId);
-                        insCmd.Parameters.AddWithValue("@text", (object?)newText ?? DBNull.Value);
-                        insCmd.Parameters.AddWithValue("@cached_at", now);
-                        insCmd.ExecuteNonQuery();
-                    }
-
+                    // Bu yerda qator YOZILMAYDI: updateMessageContent da
+                    // sana, yuboruvchi va is_out yo'q. Ularni to'qib yozish
+                    // keyingi `deleted` yozuviga yolg'on maydonlar va
+                    // tdesktop'nikidan boshqa record_id (occurred_at = now)
+                    // beradi. To'liq xabarni handler getMessage bilan oladi.
                     tx.Commit();
-                    return EditResult.BaselineCreated;
+                    return EditResult.NotCached;
                 }
 
                 string oldText = cached.Text ?? "";

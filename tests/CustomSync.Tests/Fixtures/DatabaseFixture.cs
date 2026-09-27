@@ -80,6 +80,21 @@ public class DatabaseFixture : IAsyncLifetime
         await admin.OpenAsync();
         await using var cmd = new NpgsqlCommand(
             $"DROP DATABASE IF EXISTS \"{DatabaseName}\" WITH (FORCE)", admin);
-        await cmd.ExecuteNonQueryAsync();
+
+        // FORCE boshqa rol jarayonini (masalan, test bazasiga kirgan
+        // autovacuum) to'xtata olmay 42501 beradi; u bir zumda chiqib ketadi.
+        // Busiz toza testlar "Class Cleanup Failure" bilan yiqilardi.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                await cmd.ExecuteNonQueryAsync();
+                return;
+            }
+            catch (PostgresException ex) when (ex.SqlState == "42501" && attempt < 10)
+            {
+                await Task.Delay(200 * attempt);
+            }
+        }
     }
 }

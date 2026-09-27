@@ -16,7 +16,7 @@ public record DeleteResult(int DeletedCount, int UncachedCount);
 
 public enum EditResult
 {
-    BaselineCreated,
+    NotCached,
     Unchanged,
     Edited
 }

@@ -59,7 +59,6 @@ public class Worker : BackgroundService
         // konstruktor inyeksiyasi preflight'gacha xostni yiqitardi.
         var client = _services.GetRequiredService<ITdClient>();
         var authenticator = _services.GetRequiredService<TdAuthenticator>();
-        var handler = _services.GetRequiredService<CustomSync.Capture.Capture.CaptureUpdateHandler>();
         var gate = new AuthorizationGate(client, authenticator,
             _services.GetService<ILogger<AuthorizationGate>>());
 
