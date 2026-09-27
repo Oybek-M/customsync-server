@@ -393,10 +393,18 @@ Qilingan ishlar (Task 4a):
    zanjirdan ALOHIDA.
 3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Egasi qarori:
    oraliq tahrir versiyalari ham saqlanadi. Taklif:
-   `docs/proposal-edited-edit-date.md`. **Bloklangan:** avval tdesktop
-   sessiyasi spec + `CHANGELOG.md` + `test-vectors.json` ni yangilaydi,
-   keyin capture tomoni (`updateMessageContent` + `updateMessageEdited`
-   juftlash).
+   `docs/proposal-edited-edit-date.md`. **Blok ochildi (2026-09-27):**
+   protokol tdesktop tomonida qabul qilindi (spec §3.1/§3.2, CHANGELOG,
+   `test-vectors.json` da `edited` uchun ikki `edit_date` vektori).
+   customsync-server testlari yangi vektorlar bilan 236/236. Capture
+   tomoni: `updateMessageContent` + `updateMessageEdited` juftlash.
+   Zaxira: `edit_date` yo'q bo'lsa `msg_date` (tdesktop kodi shunday).
+   Scope `setting` kalitlari ham belgilandi (spec §3.2.1:
+   `scope.whitelist`, `scope.blacklist`, `scope.wl_categories`,
+   `scope.bl_categories`, `scope.antidelete_global`,
+   `scope.antiedit_global`, `scope.antidelete_per_peer`,
+   `scope.antiedit_per_peer`; `value` doim satr) — Task 6 da scope
+   snapshot shulardan to'ldiriladi.
 4. Task 6 (sync klienti) va keyingilari.
 
 **tdesktop sessiyasiga uzatiladigan ishlar** (bu sessiya u yerga
