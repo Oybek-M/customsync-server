@@ -20,7 +20,10 @@ public static class CaptureHandlerRegistration
             ?? throw new InvalidOperationException(
                 "ITdClient must be registered before AddCaptureHandlers; otherwise the handler is never attached.");
 
-        services.TryAddSingleton<ICaptureScope, NoneCaptureScope>();
+        services.TryAddSingleton<ISyncedScopeSettingsSource, NullSyncedScopeSettingsSource>();
+        services.TryAddSingleton<ICaptureScope>(sp => new CaptureScopeEvaluator(
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetService<ISyncedScopeSettingsSource>()));
         services.AddSingleton(sp => new CaptureUpdateHandler(
             sp.GetRequiredService<MessageCache>(),
             sp.GetRequiredService<ICaptureScope>(),

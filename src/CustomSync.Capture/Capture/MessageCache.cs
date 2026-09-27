@@ -424,7 +424,8 @@ public class MessageCache
         string accountId,
         long serverMsgId,
         string newText,
-        long? observedAt = null)
+        long? observedAt = null,
+        bool emitOutbox = true)
     {
         try
         {
@@ -472,28 +473,31 @@ public class MessageCache
                     return EditResult.Unchanged;
                 }
 
-                long occurredAt = cached.Date > 0 ? cached.Date : now;
-                string payloadJson = PayloadBuilder.BuildEdited(
-                    accountId,
-                    peerId,
-                    oldText,
-                    effectiveNewText,
-                    cached.IsOut);
-
-                using (var insCmd = conn.CreateCommand())
+                if (emitOutbox)
                 {
-                    insCmd.Transaction = tx;
-                    insCmd.CommandText = @"
-                        INSERT OR REPLACE INTO capture_outbox (kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at)
-                        VALUES ('edited', @account_id, @peer_id, @msg_id, @occurred_at, @observed_at, @payload_json, @created_at);";
-                    insCmd.Parameters.AddWithValue("@account_id", accountId);
-                    insCmd.Parameters.AddWithValue("@peer_id", peerId);
-                    insCmd.Parameters.AddWithValue("@msg_id", serverMsgId);
-                    insCmd.Parameters.AddWithValue("@occurred_at", occurredAt);
-                    insCmd.Parameters.AddWithValue("@observed_at", now);
-                    insCmd.Parameters.AddWithValue("@payload_json", payloadJson);
-                    insCmd.Parameters.AddWithValue("@created_at", now);
-                    insCmd.ExecuteNonQuery();
+                    long occurredAt = cached.Date > 0 ? cached.Date : now;
+                    string payloadJson = PayloadBuilder.BuildEdited(
+                        accountId,
+                        peerId,
+                        oldText,
+                        effectiveNewText,
+                        cached.IsOut);
+
+                    using (var insCmd = conn.CreateCommand())
+                    {
+                        insCmd.Transaction = tx;
+                        insCmd.CommandText = @"
+                            INSERT OR REPLACE INTO capture_outbox (kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at)
+                            VALUES ('edited', @account_id, @peer_id, @msg_id, @occurred_at, @observed_at, @payload_json, @created_at);";
+                        insCmd.Parameters.AddWithValue("@account_id", accountId);
+                        insCmd.Parameters.AddWithValue("@peer_id", peerId);
+                        insCmd.Parameters.AddWithValue("@msg_id", serverMsgId);
+                        insCmd.Parameters.AddWithValue("@occurred_at", occurredAt);
+                        insCmd.Parameters.AddWithValue("@observed_at", now);
+                        insCmd.Parameters.AddWithValue("@payload_json", payloadJson);
+                        insCmd.Parameters.AddWithValue("@created_at", now);
+                        insCmd.ExecuteNonQuery();
+                    }
                 }
 
                 using (var updCmd = conn.CreateCommand())

@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using CustomSync.Capture.Capture;
 using Microsoft.Extensions.Configuration;
 
 namespace CustomSync.Capture.Preflight;
@@ -90,6 +91,42 @@ public static class CapturePreflight
         catch (Exception ex)
         {
             errors.Add($"Capture:CacheDatabasePath directory '{cacheDir}' cannot be created or is not writable: {ex.Message}");
+        }
+
+        // 5. Scope configuration check (Capture:Scope:Block, Capture:Scope:Allow)
+        var blockList = ScopeConfigReader.ReadPeerList(config, "Capture:Scope:Block");
+        var allowList = ScopeConfigReader.ReadPeerList(config, "Capture:Scope:Allow");
+
+        bool hasBlockError = false;
+        foreach (var entry in blockList)
+        {
+            if (!ScopeConfigReader.IsValidDecimalInt64(entry))
+            {
+                errors.Add("Capture:Scope:Block contains an invalid entry that is not a decimal int64.");
+                hasBlockError = true;
+                break;
+            }
+        }
+
+        bool hasAllowError = false;
+        foreach (var entry in allowList)
+        {
+            if (!ScopeConfigReader.IsValidDecimalInt64(entry))
+            {
+                errors.Add("Capture:Scope:Allow contains an invalid entry that is not a decimal int64.");
+                hasAllowError = true;
+                break;
+            }
+        }
+
+        if (!hasBlockError && !hasAllowError)
+        {
+            var blockSet = new HashSet<string>(blockList);
+            var allowSet = new HashSet<string>(allowList);
+            if (blockSet.Overlaps(allowSet))
+            {
+                errors.Add("Capture:Scope:Block and Capture:Scope:Allow contain overlapping peer entries.");
+            }
         }
 
         return new PreflightReport(errors.Count == 0, errors);

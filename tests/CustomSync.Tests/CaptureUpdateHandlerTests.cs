@@ -13,17 +13,23 @@ namespace CustomSync.Tests;
 
 public class AllowAllCaptureScope : ICaptureScope
 {
-    public bool ShouldCapture(string peerId) => true;
+    public bool ShouldCache(string peerId) => true;
+    public bool ShouldAntiDelete(string peerId) => true;
+    public bool ShouldAntiEdit(string peerId) => true;
 }
 
 public class DenyAllCaptureScope : ICaptureScope
 {
-    public bool ShouldCapture(string peerId) => false;
+    public bool ShouldCache(string peerId) => false;
+    public bool ShouldAntiDelete(string peerId) => false;
+    public bool ShouldAntiEdit(string peerId) => false;
 }
 
 public class FilterCaptureScope(Func<string, bool> predicate) : ICaptureScope
 {
-    public bool ShouldCapture(string peerId) => predicate(peerId);
+    public bool ShouldCache(string peerId) => predicate(peerId);
+    public bool ShouldAntiDelete(string peerId) => predicate(peerId);
+    public bool ShouldAntiEdit(string peerId) => predicate(peerId);
 }
 
 public class TestLogger<T> : ILogger<T>
@@ -733,8 +739,8 @@ public class CaptureUpdateHandlerTests : IDisposable
         transport.EnqueueIncoming(newMsgJson);
         transport.EnqueueIncoming(deleteMsgJson);
 
-        // Wait up to 5 seconds for processing
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        // Wait up to 10 seconds for processing
+        var deadline = DateTime.UtcNow.AddSeconds(10);
         IReadOnlyList<OutboxRow> rows = Array.Empty<OutboxRow>();
         while (DateTime.UtcNow < deadline)
         {

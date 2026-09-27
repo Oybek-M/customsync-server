@@ -1,20 +1,26 @@
 namespace CustomSync.Capture.Capture;
 
 /// <summary>
-/// Evaluates whether a peer is within the capture scope.
+/// Evaluates whether a chat should be cached or captured for deletions/edits.
+/// Mirrors tdesktop's three distinct decisions:
+/// - ShouldCache: ShouldBackgroundCache (storing new messages, updating cached text on edit, baseline fetch)
+/// - ShouldAntiDelete: ShouldAntiDelete (emitting deleted rows)
+/// - ShouldAntiEdit: ShouldAntiEdit (emitting edited rows)
 /// </summary>
 public interface ICaptureScope
 {
-    bool ShouldCapture(string peerId);
+    bool ShouldCache(string peerId);
+    bool ShouldAntiDelete(string peerId);
+    bool ShouldAntiEdit(string peerId);
 }
 
 /// <summary>
 /// Fail-closed placeholder for ICaptureScope.
-/// Captures nothing until ScopeEvaluator is implemented in Task 5.
-/// Registering this prevents writing private chats to VPS disk
-/// before capture rules are explicitly defined.
+/// Captures and caches nothing.
 /// </summary>
 public class NoneCaptureScope : ICaptureScope
 {
-    public bool ShouldCapture(string peerId) => false;
+    public bool ShouldCache(string peerId) => false;
+    public bool ShouldAntiDelete(string peerId) => false;
+    public bool ShouldAntiEdit(string peerId) => false;
 }

@@ -245,7 +245,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope BEFORE caching
-        if (!_scope.ShouldCapture(peerId))
+        if (!_scope.ShouldCache(peerId))
             return;
 
         (string text, bool isMedia) = msg.TryGetProperty("content", out var contentProp)
@@ -300,7 +300,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope at emit time
-        if (!_scope.ShouldCapture(peerId))
+        if (!_scope.ShouldAntiDelete(peerId))
             return;
 
         var serverMsgIds = new List<long>();
@@ -341,9 +341,11 @@ public class CaptureUpdateHandler
         if (serverMsgId is null)
             return;
 
-        // Consult scope at emit time
-        if (!_scope.ShouldCapture(peerId))
+        // Consult scope: if not even cached, ignore completely (no cache update, no baseline fetch, no outbox)
+        if (!_scope.ShouldCache(peerId))
             return;
+
+        bool shouldAntiEdit = _scope.ShouldAntiEdit(peerId);
 
         if (!root.TryGetProperty("new_content", out var newContent))
             return;
@@ -351,7 +353,7 @@ public class CaptureUpdateHandler
         (string newText, _) = ExtractTextAndMedia(newContent);
 
         long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
-        var result = _cache.UpdateMessageContent(chatId, peerId, _accountId!, serverMsgId.Value, newText, now);
+        var result = _cache.UpdateMessageContent(chatId, peerId, _accountId!, serverMsgId.Value, newText, now, emitOutbox: shouldAntiEdit);
         if (result == EditResult.NotCached)
         {
             // Hodisa yozilmaydi ("oldin" matni noma'lum). Keyingi tahrir
