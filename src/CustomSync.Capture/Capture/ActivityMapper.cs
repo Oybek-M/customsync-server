@@ -11,10 +11,19 @@ namespace CustomSync.Capture.Capture;
 /// </summary>
 public static class ActivityMapper
 {
+    // Spec §3.2.2 / tdesktop kLifeStartDate + 4 (2013-08-01): undan eski
+    // (0 ham) online/offline vaqti tdesktop'da LastseenStatus::LongAgo().
+    public const long LifeStartThreshold = 1375315204;
+
+    // "empty" HECH QACHON yozilmaydi: tdesktop userStatusEmpty ni ham,
+    // noma'lum holatni ham "long_ago" deb yozadi. Boshqa qiymat — bir xil
+    // hodisa ikki xil new_value bilan keladi va yozuvlar birlashmaydi.
+    public const string LongAgo = "long_ago";
+
     public static string MapStatus(JsonElement statusElement, long now)
     {
         if (!statusElement.TryGetProperty("@type", out var typeProp))
-            return "empty";
+            return LongAgo;
 
         string type = typeProp.GetString() ?? "";
         return type switch
@@ -24,8 +33,8 @@ public static class ActivityMapper
             "userStatusRecently" => "recently",
             "userStatusLastWeek" => "within_week",
             "userStatusLastMonth" => "within_month",
-            "userStatusEmpty" => "empty",
-            _ => "empty"
+            "userStatusEmpty" => LongAgo,
+            _ => LongAgo
         };
     }
 
@@ -40,17 +49,12 @@ public static class ActivityMapper
                 expires = val;
         }
 
-        if (expires > now)
+        if (expires < LifeStartThreshold)
         {
-            return $"online:{expires}";
+            return LongAgo;
         }
 
-        if (expires > 0)
-        {
-            return $"offline:{expires}";
-        }
-
-        return "empty";
+        return expires > now ? $"online:{expires}" : $"offline:{expires}";
     }
 
     private static string MapOffline(JsonElement elem)
@@ -64,12 +68,7 @@ public static class ActivityMapper
                 wasOnline = val;
         }
 
-        if (wasOnline > 0)
-        {
-            return $"offline:{wasOnline}";
-        }
-
-        return "empty";
+        return wasOnline < LifeStartThreshold ? LongAgo : $"offline:{wasOnline}";
     }
 
     /// <summary>

@@ -70,8 +70,19 @@ public class CaptureActivityTests : IDisposable
         using var offlineDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOffline"", ""was_online"": 1786995000 }");
         Assert.Equal("offline:1786995000", ActivityMapper.MapStatus(offlineDoc.RootElement, now));
 
+        // Spec §3.2.2: vaqti 1375315204 (kLifeStartDate + 4) dan kichik — long_ago
         using var offlineZeroDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOffline"", ""was_online"": 0 }");
-        Assert.Equal("empty", ActivityMapper.MapStatus(offlineZeroDoc.RootElement, now));
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(offlineZeroDoc.RootElement, now));
+        using var offlineOldDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOffline"", ""was_online"": 1375315203 }");
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(offlineOldDoc.RootElement, now));
+        using var offlineEdgeDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOffline"", ""was_online"": 1375315204 }");
+        Assert.Equal("offline:1375315204", ActivityMapper.MapStatus(offlineEdgeDoc.RootElement, now));
+        using var onlineZeroDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOnline"", ""expires"": 0 }");
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(onlineZeroDoc.RootElement, now));
+        using var onlineOldDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusOnline"", ""expires"": 1375315203 }");
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(onlineOldDoc.RootElement, now));
+        using var noTypeDoc = JsonDocument.Parse(@"{ ""expires"": 1787000300 }");
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(noTypeDoc.RootElement, now));
 
         using var recentlyDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusRecently"" }");
         Assert.Equal("recently", ActivityMapper.MapStatus(recentlyDoc.RootElement, now));
@@ -82,11 +93,14 @@ public class CaptureActivityTests : IDisposable
         using var lastMonthDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusLastMonth"" }");
         Assert.Equal("within_month", ActivityMapper.MapStatus(lastMonthDoc.RootElement, now));
 
+        // tdesktop userStatusEmpty -> LastseenStatus::LongAgo() -> "long_ago".
+        // "empty" yozilsa, bir xil hodisa ikki xil new_value bilan kelib
+        // birlashmaydi (spec §3.2.2).
         using var emptyDoc = JsonDocument.Parse(@"{ ""@type"": ""userStatusEmpty"" }");
-        Assert.Equal("empty", ActivityMapper.MapStatus(emptyDoc.RootElement, now));
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(emptyDoc.RootElement, now));
 
         using var unknownDoc = JsonDocument.Parse(@"{ ""@type"": ""someUnknownStatus"" }");
-        Assert.Equal("empty", ActivityMapper.MapStatus(unknownDoc.RootElement, now));
+        Assert.Equal("long_ago", ActivityMapper.MapStatus(unknownDoc.RootElement, now));
 
         // Name mapping (langFullName)
         Assert.Equal("Ali Valiyev", ActivityMapper.MapName("Ali", "Valiyev"));
@@ -782,6 +796,20 @@ public class CaptureActivityTests : IDisposable
             var scope = sp.GetRequiredService<IActivityScope>();
             Assert.True(scope.ShouldTrackActivity("666", isContact: false), $"registerFirst={registerFirst}");
             Assert.False(scope.ShouldTrackActivity("777", isContact: true), $"registerFirst={registerFirst}");
+        }
+    }
+
+    [Fact]
+    public void Test15b_Discriminator_matches_every_protocol_vector()
+    {
+        // test-vectors.json "discriminator" bo'limi — tdesktop DiscriminatorFor
+        // bilan platformalararo kontrakt (yuqori biti 1 bo'lgan "name" ham bor).
+        var cases = TestVectors.Get("discriminator").GetProperty("cases").EnumerateArray().ToList();
+        Assert.NotEmpty(cases);
+        foreach (var c in cases)
+        {
+            var text = c.GetProperty("text").GetString()!;
+            Assert.Equal(c.GetProperty("value").GetInt64(), ActivityMapper.DiscriminatorFor(text));
         }
     }
 
