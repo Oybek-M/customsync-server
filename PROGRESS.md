@@ -8,6 +8,24 @@ Oxirgi yangilanish: **2026-09-27**
 **Hozir:** `dotnet test` → **266 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
+### ▶️ Qayerda to'xtadik (2026-09-27 kechqurun, PC `DESKTOP-5CAUS66`)
+
+| | |
+|---|---|
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 4b — activity** (`457b92f` + tuzatishlar `a764da4`, `b6d3e22`). Tekshiruv bo'limi: "Plan 05 Task 4b tekshiruvi" |
+| **Keyingi bajariladigan** | **Plan 05 Task 4c — `edited.occurred_at = edit_date`**. Prompt tayyor: `docs/05-task4c-prompt.md` — **hali hech bir agentga BERILMAGAN**. Egasi delegate'ga (Gemini / Claude) beradi, hisobot kelgach mustaqil tekshiruv |
+| Undan keyin | Task 6 (sync klienti; scope snapshot'larini `setting` yozuvlaridan to'ldirish — §2 dagi 🔴 eslatmani o'qing), keyin 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, **4c ⏳**, 6–10 ⏸ |
+| Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
+| ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
+
+Bugun (2026-09-27) qilinganlar: Task 4a, 5, 4b tekshirilib qabul
+qilindi (har birida delegate o'tkazib yuborgan nuqsonlar tuzatildi);
+Task 4b/4c/5 promptlari yozildi; `edited` protokol taklifi
+(`docs/proposal-edited-edit-date.md`) tdesktop tomonida qabul qilindi;
+activity protokol savollari (msg_id, `long_ago`, activity scope
+kalitlari) yopildi.
+
 ---
 
 ## 0. 🆕 2026-09-03 — plan 06 Task 1–4 va tozalash
@@ -231,7 +249,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (6/10 — Task 4b yakunlandi)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b tekshirildi; keyingi: 4c)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -421,11 +439,11 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 4c (edit_date) yoki Task 6 (synced scope settings)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 4c (edit_date), keyin Task 6
 
-Task 4b tugadi va tekshirildi (265 test; tekshiruv bo'limi yuqorida).
+Task 4b tugadi va tekshirildi (265 test + `long_ago` tuzatishi = 266; tekshiruv bo'limi yuqorida).
 Qilingan ishlar (Task 4b):
-- `ActivityMapper`: status kodlash (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`, `empty`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`).
+- `ActivityMapper`: status kodlash (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`; `empty` hech qachon yozilmaydi — `b6d3e22`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`).
 - 60 soniyalik last-seen shovqin filtri (`|oldAge - newAge| < 60`) tdesktop `custom_activity_history.cpp` mantiqiga to'liq moslandi.
 - `MessageCache`: `activity_latest` jadvali qo'shildi; oxirgi qiymatni tekshirish, shovqin filtrini qo'llash, keshni yangilash va outbox'ga yozish yagona atomar SQLite tranzaksiyasida bajariladi.
 - `IActivityScope` va `ActivityScopeEvaluator`: 4 qatlamli mustaqil activity scope (Server Exclude > Server Include > Synced snapshot > TrackAllContacts && isContact).
@@ -774,7 +792,7 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 30. **`NoneCaptureScope` fail-closed xavfsizlik** — Task 5 doirasida haqiqiy scope joriy qilinguncha xizmat hech narsani saqlamaydigan placeholder bilan xavfsiz holatda (fail-closed) turadi.
 31. **`activity` alohida Task 4b ga ajratilishi** — `updateUserStatus` va `updateUser` hodisalarini qayta ishlash, status kodlash hamda tdesktop shovqin filtrini aniq ko'chirish alohida topshiriq sifatida ajratildi.
 32. **Capture scope: 3 ta mustaqil qaror va tdesktop zanjiri** — Plandagi bitta `ShouldCapture` o'rniga tdesktop kabi uchta mustaqil qaror (`ShouldCache`, `ShouldAntiDelete`, `ShouldAntiEdit`) va 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced Snapshot > DefaultEnabled) joriy qilindi. Sinxronlangan sozlamalar uchun `ISyncedScopeSettingsSource` choki qoldirildi (Task 6 gacha null qaytaradi). Preflight Block/Allow ro'yxatlaridagi har bir element decimal int64 ekani va ular kesishmasligini tekshiradi (xatoliklarda peer_id chiqmaydi).
-33. **Activity capture va shovqin filtri (Plan 05 Task 4b)** — Foydalanuvchi faolligi (`status`, `name`, `username`) tdesktop bilan baytma-bayt mos kodlandi. Status holatlari (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`, `empty`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`) tdesktop'ga to'liq moslandi. 60 soniyalik offline bump shovqin filtri (`|oldAge - newAge| < 60`) SQLite'dagi `activity_latest` jadvali bilan atomar tranzaksiyada birlashtirildi. Xavfsizlik uchun alohida `IActivityScope` (Server Exclude > Server Include > Synced Snapshot > TrackAllContacts) va Preflight Check 6 kiritildi. Maxfiy ma'lumotlar (status, ism, username, peer_id) hech qachon loglarga yozilmaydi.
+33. **Activity capture va shovqin filtri (Plan 05 Task 4b)** — Foydalanuvchi faolligi (`status`, `name`, `username`) tdesktop bilan baytma-bayt mos kodlandi. Status holatlari (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`; `empty` hech qachon yozilmaydi — `b6d3e22`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`) tdesktop'ga to'liq moslandi. 60 soniyalik offline bump shovqin filtri (`|oldAge - newAge| < 60`) SQLite'dagi `activity_latest` jadvali bilan atomar tranzaksiyada birlashtirildi. Xavfsizlik uchun alohida `IActivityScope` (Server Exclude > Server Include > Synced Snapshot > TrackAllContacts) va Preflight Check 6 kiritildi. Maxfiy ma'lumotlar (status, ism, username, peer_id) hech qachon loglarga yozilmaydi.
 
 ---
 
