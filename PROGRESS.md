@@ -449,7 +449,10 @@ Qilingan ishlar (Task 4b):
    chiqarmaydi (`userStatusEmpty` → `empty`). tdesktop MTProto
    `userStatusEmpty` ni `long_ago` deb yozsa — yozuvlar birlashmaydi.
    tdesktop kodidan tasdiqlash kerak (bu sessiya tdesktop'ni o'qimaydi).
-3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Egasi qarori:
+3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Prompt tayyor:
+   `docs/05-task4c-prompt.md` (2026-09-27) — `updateMessageContent` +
+   `updateMessageEdited` SQLite'da saqlanadigan pending-edit bilan juftlanadi,
+   juftsiz qolsa timeout'dan keyin `msg_date` zaxirasi. Egasi qarori:
    oraliq tahrir versiyalari ham saqlanadi. Taklif:
    `docs/proposal-edited-edit-date.md`. **Blok ochildi (2026-09-27):**
    protokol tdesktop tomonida qabul qilindi (spec §3.1/§3.2, CHANGELOG,
