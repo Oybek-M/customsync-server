@@ -4,7 +4,10 @@ using Microsoft.Extensions.Configuration;
 
 namespace CustomSync.Capture.Preflight;
 
-public record PreflightReport(bool Success, IReadOnlyList<string> Errors);
+public record PreflightReport(bool Success, IReadOnlyList<string> Errors)
+{
+    public bool Passed => Success;
+}
 
 public static class CapturePreflight
 {
@@ -135,6 +138,48 @@ public static class CapturePreflight
         if (!string.IsNullOrEmpty(defaultEnabled) && !bool.TryParse(defaultEnabled, out _))
         {
             errors.Add("Capture:Scope:DefaultEnabled must be 'true' or 'false'.");
+        }
+
+        // 6. Activity Scope configuration check (Capture:Activity:Exclude, Capture:Activity:Include, Capture:Activity:TrackAllContacts)
+        var actExcludeList = ScopeConfigReader.ReadPeerList(config, "Capture:Activity:Exclude");
+        var actIncludeList = ScopeConfigReader.ReadPeerList(config, "Capture:Activity:Include");
+
+        bool hasActExcludeError = false;
+        foreach (var entry in actExcludeList)
+        {
+            if (!ScopeConfigReader.IsCanonicalPeerId(entry))
+            {
+                errors.Add("Capture:Activity:Exclude contains an entry that is not a canonical tdesktop peer id (positive decimal, no spaces or leading zeros; TDLib chat ids such as -100... are not accepted).");
+                hasActExcludeError = true;
+                break;
+            }
+        }
+
+        bool hasActIncludeError = false;
+        foreach (var entry in actIncludeList)
+        {
+            if (!ScopeConfigReader.IsCanonicalPeerId(entry))
+            {
+                errors.Add("Capture:Activity:Include contains an entry that is not a canonical tdesktop peer id (positive decimal, no spaces or leading zeros; TDLib chat ids such as -100... are not accepted).");
+                hasActIncludeError = true;
+                break;
+            }
+        }
+
+        if (!hasActExcludeError && !hasActIncludeError)
+        {
+            var actExcludeSet = new HashSet<string>(actExcludeList);
+            var actIncludeSet = new HashSet<string>(actIncludeList);
+            if (actExcludeSet.Overlaps(actIncludeSet))
+            {
+                errors.Add("Capture:Activity:Exclude and Capture:Activity:Include contain overlapping peer entries.");
+            }
+        }
+
+        var trackAllContacts = config["Capture:Activity:TrackAllContacts"];
+        if (!string.IsNullOrEmpty(trackAllContacts) && !bool.TryParse(trackAllContacts, out _))
+        {
+            errors.Add("Capture:Activity:TrackAllContacts must be 'true' or 'false'.");
         }
 
         return new PreflightReport(errors.Count == 0, errors);

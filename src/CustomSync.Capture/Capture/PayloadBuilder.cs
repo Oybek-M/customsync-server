@@ -79,4 +79,16 @@ public static class PayloadBuilder
     {
         return $"{{\"account_id\":\"{EscapeString(accountId)}\",\"peer_id\":\"{EscapeString(peerId)}\",\"old_text\":\"{EscapeString(oldText)}\",\"new_text\":\"{EscapeString(newText)}\",\"is_out\":{(isOut ? "true" : "false")}}}";
     }
+
+    public static string BuildActivity(
+        string accountId,
+        string peerId,
+        string field,
+        bool hasOldValue,
+        string? oldValue,
+        string newValue)
+    {
+        string oldValueJson = hasOldValue ? $"\"{EscapeString(oldValue)}\"" : "null";
+        return $"{{\"account_id\":\"{EscapeString(accountId)}\",\"peer_id\":\"{EscapeString(peerId)}\",\"field\":\"{EscapeString(field)}\",\"old_value\":{oldValueJson},\"has_old_value\":{(hasOldValue ? "true" : "false")},\"new_value\":\"{EscapeString(newValue)}\"}}";
+    }
 }

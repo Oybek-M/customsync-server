@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using CustomSync.Capture.Tdlib;
@@ -6,14 +7,16 @@ using Microsoft.Extensions.Logging;
 namespace CustomSync.Capture.Capture;
 
 /// <summary>
-/// Processes TDLib updates (updateNewMessage, updateDeleteMessages, updateMessageContent)
-/// sequentially in exact arrival order, caching in-scope messages and emitting durable
-/// events to capture_outbox.
+/// Processes TDLib updates (updateNewMessage, updateDeleteMessages, updateMessageContent,
+/// updateUser, updateUserStatus) sequentially in exact arrival order, caching in-scope
+/// messages and emitting durable events to capture_outbox.
 /// </summary>
 public class CaptureUpdateHandler
 {
     private readonly MessageCache _cache;
-    private readonly ICaptureScope _scope;
+    private readonly ICaptureScope? _scope;
+    private readonly IActivityScope? _activityScope;
+    private readonly ConcurrentDictionary<string, bool> _contactMap = new();
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CaptureUpdateHandler>? _logger;
     private readonly object _lock = new();
@@ -32,13 +35,25 @@ public class CaptureUpdateHandler
 
     public CaptureUpdateHandler(
         MessageCache cache,
-        ICaptureScope scope,
+        ICaptureScope? scope,
+        TimeProvider? timeProvider = null,
+        ILogger<CaptureUpdateHandler>? logger = null,
+        string? accountId = null)
+        : this(cache, scope, activityScope: null, timeProvider, logger, accountId)
+    {
+    }
+
+    public CaptureUpdateHandler(
+        MessageCache cache,
+        ICaptureScope? scope,
+        IActivityScope? activityScope,
         TimeProvider? timeProvider = null,
         ILogger<CaptureUpdateHandler>? logger = null,
         string? accountId = null)
     {
         _cache = cache;
         _scope = scope;
+        _activityScope = activityScope;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _accountId = accountId;
@@ -102,6 +117,18 @@ public class CaptureUpdateHandler
                     return;
                 }
 
+                if (updateType == "updateUser" && root.TryGetProperty("user", out var userObj) && userObj.ValueKind == JsonValueKind.Object)
+                {
+                    if (userObj.TryGetProperty("id", out var idElem) && userObj.TryGetProperty("is_contact", out var cElem))
+                    {
+                        var pId = idElem.ValueKind == JsonValueKind.Number ? idElem.GetInt64().ToString(CultureInfo.InvariantCulture) : idElem.GetString();
+                        if (!string.IsNullOrEmpty(pId))
+                        {
+                            _contactMap[pId] = cElem.GetBoolean();
+                        }
+                    }
+                }
+
                 if (string.IsNullOrEmpty(_accountId))
                 {
                     // Faqat ushlanadigan turlar buferlanadi: TDLib ishga
@@ -148,7 +175,7 @@ public class CaptureUpdateHandler
     }
 
     private static bool IsCapturedType(string? type) =>
-        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent";
+        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent" or "updateUser" or "updateUserStatus";
 
     // Zaxira yo'l: my_id odatda updateOption bilan keladi, lekin u kelmasa
     // yoki obunadan oldin kelib qolsa, bufer cheksiz o'sadi va hech narsa
@@ -216,6 +243,12 @@ public class CaptureUpdateHandler
             case "updateMessageContent":
                 HandleMessageContent(root);
                 break;
+            case "updateUser":
+                HandleUpdateUser(root);
+                break;
+            case "updateUserStatus":
+                HandleUpdateUserStatus(root);
+                break;
         }
     }
 
@@ -245,7 +278,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope BEFORE caching
-        if (!_scope.ShouldCache(peerId))
+        if (_scope is not null && !_scope.ShouldCache(peerId))
             return;
 
         (string text, bool isMedia) = msg.TryGetProperty("content", out var contentProp)
@@ -300,7 +333,7 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope at emit time
-        if (!_scope.ShouldAntiDelete(peerId))
+        if (_scope is not null && !_scope.ShouldAntiDelete(peerId))
             return;
 
         var serverMsgIds = new List<long>();
@@ -342,10 +375,10 @@ public class CaptureUpdateHandler
             return;
 
         // Consult scope: if not even cached, ignore completely (no cache update, no baseline fetch, no outbox)
-        if (!_scope.ShouldCache(peerId))
+        if (_scope is not null && !_scope.ShouldCache(peerId))
             return;
 
-        bool shouldAntiEdit = _scope.ShouldAntiEdit(peerId);
+        bool shouldAntiEdit = _scope?.ShouldAntiEdit(peerId) ?? false;
 
         if (!root.TryGetProperty("new_content", out var newContent))
             return;
@@ -389,6 +422,95 @@ public class CaptureUpdateHandler
             _logger?.LogError("getMessage for edit baseline failed ({ErrorType}) chat {ChatId} message {MessageId}",
                 ex.GetType().Name, chatId, tdlibId);
         }
+    }
+
+    private void HandleUpdateUser(JsonElement root)
+    {
+        if (!root.TryGetProperty("user", out var user) || user.ValueKind != JsonValueKind.Object)
+            return;
+
+        if (!user.TryGetProperty("id", out var idProp))
+            return;
+
+        string peerId = idProp.ValueKind switch
+        {
+            JsonValueKind.Number => idProp.GetInt64().ToString(CultureInfo.InvariantCulture),
+            JsonValueKind.String => idProp.GetString() ?? "",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(peerId))
+            return;
+
+        bool isContact = false;
+        if (user.TryGetProperty("is_contact", out var contactProp))
+        {
+            isContact = contactProp.GetBoolean();
+            _contactMap[peerId] = isContact;
+        }
+        else if (_contactMap.TryGetValue(peerId, out var existingContact))
+        {
+            isContact = existingContact;
+        }
+
+        if (_activityScope == null || !_activityScope.ShouldTrackActivity(peerId, isContact))
+            return;
+
+        if (string.IsNullOrEmpty(_accountId))
+            return;
+
+        long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        // 1. Name
+        string? firstName = user.TryGetProperty("first_name", out var fnProp) ? fnProp.GetString() : null;
+        string? lastName = user.TryGetProperty("last_name", out var lnProp) ? lnProp.GetString() : null;
+        string fullName = ActivityMapper.MapName(firstName, lastName);
+        _cache.RecordActivity(_accountId, peerId, "name", fullName, now);
+
+        // 2. Username
+        if (user.TryGetProperty("usernames", out var usernamesProp) && usernamesProp.ValueKind == JsonValueKind.Object)
+        {
+            string username = ActivityMapper.MapUsername(usernamesProp);
+            _cache.RecordActivity(_accountId, peerId, "username", username, now);
+        }
+
+        // 3. Status
+        if (user.TryGetProperty("status", out var statusProp) && statusProp.ValueKind == JsonValueKind.Object)
+        {
+            string status = ActivityMapper.MapStatus(statusProp, now);
+            _cache.RecordActivity(_accountId, peerId, "status", status, now);
+        }
+    }
+
+    private void HandleUpdateUserStatus(JsonElement root)
+    {
+        if (!root.TryGetProperty("user_id", out var idProp))
+            return;
+
+        string peerId = idProp.ValueKind switch
+        {
+            JsonValueKind.Number => idProp.GetInt64().ToString(CultureInfo.InvariantCulture),
+            JsonValueKind.String => idProp.GetString() ?? "",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(peerId))
+            return;
+
+        bool isContact = _contactMap.TryGetValue(peerId, out var c) && c;
+
+        if (_activityScope == null || !_activityScope.ShouldTrackActivity(peerId, isContact))
+            return;
+
+        if (string.IsNullOrEmpty(_accountId))
+            return;
+
+        if (!root.TryGetProperty("status", out var statusProp) || statusProp.ValueKind != JsonValueKind.Object)
+            return;
+
+        long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        string status = ActivityMapper.MapStatus(statusProp, now);
+        _cache.RecordActivity(_accountId, peerId, "status", status, now);
     }
 
     public static (string Text, bool IsMedia) ExtractTextAndMedia(JsonElement content)

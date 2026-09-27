@@ -69,6 +69,13 @@ public class MessageCache
                     UNIQUE (kind, account_id, peer_id, msg_id, occurred_at)
                 );
                 CREATE INDEX IF NOT EXISTS idx_capture_outbox_created_at ON capture_outbox (created_at);
+                CREATE TABLE IF NOT EXISTS activity_latest (
+                    peer_id TEXT NOT NULL,
+                    field TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    observed_at INTEGER NOT NULL,
+                    PRIMARY KEY (peer_id, field)
+                );
             ";
             cmd.ExecuteNonQuery();
 
@@ -584,6 +591,134 @@ public class MessageCache
         catch (Exception ex) when (ex is not MessageCacheException)
         {
             throw new MessageCacheException("Failed to get outbox rows.", ex);
+        }
+    }
+
+    public virtual bool RecordActivity(string accountId, string peerId, string field, string newValue, long now)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                bool hadPrevious = false;
+                string? oldValue = null;
+
+                using (var selCmd = conn.CreateCommand())
+                {
+                    selCmd.Transaction = tx;
+                    selCmd.CommandText = "SELECT value FROM activity_latest WHERE peer_id = @peer_id AND field = @field;";
+                    selCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    selCmd.Parameters.AddWithValue("@field", field);
+                    using var reader = selCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        hadPrevious = true;
+                        oldValue = reader.GetString(0);
+                    }
+                }
+
+                if (hadPrevious)
+                {
+                    if (oldValue == newValue)
+                    {
+                        tx.Rollback();
+                        return false;
+                    }
+
+                    if (field == "status" && ActivityMapper.IsStatusNoise(oldValue!, newValue, now))
+                    {
+                        tx.Rollback();
+                        return false;
+                    }
+                }
+                else
+                {
+                    if (string.IsNullOrEmpty(newValue))
+                    {
+                        tx.Rollback();
+                        return false;
+                    }
+                }
+
+                using (var upsertCmd = conn.CreateCommand())
+                {
+                    upsertCmd.Transaction = tx;
+                    upsertCmd.CommandText = @"
+                        INSERT INTO activity_latest (peer_id, field, value, observed_at)
+                        VALUES (@peer_id, @field, @value, @observed_at)
+                        ON CONFLICT(peer_id, field) DO UPDATE SET
+                            value = excluded.value,
+                            observed_at = excluded.observed_at;";
+                    upsertCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    upsertCmd.Parameters.AddWithValue("@field", field);
+                    upsertCmd.Parameters.AddWithValue("@value", newValue);
+                    upsertCmd.Parameters.AddWithValue("@observed_at", now);
+                    upsertCmd.ExecuteNonQuery();
+                }
+
+                var payloadJson = PayloadBuilder.BuildActivity(accountId, peerId, field, hadPrevious, oldValue, newValue);
+                long msgId = ActivityMapper.DiscriminatorFor(field);
+
+                using (var insCmd = conn.CreateCommand())
+                {
+                    insCmd.Transaction = tx;
+                    insCmd.CommandText = @"
+                        INSERT OR REPLACE INTO capture_outbox (kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at)
+                        VALUES ('activity', @account_id, @peer_id, @msg_id, @occurred_at, @observed_at, @payload_json, @created_at);";
+                    insCmd.Parameters.AddWithValue("@account_id", accountId);
+                    insCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    insCmd.Parameters.AddWithValue("@msg_id", msgId);
+                    insCmd.Parameters.AddWithValue("@occurred_at", now);
+                    insCmd.Parameters.AddWithValue("@observed_at", now);
+                    insCmd.Parameters.AddWithValue("@payload_json", payloadJson);
+                    insCmd.Parameters.AddWithValue("@created_at", now);
+                    insCmd.ExecuteNonQuery();
+                }
+
+                tx.Commit();
+                return true;
+            }
+            catch
+            {
+                try { tx.Rollback(); } catch { }
+                throw;
+            }
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to record activity in cache.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to record activity in cache.", ex);
+        }
+    }
+
+    public virtual (bool Exists, string? Value, long ObservedAt) GetLatestActivity(string peerId, string field)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT value, observed_at FROM activity_latest WHERE peer_id = @peer_id AND field = @field;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@field", field);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                return (true, reader.GetString(0), reader.GetInt64(1));
+            }
+            return (false, null, 0);
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to get latest activity.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to get latest activity.", ex);
         }
     }
 

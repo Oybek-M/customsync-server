@@ -21,12 +21,29 @@ public static class CaptureHandlerRegistration
                 "ITdClient must be registered before AddCaptureHandlers; otherwise the handler is never attached.");
 
         services.TryAddSingleton<ISyncedScopeSettingsSource, NullSyncedScopeSettingsSource>();
-        services.TryAddSingleton<ICaptureScope>(sp => new CaptureScopeEvaluator(
-            sp.GetRequiredService<IConfiguration>(),
-            sp.GetService<ISyncedScopeSettingsSource>()));
+        services.TryAddSingleton<ICaptureScope>(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            var settingsSource = sp.GetService<ISyncedScopeSettingsSource>();
+            return config is not null
+                ? new CaptureScopeEvaluator(config, settingsSource)
+                : new CaptureScopeEvaluator(null, null, false, settingsSource);
+        });
+
+        services.TryAddSingleton<ISyncedActivityScopeSettingsSource, NullSyncedActivityScopeSettingsSource>();
+        services.TryAddSingleton<IActivityScope>(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            var settingsSource = sp.GetService<ISyncedActivityScopeSettingsSource>();
+            return config is not null
+                ? new ActivityScopeEvaluator(config, settingsSource)
+                : new ActivityScopeEvaluator(null, null, false, settingsSource);
+        });
+
         services.AddSingleton(sp => new CaptureUpdateHandler(
             sp.GetRequiredService<MessageCache>(),
             sp.GetRequiredService<ICaptureScope>(),
+            sp.GetRequiredService<IActivityScope>(),
             sp.GetService<TimeProvider>(),
             sp.GetService<ILogger<CaptureUpdateHandler>>()));
 
