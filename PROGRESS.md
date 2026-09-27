@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-09-27**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **265 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **266 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ---
@@ -437,18 +437,23 @@ Qilingan ishlar (Task 4b):
 
 1. **Task 5 — scope.** ✅ YAKUNLANDI va tekshirildi (`640066e` + tuzatish, 249 test).
 2. **Task 4b — activity.** ✅ YAKUNLANDI va tekshirildi (`457b92f` + tuzatish,
-   265 test). **Ochiq savollar (tdesktop sessiyasi):**
-   (a) activity `msg_id`: delegate'ga ko'ra tdesktop `DiscriminatorFor(field)`
-   ishlatadi (`custom_db.cpp:3972`) — demak spec §3.2 jadvalidagi `0` va
-   `test-vectors.json` dagi `msg_id: 0` li activity holatlari ESKIRGAN;
-   discriminator'li activity vektori kerak.
-   (b) activity Include/Exclude/TrackAllContacts uchun `setting` kalitlari
-   yo'q (§3.2.1 faqat xabar scope'i).
-   (c) ⚠️ `long_ago`: delegate PROGRESS'ga status qiymatlari qatoriga
-   `long_ago` ni yozgan, lekin `ActivityMapper` uni hech qachon
-   chiqarmaydi (`userStatusEmpty` → `empty`). tdesktop MTProto
-   `userStatusEmpty` ni `long_ago` deb yozsa — yozuvlar birlashmaydi.
-   tdesktop kodidan tasdiqlash kerak (bu sessiya tdesktop'ni o'qimaydi).
+   265 test). Protokol savollari tdesktop sessiyasida yopildi
+   (`a06ed12373`, CHANGELOG 2026-09-27):
+   (a) activity `msg_id` = `DiscriminatorFor(field)` — spec §3.2 va
+   vektorlar to'g'rilandi; `test-vectors.json` dagi yangi `discriminator`
+   bo'limini `CaptureActivityTests.Test15b` to'liq tekshiradi.
+   (b) activity kalitlari belgilandi (§3.2.1): `scope.activity_track_all_contacts`,
+   `scope.activity_include`, `scope.activity_exclude` — tdesktop ularni
+   HALI yubormaydi. 🔴 **Task 6 uchun:** sinxron snapshot qurilganda bu
+   kalitlar yo'q bo'lsa — `track_all=true`, ro'yxatlar bo'sh (spec
+   talabi). Snapshot umuman yo'q bo'lsa (juftlanmagan xizmat) server
+   standarti `Capture:Activity:TrackAllContacts` = false qoladi.
+   (c) `userStatusEmpty` → `long_ago` (§3.2.2); `1375315204` dan eski
+   online/offline va noma'lum holat ham `long_ago`; `empty` hech qachon
+   yozilmaydi. Delegate `empty` yozib, testda mustahkamlagan edi —
+   tuzatildi (`b6d3e22`, 266 test).
+   Qamrab olinmagan: `photo` maydoni (§3.2.2: story/rasm signali
+   `online:<vaqt>`, `photo` belgisi bilan) — alohida kichik vazifa.
 3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Prompt tayyor:
    `docs/05-task4c-prompt.md` (2026-09-27) — `updateMessageContent` +
    `updateMessageEdited` SQLite'da saqlanadigan pending-edit bilan juftlanadi,
@@ -686,6 +691,7 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | PostgreSQL | 17.2 ishlab turibdi (plan 16 deydi — muammo emas) |
 | `dotnet-ef` | global tool 9.0.1, EF Core 8 bilan ishlaydi |
 | `test-vectors.json` | `<tdesktop>\docs\sync-protocol\test-vectors.json` (laptop: `C:\TBuild\tdesktop`) |
+| ⚠️ PC NuGet (2026-09-27) | E: tozalangandan keyin `C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config` yo'q papkani (`E:\Application's datas\...\NuGetPackages`) ko'rsatadi → build `MSB4018`. Tizim fayliga tegilmadi. Aylanib o'tish: `fallbackPackageFolders` ichida `<clear/>` bo'lgan vaqtinchalik nuget.config bilan bir marta `dotnet restore --configfile <fayl>`, keyin odatiy build. Doimiy yechim — egasi: VS Installer'da "Repair" yoki o'sha config faylini o'chirish (admin) |
 | pg auth | `scram-sha-256` — parolsiz kirish yo'q |
 
 🔴 **Paket qo'shganda ALBATTA `--version 8.0.*`** — versiyasiz
