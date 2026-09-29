@@ -410,14 +410,10 @@ public class MessageCache
                         delCmd.ExecuteNonQuery();
                     }
 
-                    using (var delPendingCmd = conn.CreateCommand())
-                    {
-                        delPendingCmd.Transaction = tx;
-                        delPendingCmd.CommandText = "DELETE FROM pending_edits WHERE chat_id = @chat_id AND message_id = @message_id;";
-                        delPendingCmd.Parameters.AddWithValue("@chat_id", chatId);
-                        delPendingCmd.Parameters.AddWithValue("@message_id", serverMsgId);
-                        delPendingCmd.ExecuteNonQuery();
-                    }
+                    // edit_date ni kutayotgan tahrir tashlanmaydi: eski matn
+                    // faqat o'sha qatorda qolgan (kesh va `deleted` yozuvida
+                    // yangi matn). Zaxira occurred_at bilan chiqariladi.
+                    FlushPendingEdit(conn, tx, chatId, serverMsgId, now);
 
                     deletedCount++;
                 }
@@ -999,6 +995,17 @@ public class MessageCache
         {
             long cutoff = now - timeoutSeconds;
             using var conn = OpenConnection();
+
+            // Odatda muddati o'tgan qator yo'q: yozish qulfini (BEGIN
+            // IMMEDIATE) faqat ish bo'lganda olamiz.
+            using (var existsCmd = conn.CreateCommand())
+            {
+                existsCmd.CommandText = "SELECT EXISTS(SELECT 1 FROM pending_edits WHERE observed_at <= @cutoff);";
+                existsCmd.Parameters.AddWithValue("@cutoff", cutoff);
+                if (Convert.ToInt64(existsCmd.ExecuteScalar()) == 0)
+                    return 0;
+            }
+
             using var tx = conn.BeginTransaction();
 
             int emittedCount = 0;
@@ -1092,6 +1099,72 @@ public class MessageCache
         {
             throw new MessageCacheException("Failed to sweep pending edits.", ex);
         }
+    }
+
+    /// <summary>
+    /// Berilgan xabarning kutayotgan tahririni (matni bo'lsa) `edited`
+    /// yozuvi sifatida chiqaradi va pending qatorni o'chiradi. Chaqiruvchi
+    /// tranzaksiyasi ichida ishlaydi.
+    /// </summary>
+    private static void FlushPendingEdit(SqliteConnection conn, SqliteTransaction tx, long chatId, long messageId, long now)
+    {
+        string? peerId = null, accountId = null, oldText = null, newText = null;
+        bool isOut = false;
+        long msgDate = 0, editDate = 0, observedAt = 0;
+        bool found = false;
+
+        using (var selCmd = conn.CreateCommand())
+        {
+            selCmd.Transaction = tx;
+            selCmd.CommandText = @"
+                SELECT peer_id, account_id, old_text, new_text, is_out, msg_date, edit_date, observed_at
+                FROM pending_edits
+                WHERE chat_id = @chat_id AND message_id = @message_id;";
+            selCmd.Parameters.AddWithValue("@chat_id", chatId);
+            selCmd.Parameters.AddWithValue("@message_id", messageId);
+
+            using var reader = selCmd.ExecuteReader();
+            if (reader.Read())
+            {
+                found = true;
+                peerId = reader.IsDBNull(0) ? "" : reader.GetString(0);
+                accountId = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                oldText = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                newText = reader.IsDBNull(3) ? null : reader.GetString(3);
+                isOut = !reader.IsDBNull(4) && reader.GetInt32(4) != 0;
+                msgDate = reader.IsDBNull(5) ? 0 : reader.GetInt64(5);
+                editDate = reader.IsDBNull(6) ? 0 : reader.GetInt64(6);
+                observedAt = reader.GetInt64(7);
+            }
+        }
+
+        if (!found)
+            return;
+
+        if (newText != null)
+        {
+            long occurredAt = editDate > 0 ? editDate : (msgDate > 0 ? msgDate : observedAt);
+            using var insCmd = conn.CreateCommand();
+            insCmd.Transaction = tx;
+            insCmd.CommandText = @"
+                INSERT OR REPLACE INTO capture_outbox (kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at)
+                VALUES ('edited', @account_id, @peer_id, @msg_id, @occurred_at, @observed_at, @payload_json, @created_at);";
+            insCmd.Parameters.AddWithValue("@account_id", accountId!);
+            insCmd.Parameters.AddWithValue("@peer_id", peerId!);
+            insCmd.Parameters.AddWithValue("@msg_id", messageId);
+            insCmd.Parameters.AddWithValue("@occurred_at", occurredAt);
+            insCmd.Parameters.AddWithValue("@observed_at", now);
+            insCmd.Parameters.AddWithValue("@payload_json", PayloadBuilder.BuildEdited(accountId!, peerId!, oldText!, newText, isOut));
+            insCmd.Parameters.AddWithValue("@created_at", now);
+            insCmd.ExecuteNonQuery();
+        }
+
+        using var delCmd = conn.CreateCommand();
+        delCmd.Transaction = tx;
+        delCmd.CommandText = "DELETE FROM pending_edits WHERE chat_id = @chat_id AND message_id = @message_id;";
+        delCmd.Parameters.AddWithValue("@chat_id", chatId);
+        delCmd.Parameters.AddWithValue("@message_id", messageId);
+        delCmd.ExecuteNonQuery();
     }
 
     private static CachedMessage ReadRow(SqliteDataReader reader)

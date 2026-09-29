@@ -43,11 +43,9 @@ public static class CaptureHandlerRegistration
         services.AddSingleton(sp =>
         {
             var config = sp.GetService<IConfiguration>();
-            int pairingTimeout = 60;
-            if (config != null && int.TryParse(config["Capture:EditPairingTimeoutSeconds"], out var t) && t > 0)
-            {
-                pairingTimeout = t;
-            }
+            int pairingTimeout = CaptureCacheRegistration.ReadPositiveInt(
+                config?["Capture:EditPairingTimeoutSeconds"],
+                CaptureCacheRegistration.DefaultEditPairingTimeoutSeconds);
 
             return new CaptureUpdateHandler(
                 sp.GetRequiredService<MessageCache>(),

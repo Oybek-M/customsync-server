@@ -40,6 +40,6 @@ public static class CaptureCacheRegistration
         return services;
     }
 
-    private static int ReadPositiveInt(string? raw, int fallback)
+    internal static int ReadPositiveInt(string? raw, int fallback)
         => int.TryParse(raw, out var value) && value > 0 ? value : fallback;
 }

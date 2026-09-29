@@ -29,6 +29,7 @@ public class CaptureUpdateHandler
     private long _unpairedEditCount;
     private long _errorCount;
     private readonly int _editPairingTimeoutSeconds;
+    private long _lastSweepAt = long.MinValue;
 
     public string? AccountId => _accountId;
     public long UncachedDeleteCount => Interlocked.Read(ref _uncachedDeleteCount);
@@ -113,13 +114,7 @@ public class CaptureUpdateHandler
                 var root = doc.RootElement;
                 updateType = root.TryGetProperty("@type", out var t) ? t.GetString() : null;
 
-                // Sweep pending edits on each handled update using TimeProvider
-                long sweepNow = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
-                int swept = _cache.SweepPendingEdits(sweepNow, _editPairingTimeoutSeconds);
-                if (swept > 0)
-                {
-                    Interlocked.Add(ref _unpairedEditCount, swept);
-                }
+                SweepPendingEditsThrottled();
 
                 if (updateType == "updateOption")
                 {
@@ -440,6 +435,32 @@ public class CaptureUpdateHandler
             Interlocked.Increment(ref _errorCount);
             _logger?.LogError("getMessage for edit baseline failed ({ErrorType}) chat {ChatId} message {MessageId}",
                 ex.GetType().Name, chatId, tdlibId);
+        }
+    }
+
+    /// <summary>
+    /// Juftsiz tahrirlarni chiqaradi — soniyasiga ko'pi bilan bir marta
+    /// (muddat soniyalarda o'lchanadi). Sweep xatosi joriy update'ni
+    /// to'xtatmaydi: aks holda DB'dagi bitta buzuq pending qator har
+    /// kelgan o'chirish/tahrirni yutib yuborardi.
+    /// </summary>
+    private void SweepPendingEditsThrottled()
+    {
+        long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        if (now == _lastSweepAt)
+            return;
+        _lastSweepAt = now;
+
+        try
+        {
+            int swept = _cache.SweepPendingEdits(now, _editPairingTimeoutSeconds);
+            if (swept > 0)
+                Interlocked.Add(ref _unpairedEditCount, swept);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _errorCount);
+            _logger?.LogError("Sweeping unpaired edits failed ({ErrorType})", ex.GetType().Name);
         }
     }
 
