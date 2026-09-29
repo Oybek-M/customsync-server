@@ -5,18 +5,18 @@ Oxirgi yangilanish: **2026-09-29**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **288 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **306 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-09-29 kechqurun, PC `DESKTOP-5CAUS66`)
+### ▶️ Qayerda to'xtadik (2026-09-30 tun, PC `DESKTOP-5CAUS66`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 4c — `edited.occurred_at = edit_date`** (`3b9b416` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 4c tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6a — sync klienti: shifrlash + outbox push**. Prompt tayyor: `docs/05-task6a-prompt.md` (2026-09-29) — **hali hech bir agentga BERILMAGAN** |
-| Undan keyin | **Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari (prompt 6a qabul qilingach yoziladi; oldin tdesktop javobi kerak — pastdagi savollar), keyin Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a — sync klienti: shifrlash + outbox push** (18 test, jami 306). |
+| **Keyingi bajariladigan** | **Plan 05 Task 6b — pull + `setting` yozuvlari → scope snapshot'lari** |
+| Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | ❓ tdesktop sessiyasidan kutilayotgan javob | (1) scope `setting` yozuvlari akkauntga bog'liqmi yoki global — qaysi `account_id` bilan yoziladi va bitta akkauntli capture qaysilarini qabul qilishi kerak (6b uchun); (2) egasi VPS xizmatiga master kalitni qanday oladi (hex eksport / tiklash kodi / parol o'rami) — deploy'dan oldin |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6–10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6b–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 
@@ -253,7 +253,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c tekshirildi; keyingi: 6)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c + 6a tekshirildi; keyingi: 6b)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -264,6 +264,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 5 — Capture scope: chatlar saralanishi (cache, delete, edit) | `640066e` + tekshiruv tuzatishlari | 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced snapshot > DefaultEnabled); tdesktop zanjiriga mos 3 qaror (ShouldCache, ShouldAntiDelete, ShouldAntiEdit); ScopeSettingsSnapshot va ISyncedScopeSettingsSource choki; CapturePreflight decimal int64 va kesishtirmaslik tekshiruvi; privacy loglar (hech qanday peer_id loglanmaydi); 11 test (jami 247) | 10 ta ataylab buzish (a–j) ushlandi; DI da factory lambda orqali konstruktor noaniqligi bartaraf etildi; tdesktop background-edit nomuvofiqligi qayd etildi (server ShouldAntiEdit ga qaraydi) |
 | 4b — Activity capture (status, name, username) | `457b92f` + tekshiruv tuzatishlari | Activity kuzatuvi (`updateUser`, `updateUserStatus`); tdesktop bilan baytma-bayt moslik (status holatlari, `langFullName`, username, discriminator SHA256[0:8]); 60s offline shovqin filtri; `activity_latest` kesh jadvali; 4 qatlamli `IActivityScope` va preflight Check 6; 12 yangi test (jami 261 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; discriminator CustomSync.Capture ichida tdesktop bilan 100% mos qilindi; boshlang'ich kuzatuvda bo'sh qiymatlar tashlanadi |
 | 4c — `edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi | `3b9b416` + tekshiruv tuzatishlari | `pending_edits` SQLite jadvali (chat_id, message_id juftligi), `updateMessageContent` va `updateMessageEdited` ni ikki tomonlama juftlash (content-first yoki edit-first), oraliq versiyalarni saqlash, timeout zaxirasi (`msg_date`), `SweepPendingEdits`, `PeriodicCachePruner` va DI konfiguratsiyasi (`Capture:EditPairingTimeoutSeconds`, default 60s); 16+6 test (jami 288) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'chirishda kutayotgan tahrir yo'qolardi, sweep xatosi update'ni yutardi — tuzatildi |
+| 6a — Capture sync client: shifrlash va outbox push | bu commit | HKDF kalit derivatsiyasi (content, peer, account), AES-256-GCM shifrlash (12-byte random nonce, 16-byte tag, payload = ciphertext ‖ tag), outbox row -> SyncRecord konvertatsiyasi (account_hash faqat activity uchun "", peer_hash barcha turlar uchun account-less), §0.14 pre-validation (poisoned rows karantini), CLI buyruqlari (--set-key, --enroll, 0600 ruxsat tekshiruvi), in-memory access token va faylga avval yoziluvchi refresh token rotatsiyasi, TimeProvider davriy push sikli (30s interval, 500 qator/5MB batch, 400 backoff, 5xx/tarmoq xatosida 1s..300s eksponentsial backoff), SQLite schema user_version = 2 (retry_count, next_retry_at, last_error); 18 test (jami 306) | 11 ta ataylab buzish (a–k) to'liq tasdiqlandi; o'chirish faqat primary key id bo'yicha amalga oshiriladi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -825,6 +826,13 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 32. **Capture scope: 3 ta mustaqil qaror va tdesktop zanjiri** — Plandagi bitta `ShouldCapture` o'rniga tdesktop kabi uchta mustaqil qaror (`ShouldCache`, `ShouldAntiDelete`, `ShouldAntiEdit`) va 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced Snapshot > DefaultEnabled) joriy qilindi. Sinxronlangan sozlamalar uchun `ISyncedScopeSettingsSource` choki qoldirildi (Task 6 gacha null qaytaradi). Preflight Block/Allow ro'yxatlaridagi har bir element decimal int64 ekani va ular kesishmasligini tekshiradi (xatoliklarda peer_id chiqmaydi).
 33. **Activity capture va shovqin filtri (Plan 05 Task 4b)** — Foydalanuvchi faolligi (`status`, `name`, `username`) tdesktop bilan baytma-bayt mos kodlandi. Status holatlari (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`; `empty` hech qachon yozilmaydi — `b6d3e22`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`) tdesktop'ga to'liq moslandi. 60 soniyalik offline bump shovqin filtri (`|oldAge - newAge| < 60`) SQLite'dagi `activity_latest` jadvali bilan atomar tranzaksiyada birlashtirildi. Xavfsizlik uchun alohida `IActivityScope` (Server Exclude > Server Include > Synced Snapshot > TrackAllContacts) va Preflight Check 6 kiritildi. Maxfiy ma'lumotlar (status, ism, username, peer_id) hech qachon loglarga yozilmaydi.
 34. **`edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi va `pending_edits` juftlash mexanizmi (Plan 05 Task 4c)** — Spec §3.1/§3.2 talabiga ko'ra `edited` yozuvlarining `occurred_at` vaqti tahrir qilingan vaqt (`edit_date`) bo'lishi shart. TDLib tahrirni ikki alohida yangilanishga (`updateMessageContent` va `updateMessageEdited`) ajratgani sababli ular `pending_edits` SQLite jadvalida `(chat_id, message_id)` bo'yicha bog'lanadi. Qaysi biri birinchi kelishidan qat'i nazar (content-then-edited yoki edited-then-content) juftlanib `capture_outbox` ga chiqariladi. Oraliq tahrirlar yo'qolmasligi uchun birinchi tahrir zaxira vaqt bilan darhol chiqariladi. Agar `updateMessageEdited` kelmasa, sozlanuvchi timeout (`Capture:EditPairingTimeoutSeconds`, standart 60s) asosida `SweepPendingEdits` orqali zaxira `occurred_at = msg_date` bilan chiqariladi. Tozalash har yangilanishda (soniyasiga ko'pi bilan bir marta, xatosi update'ni to'xtatmaydi) va `PeriodicCachePruner` da (ishga tushishda va davriy) `TimeProvider` orqali amalga oshiriladi. Xabar o'chirilganda kutayotgan tahrir avval chiqariladi.
+35. **Capture sync mijozi va outbox push arxitekturasi (Plan 05 Task 6a)** —
+    - **Yangi konfiguratsiya kalitlari**: `Capture:Sync:Enabled` (bool, default false, bo'sh bo'lganda false, faqat aniq `true` qiymatda ishlaydi), `Capture:Sync:ServerUrl` (string, preflight da `https://` yoki `http://localhost|127.0.0.1` ekani tekshiriladi), `Capture:Sync:MasterKeyPath` (string, default `sync.key`), `Capture:Sync:StatePath` (string, default `sync.state`), `Capture:Sync:IntervalSeconds` (int, default 30s), `Capture:Sync:PushBatchSize` (int, default 500 ta qator yoki taxminan 5 MB).
+    - **Kalitlar va shifrlash**: 32-bayt master kalitdan HKDF-SHA256 orqali 3 ta subkey olinadi (`customsync-content-v1`, `customsync-peer-v1`, `customsync-account-v1`). AES-256-GCM har bir yozuv uchun yangi 12-bayt tasodifiy nonce ishlatadi, AAD yo'q, 16-bayt autentifikatsiya tegi. Tarmoqqa `ciphertext ‖ tag` (birlashtirilgan) Base64 qilib uzatiladi.
+    - **Outbox -> SyncRecord va §0.14 validatsiyasi**: `account_hash` = HMAC-SHA256(account_key, account_id)[0..16] hex, faqat `activity` uchun `""` (bo'sh satr). `peer_hash` = HMAC-SHA256(peer_key, peer_id)[0..16] hex barcha turlar uchun (account-less formula). §0.14 talabiga ko'ra `payload_json` ichidagi `account_id` va `peer_id` outbox qatoridagi bilan solishtiriladi; zaharlangan qatorlar (poisoned rows) serverga hech qachon yuborilmaydi, bazada qoldiriladi va karantin qilinadi.
+    - **CLI va fayl xavfsizligi**: `--set-key` (interaktiv 64 hex belgili kiritish, ekranga chiqarmasdan, atomar yozish), `--enroll` (interaktiv enrollment code va device name, `POST /api/v1/devices/enroll` chaqirib natijani atomar yozish). Linux/macOS tizimlarida fayl ruxsatnomasi `0600` ekani tekshiriladi (boshqacha bo'lsa xato beradi; Windows'da esa hujjatlashtirilgan sabab bilan o'tkazib yuboriladi).
+    - **Token aylanishi va krash oynasi (Crash Window)**: Access token faqat xotirada saqlanadi, muddati tugashiga 60s qolganda yoki 401 qaytganda yangilanadi. Yangilangan `refresh_token` yangi access token ishlatilishidan **AVVAL** diskka (`StatePath`) atomar yozilishi shart. Agar server token'ni yangilasa, lekin yangi token diskka yozilishidan oldin xizmat to'xtab qolsa/krash bo'lsa (refresh-token rotation crash window), serverdagi eski refresh token bekor qilingan bo'ladi va keyingi refresh 401 qaytaradi. Bunday holatda sync mijozi xavfsiz to'xtaydi, outbox qatorlari bazada saqlanib qoladi va egasi xizmatni `--enroll` orqali qayta ro'yxatdan o'tkazishi kerak. Refresh vaqtidagi 401 xatoligi outbox'ni o'chirmaydi.
+    - **Outbox push va qayta ishlash**: Push natijasida `created`, `duplicate`, `superseded` bo'lgan qatorlar bazadan **faqat birlamchi kalit `id` bo'yicha** o'chiriladi (unique key bo'yicha emas — parvoz vaqtidagi yangi versiyalar o'chib ketmasligi uchun). `error` yoki javobda tushib qolgan qatorlar uchun `retry_count` oshirilib, `next_retry_at` (1s..300s eksponentsial backoff) belgilanadi. `400 batch_too_large` xatoligida batch hajmi ikkiga bo'linadi (min 1). 5xx yoki tarmoq xatolarida butun sikl kechiktiriladi (1s..300s).
 
 ---
 

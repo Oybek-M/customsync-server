@@ -66,9 +66,13 @@ public class MessageCache
                     observed_at INTEGER NOT NULL,
                     payload_json TEXT NOT NULL,
                     created_at INTEGER NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    next_retry_at INTEGER,
+                    last_error TEXT,
                     UNIQUE (kind, account_id, peer_id, msg_id, occurred_at)
                 );
                 CREATE INDEX IF NOT EXISTS idx_capture_outbox_created_at ON capture_outbox (created_at);
+                CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);
                 CREATE TABLE IF NOT EXISTS activity_latest (
                     peer_id TEXT NOT NULL,
                     field TEXT NOT NULL,
@@ -99,8 +103,20 @@ public class MessageCache
             if (version == 0)
             {
                 using var setVersionCmd = conn.CreateCommand();
-                setVersionCmd.CommandText = "PRAGMA user_version = 1;";
+                setVersionCmd.CommandText = "PRAGMA user_version = 2;";
                 setVersionCmd.ExecuteNonQuery();
+            }
+            else if (version == 1)
+            {
+                using var upgradeCmd = conn.CreateCommand();
+                upgradeCmd.CommandText = @"
+                    ALTER TABLE capture_outbox ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE capture_outbox ADD COLUMN next_retry_at INTEGER;
+                    ALTER TABLE capture_outbox ADD COLUMN last_error TEXT;
+                    CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);
+                    PRAGMA user_version = 2;
+                ";
+                upgradeCmd.ExecuteNonQuery();
             }
         }
         catch (SqliteException ex)
@@ -700,14 +716,14 @@ public class MessageCache
             if (string.IsNullOrEmpty(kind))
             {
                 cmd.CommandText = @"
-                    SELECT id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at
+                    SELECT id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at, retry_count, next_retry_at, last_error
                     FROM capture_outbox
                     ORDER BY id ASC;";
             }
             else
             {
                 cmd.CommandText = @"
-                    SELECT id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at
+                    SELECT id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at, retry_count, next_retry_at, last_error
                     FROM capture_outbox
                     WHERE kind = @kind
                     ORDER BY id ASC;";
@@ -727,7 +743,10 @@ public class MessageCache
                     OccurredAt: reader.GetInt64(5),
                     ObservedAt: reader.GetInt64(6),
                     PayloadJson: reader.GetString(7),
-                    CreatedAt: reader.GetInt64(8)));
+                    CreatedAt: reader.GetInt64(8),
+                    RetryCount: reader.FieldCount > 9 && !reader.IsDBNull(9) ? reader.GetInt32(9) : 0,
+                    NextRetryAt: reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetInt64(10) : null,
+                    LastError: reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetString(11) : null));
             }
 
             return list;
@@ -739,6 +758,99 @@ public class MessageCache
         catch (Exception ex) when (ex is not MessageCacheException)
         {
             throw new MessageCacheException("Failed to get outbox rows.", ex);
+        }
+    }
+
+    public virtual IReadOnlyList<OutboxRow> GetEligibleOutboxRows(int limit, long now)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at, retry_count, next_retry_at, last_error
+                FROM capture_outbox
+                WHERE next_retry_at IS NULL OR next_retry_at <= @now
+                ORDER BY occurred_at ASC, id ASC
+                LIMIT @limit;";
+            cmd.Parameters.AddWithValue("@now", now);
+            cmd.Parameters.AddWithValue("@limit", limit);
+
+            var list = new List<OutboxRow>();
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                list.Add(new OutboxRow(
+                    Id: reader.GetInt64(0),
+                    Kind: reader.GetString(1),
+                    AccountId: reader.GetString(2),
+                    PeerId: reader.GetString(3),
+                    MsgId: reader.GetInt64(4),
+                    OccurredAt: reader.GetInt64(5),
+                    ObservedAt: reader.GetInt64(6),
+                    PayloadJson: reader.GetString(7),
+                    CreatedAt: reader.GetInt64(8),
+                    RetryCount: reader.FieldCount > 9 && !reader.IsDBNull(9) ? reader.GetInt32(9) : 0,
+                    NextRetryAt: reader.FieldCount > 10 && !reader.IsDBNull(10) ? reader.GetInt64(10) : null,
+                    LastError: reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetString(11) : null));
+            }
+
+            return list;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to get eligible outbox rows.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to get eligible outbox rows.", ex);
+        }
+    }
+
+    public virtual bool DeleteOutboxRowById(long id)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM capture_outbox WHERE id = @id;";
+            cmd.Parameters.AddWithValue("@id", id);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to delete outbox row by id.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to delete outbox row by id.", ex);
+        }
+    }
+
+    public virtual void MarkOutboxRowError(long id, string errorMessage, long nextRetryAt)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE capture_outbox
+                SET retry_count = retry_count + 1,
+                    last_error = @last_error,
+                    next_retry_at = @next_retry_at
+                WHERE id = @id;";
+            cmd.Parameters.AddWithValue("@id", id);
+            cmd.Parameters.AddWithValue("@last_error", errorMessage);
+            cmd.Parameters.AddWithValue("@next_retry_at", nextRetryAt);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to mark outbox row error.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to mark outbox row error.", ex);
         }
     }
 

@@ -9,7 +9,10 @@ public record OutboxRow(
     long OccurredAt,
     long ObservedAt,
     string PayloadJson,
-    long CreatedAt
+    long CreatedAt,
+    int RetryCount = 0,
+    long? NextRetryAt = null,
+    string? LastError = null
 );
 
 public record DeleteResult(int DeletedCount, int UncachedCount);

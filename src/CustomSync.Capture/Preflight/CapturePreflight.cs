@@ -182,6 +182,39 @@ public static class CapturePreflight
             errors.Add("Capture:Activity:TrackAllContacts must be 'true' or 'false'.");
         }
 
+        // 7. Sync configuration check
+        var syncEnabledStr = config["Capture:Sync:Enabled"];
+        if (!string.IsNullOrEmpty(syncEnabledStr))
+        {
+            if (!bool.TryParse(syncEnabledStr, out var syncEnabled))
+            {
+                errors.Add("Capture:Sync:Enabled must be 'true' or 'false'.");
+            }
+            else if (syncEnabled)
+            {
+                var serverUrl = config["Capture:Sync:ServerUrl"];
+                if (string.IsNullOrWhiteSpace(serverUrl))
+                {
+                    errors.Add("Capture:Sync:ServerUrl must be configured when sync is enabled.");
+                }
+                else if (!Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri))
+                {
+                    errors.Add("Capture:Sync:ServerUrl must be an absolute URL.");
+                }
+                else if (uri.Scheme == Uri.UriSchemeHttp)
+                {
+                    if (uri.Host != "localhost" && uri.Host != "127.0.0.1")
+                    {
+                        errors.Add("Capture:Sync:ServerUrl must use HTTPS, except for localhost or 127.0.0.1.");
+                    }
+                }
+                else if (uri.Scheme != Uri.UriSchemeHttps)
+                {
+                    errors.Add("Capture:Sync:ServerUrl must use HTTPS.");
+                }
+            }
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
     }
 

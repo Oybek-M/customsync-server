@@ -34,10 +34,12 @@ public class Worker : BackgroundService
         {
             _ = CustomSync.Capture.Capture.CaptureCacheStartup.Start(
                 _services, _services.GetService<ILogger<Worker>>(), stoppingToken);
+            _ = CustomSync.Capture.Sync.CaptureSyncStartup.Start(
+                _services, _services.GetService<ILogger<Worker>>(), stoppingToken);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Message cache could not be started.");
+            _logger.LogError(ex, "Message cache or sync client could not be started.");
             Fail();
             return;
         }
