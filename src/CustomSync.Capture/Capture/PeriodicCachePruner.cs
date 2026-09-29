@@ -9,19 +9,25 @@ public class PeriodicCachePruner
     private readonly TimeSpan _interval;
     private readonly ILogger? _logger;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly TimeProvider _timeProvider;
+    private readonly int _editPairingTimeoutSeconds;
 
     public PeriodicCachePruner(
         MessageCache cache,
         int retentionDays,
         TimeSpan interval,
         ILogger? logger = null,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null,
+        TimeProvider? timeProvider = null,
+        int editPairingTimeoutSeconds = 60)
     {
         _cache = cache;
         _retentionDays = retentionDays;
         _interval = interval;
         _logger = logger;
         _delay = delay ?? Task.Delay;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _editPairingTimeoutSeconds = editPairingTimeoutSeconds > 0 ? editPairingTimeoutSeconds : 60;
     }
 
     public int PruneOnce()
@@ -30,6 +36,8 @@ public class PeriodicCachePruner
         {
             var count = _cache.Prune(_retentionDays);
             _logger?.LogInformation("Pruned {Count} expired messages from cache (retention: {RetentionDays} days).", count, _retentionDays);
+            long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            _cache.SweepPendingEdits(now, _editPairingTimeoutSeconds);
             return count;
         }
         catch (Exception ex)

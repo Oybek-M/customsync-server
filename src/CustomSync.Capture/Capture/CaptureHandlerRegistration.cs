@@ -40,12 +40,23 @@ public static class CaptureHandlerRegistration
                 : new ActivityScopeEvaluator(null, null, false, settingsSource);
         });
 
-        services.AddSingleton(sp => new CaptureUpdateHandler(
-            sp.GetRequiredService<MessageCache>(),
-            sp.GetRequiredService<ICaptureScope>(),
-            sp.GetRequiredService<IActivityScope>(),
-            sp.GetService<TimeProvider>(),
-            sp.GetService<ILogger<CaptureUpdateHandler>>()));
+        services.AddSingleton(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            int pairingTimeout = 60;
+            if (config != null && int.TryParse(config["Capture:EditPairingTimeoutSeconds"], out var t) && t > 0)
+            {
+                pairingTimeout = t;
+            }
+
+            return new CaptureUpdateHandler(
+                sp.GetRequiredService<MessageCache>(),
+                sp.GetRequiredService<ICaptureScope>(),
+                sp.GetRequiredService<IActivityScope>(),
+                sp.GetService<TimeProvider>(),
+                sp.GetService<ILogger<CaptureUpdateHandler>>(),
+                editPairingTimeoutSeconds: pairingTimeout);
+        });
 
         services.Remove(clientDescriptor);
         services.AddSingleton<ITdClient>(sp =>

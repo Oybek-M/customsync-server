@@ -1,21 +1,21 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-27**
+Oxirgi yangilanish: **2026-09-29**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **266 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **282 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-09-27 kechqurun, PC `DESKTOP-5CAUS66`)
+### ▶️ Qayerda to'xtadik (2026-09-29 kechqurun, PC `DESKTOP-5CAUS66`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 4b — activity** (`457b92f` + tuzatishlar `a764da4`, `b6d3e22`). Tekshiruv bo'limi: "Plan 05 Task 4b tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 4c — `edited.occurred_at = edit_date`**. Prompt tayyor: `docs/05-task4c-prompt.md` — **hali hech bir agentga BERILMAGAN**. Egasi delegate'ga (Gemini / Claude) beradi, hisobot kelgach mustaqil tekshiruv |
-| Undan keyin | Task 6 (sync klienti; scope snapshot'larini `setting` yozuvlaridan to'ldirish — §2 dagi 🔴 eslatmani o'qing), keyin 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, **4c ⏳**, 6–10 ⏸ |
+| **Oxirgi bajarilgan** | **Plan 05 Task 4c — `edited.occurred_at = edit_date`** (`pending_edits` jadvali, ikki tomonlama juftlash, timeout fallback, 16 yangi test). Tekshiruv bo'limi: "Plan 05 Task 4c" |
+| **Keyingi bajariladigan** | **Plan 05 Task 6 — sync klienti (synced scope settings)**. Scope snapshot'larini `setting` yozuvlaridan to'ldirish — §2 dagi 🔴 eslatmani o'qing |
+| Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 
@@ -249,7 +249,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b tekshirildi; keyingi: 4c)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c tekshirildi; keyingi: 6)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -259,6 +259,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 4a — O'chirilgan va tahrirlangan xabarlarni saqlash (outbox) | `7d9b98f` + tekshiruv tuzatishlari | `capture_outbox` jadvali (SQLite, durativ outbox), `TdIdMapper` (peer << 48, msg_id >> 20), `PayloadBuilder` (BuildDeleted/BuildEdited UTF-8 mosligi, non-ASCII/emojilar saqlanadi), `NoneCaptureScope` (fail-closed placeholder), atomar delete+outbox tranzaksiyasi (`DeleteMessagesAndRecordOutbox`), ketma-ket qayta ishlash navbati va early queue; `AddCaptureHandlers` ishlab chiqarish simi; 17+8 test (jami 236) | 9 ta buzish (a–i) + 14 ta mustaqil mutatsiya; 6 ta nuqson tuzatildi |
 | 5 — Capture scope: chatlar saralanishi (cache, delete, edit) | `640066e` + tekshiruv tuzatishlari | 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced snapshot > DefaultEnabled); tdesktop zanjiriga mos 3 qaror (ShouldCache, ShouldAntiDelete, ShouldAntiEdit); ScopeSettingsSnapshot va ISyncedScopeSettingsSource choki; CapturePreflight decimal int64 va kesishtirmaslik tekshiruvi; privacy loglar (hech qanday peer_id loglanmaydi); 11 test (jami 247) | 10 ta ataylab buzish (a–j) ushlandi; DI da factory lambda orqali konstruktor noaniqligi bartaraf etildi; tdesktop background-edit nomuvofiqligi qayd etildi (server ShouldAntiEdit ga qaraydi) |
 | 4b — Activity capture (status, name, username) | `457b92f` + tekshiruv tuzatishlari | Activity kuzatuvi (`updateUser`, `updateUserStatus`); tdesktop bilan baytma-bayt moslik (status holatlari, `langFullName`, username, discriminator SHA256[0:8]); 60s offline shovqin filtri; `activity_latest` kesh jadvali; 4 qatlamli `IActivityScope` va preflight Check 6; 12 yangi test (jami 261 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; discriminator CustomSync.Capture ichida tdesktop bilan 100% mos qilindi; boshlang'ich kuzatuvda bo'sh qiymatlar tashlanadi |
+| 4c — `edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi | `HEAD` | `pending_edits` SQLite jadvali (chat_id, message_id juftligi), `updateMessageContent` va `updateMessageEdited` ni ikki tomonlama juftlash (content-first yoki edit-first), oraliq versiyalarni saqlash, timeout zaxirasi (`msg_date`), `SweepPendingEdits`, `PeriodicCachePruner` va DI konfiguratsiyasi (`Capture:EditPairingTimeoutSeconds`, default 60s); 16 yangi test (jami 282 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; xabarlar matni hech qachon loglanmaydi; atomar tranzaksiya kesh va pending/outbox holatlarini to'liq himoyalaydi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -439,19 +440,21 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 4c (edit_date), keyin Task 6
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 6 (sync klienti: synced scope settings)
 
-Task 4b tugadi va tekshirildi (265 test + `long_ago` tuzatishi = 266; tekshiruv bo'limi yuqorida).
-Qilingan ishlar (Task 4b):
-- `ActivityMapper`: status kodlash (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`; `empty` hech qachon yozilmaydi — `b6d3e22`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`).
-- 60 soniyalik last-seen shovqin filtri (`|oldAge - newAge| < 60`) tdesktop `custom_activity_history.cpp` mantiqiga to'liq moslandi.
-- `MessageCache`: `activity_latest` jadvali qo'shildi; oxirgi qiymatni tekshirish, shovqin filtrini qo'llash, keshni yangilash va outbox'ga yozish yagona atomar SQLite tranzaksiyasida bajariladi.
-- `IActivityScope` va `ActivityScopeEvaluator`: 4 qatlamli mustaqil activity scope (Server Exclude > Server Include > Synced snapshot > TrackAllContacts && isContact).
-- `CapturePreflight`: Check 6 faollashtirildi (kanonik musbat peer_id, kesishmaslik, bool tekshiruvi, maxfiy ma'lumotlar loglanmaydi).
-- `CaptureUpdateHandler`: `updateUser` va `updateUserStatus` hodisalarini qabul qilish, `_contactMap` ni yangilab borish va activity outbox yozuvlarini chiqarish.
-- 12 ta unit/integratsiya testi, 10 ta ataylab buzish (a–j) to'liq tasdiqlandi.
+Task 4c tugadi (266 test + 16 ta yangi capture edit_date testi = 282).
+Qilingan ishlar (Task 4c):
+- `MessageCache`: `pending_edits` jadvali qo'shildi (`chat_id`, `message_id`, `peer_id`, `account_id`, `old_text`, `new_text`, `is_out`, `msg_date`, `edit_date`, `observed_at`).
+- `updateMessageContent` va `updateMessageEdited` ni ikki tomonlama juftlash:
+  - Content avval kelsa: `pending_edits` ga yoziladi va `edit_date` kutiladi; agar avvalgi tahrir juftlanmagan bo'lsa, oraliq versiya zaxira `occurred_at` bilan outbox'ga chiqarilib, yangisi kutishga qo'yiladi.
+  - Edited avval kelsa: `edit_date` saqlab turiladi va keyingi `updateMessageContent` kelishi bilan darhol juftlanib chiqariladi.
+  - `ShouldAntiEdit = false` bo'lganda kesh yangilanadi, lekin `pending_edits` ga qator qo'shilmaydi va outbox'ga yozilmaydi.
+- `SweepPendingEdits(now, timeoutSeconds)`: yetim qolgan (timeout o'tgan) content qatorlarini zaxira `occurred_at = msg_date` (yoki `observed_at`) bilan chiqaradi, yolg'iz yetim `edit_date` qatorlarini esa jimgina o'chiradi.
+- `CaptureUpdateHandler`: har bir update qabulida va `PeriodicCachePruner` davriy tozalashida `TimeProvider` orqali sweep chaqiriladi; `UnpairedEditCount` metrikasi kiritildi.
+- `Capture:EditPairingTimeoutSeconds` (sukut bo'yicha 60 soniya) sozlamasi va DI registratsiyasi ulandi.
+- 16 ta unit/integratsiya testi (`CaptureEditDateTests.cs`), 10 ta ataylab buzish (a–j) to'liq tasdiqlandi.
 
-### Plan 05 navbati (2026-09-27 kelishildi)
+### Plan 05 navbati (2026-09-29 holati)
 
 1. **Task 5 — scope.** ✅ YAKUNLANDI va tekshirildi (`640066e` + tuzatish, 249 test).
 2. **Task 4b — activity.** ✅ YAKUNLANDI va tekshirildi (`457b92f` + tuzatish,
@@ -472,17 +475,9 @@ Qilingan ishlar (Task 4b):
    tuzatildi (`b6d3e22`, 266 test).
    Qamrab olinmagan: `photo` maydoni (§3.2.2: story/rasm signali
    `online:<vaqt>`, `photo` belgisi bilan) — alohida kichik vazifa.
-3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** Prompt tayyor:
-   `docs/05-task4c-prompt.md` (2026-09-27) — `updateMessageContent` +
-   `updateMessageEdited` SQLite'da saqlanadigan pending-edit bilan juftlanadi,
-   juftsiz qolsa timeout'dan keyin `msg_date` zaxirasi. Egasi qarori:
-   oraliq tahrir versiyalari ham saqlanadi. Taklif:
-   `docs/proposal-edited-edit-date.md`. **Blok ochildi (2026-09-27):**
-   protokol tdesktop tomonida qabul qilindi (spec §3.1/§3.2, CHANGELOG,
-   `test-vectors.json` da `edited` uchun ikki `edit_date` vektori).
-   customsync-server testlari yangi vektorlar bilan 236/236. Capture
-   tomoni: `updateMessageContent` + `updateMessageEdited` juftlash.
-   Zaxira: `edit_date` yo'q bo'lsa `msg_date` (tdesktop kodi shunday).
+3. **Task 4c — `edited` uchun `occurred_at = edit_date`.** ✅ YAKUNLANDI (282 test).
+   `pending_edits` jadvali, ikki tomonlama juftlash, timeout fallback,
+   10 ta buzish (a–j) sinovdan o'tdi.
 4. **Task 6 — Synced scope settings.**
    Scope `setting` kalitlari ham belgilandi (spec §3.2.1:
    `scope.whitelist`, `scope.blacklist`, `scope.wl_categories`,
@@ -490,7 +485,7 @@ Qilingan ishlar (Task 4b):
    `scope.antiedit_global`, `scope.antidelete_per_peer`,
    `scope.antiedit_per_peer`; `value` doim satr) — Task 6 da scope
    snapshot shulardan to'ldiriladi.
-4. Task 6 (sync klienti) va keyingilari.
+5. Task 6 (sync klienti) va keyingilari.
 
 **tdesktop sessiyasiga uzatiladigan ishlar** (bu sessiya u yerga
 yozmaydi):
@@ -793,6 +788,7 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 31. **`activity` alohida Task 4b ga ajratilishi** — `updateUserStatus` va `updateUser` hodisalarini qayta ishlash, status kodlash hamda tdesktop shovqin filtrini aniq ko'chirish alohida topshiriq sifatida ajratildi.
 32. **Capture scope: 3 ta mustaqil qaror va tdesktop zanjiri** — Plandagi bitta `ShouldCapture` o'rniga tdesktop kabi uchta mustaqil qaror (`ShouldCache`, `ShouldAntiDelete`, `ShouldAntiEdit`) va 4 qatlamli iyerarxiya (Server Block > Server Allow > Synced Snapshot > DefaultEnabled) joriy qilindi. Sinxronlangan sozlamalar uchun `ISyncedScopeSettingsSource` choki qoldirildi (Task 6 gacha null qaytaradi). Preflight Block/Allow ro'yxatlaridagi har bir element decimal int64 ekani va ular kesishmasligini tekshiradi (xatoliklarda peer_id chiqmaydi).
 33. **Activity capture va shovqin filtri (Plan 05 Task 4b)** — Foydalanuvchi faolligi (`status`, `name`, `username`) tdesktop bilan baytma-bayt mos kodlandi. Status holatlari (`online:<expires>`, `offline:<was_online>`, `recently`, `within_week`, `within_month`, `long_ago`; `empty` hech qachon yozilmaydi — `b6d3e22`), ism (`langFullName`), username (`active_usernames[0]` yoki `editable_username`) va diskriminator (`SHA256(field)[0:8] & 0x7FFFFFFFFFFFFFFF`) tdesktop'ga to'liq moslandi. 60 soniyalik offline bump shovqin filtri (`|oldAge - newAge| < 60`) SQLite'dagi `activity_latest` jadvali bilan atomar tranzaksiyada birlashtirildi. Xavfsizlik uchun alohida `IActivityScope` (Server Exclude > Server Include > Synced Snapshot > TrackAllContacts) va Preflight Check 6 kiritildi. Maxfiy ma'lumotlar (status, ism, username, peer_id) hech qachon loglarga yozilmaydi.
+34. **`edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi va `pending_edits` juftlash mexanizmi (Plan 05 Task 4c)** — Spec §3.1/§3.2 talabiga ko'ra `edited` yozuvlarining `occurred_at` vaqti tahrir qilingan vaqt (`edit_date`) bo'lishi shart. TDLib tahrirni ikki alohida yangilanishga (`updateMessageContent` va `updateMessageEdited`) ajratgani sababli ular `pending_edits` SQLite jadvalida `(chat_id, message_id)` bo'yicha bog'lanadi. Qaysi biri birinchi kelishidan qat'i nazar (content-then-edited yoki edited-then-content) juftlanib `capture_outbox` ga chiqariladi. Oraliq tahrirlar yo'qolmasligi uchun birinchi tahrir zaxira vaqt bilan darhol chiqariladi. Agar `updateMessageEdited` kelmasa, sozlanuvchi timeout (`Capture:EditPairingTimeoutSeconds`, standart 60s) asosida `SweepPendingEdits` orqali zaxira `occurred_at = msg_date` bilan chiqariladi. Tozalash har yangilanishda va `PeriodicCachePruner` da `TimeProvider` orqali davriy amalga oshiriladi.
 
 ---
 

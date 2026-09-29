@@ -438,6 +438,12 @@ public class CaptureUpdateHandlerTests : IDisposable
         }}";
 
         handler.HandleUpdate(editUpdate);
+        handler.HandleUpdate($@"{{
+            ""@type"": ""updateMessageEdited"",
+            ""chat_id"": {chatId},
+            ""message_id"": {srvMsgId << 20},
+            ""edit_date"": {sendDate}
+        }}");
 
         var rows = cache.GetOutboxRows();
         Assert.Single(rows);
@@ -569,6 +575,12 @@ public class CaptureUpdateHandlerTests : IDisposable
             ""message_id"": {srvMsgId << 20},
             ""new_content"": {{ ""@type"": ""messageText"", ""text"": {{ ""text"": ""Ikkinchi tahrir matni"" }} }}
         }}");
+        transport.EnqueueIncoming($@"{{
+            ""@type"": ""updateMessageEdited"",
+            ""chat_id"": {chatId},
+            ""message_id"": {srvMsgId << 20},
+            ""edit_date"": 1786000000
+        }}");
 
         var rows = await WaitFor(() => cache.GetOutboxRows(), r => r.Count > 0);
         Assert.Single(rows);
@@ -672,6 +684,12 @@ public class CaptureUpdateHandlerTests : IDisposable
                 ""text"": {{ ""text"": ""Tahrir 1"" }}
             }}
         }}");
+        handler.HandleUpdate($@"{{
+            ""@type"": ""updateMessageEdited"",
+            ""chat_id"": {chatId},
+            ""message_id"": {srvMsgId << 20},
+            ""edit_date"": {sendDate}
+        }}");
 
         Assert.Single(cache.GetOutboxRows());
 
@@ -684,6 +702,12 @@ public class CaptureUpdateHandlerTests : IDisposable
                 ""@type"": ""messageText"",
                 ""text"": {{ ""text"": ""Tahrir 2"" }}
             }}
+        }}");
+        handler.HandleUpdate($@"{{
+            ""@type"": ""updateMessageEdited"",
+            ""chat_id"": {chatId},
+            ""message_id"": {srvMsgId << 20},
+            ""edit_date"": {sendDate}
         }}");
 
         // Still exactly one pending row in capture_outbox!

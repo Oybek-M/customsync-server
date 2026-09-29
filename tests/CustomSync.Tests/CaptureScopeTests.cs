@@ -490,6 +490,12 @@ public class CaptureScopeTests
         }}";
 
         handler.HandleUpdate(editJson);
+        handler.HandleUpdate($@"{{
+            ""@type"": ""updateMessageEdited"",
+            ""chat_id"": {chatId},
+            ""message_id"": {tdlibId},
+            ""edit_date"": 1787111300
+        }}");
 
         // Edit row IS emitted
         var editedRows = cache.GetOutboxRows("edited");

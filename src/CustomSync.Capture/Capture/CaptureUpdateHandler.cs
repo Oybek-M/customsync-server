@@ -26,11 +26,14 @@ public class CaptureUpdateHandler
 
     private long _uncachedDeleteCount;
     private long _uncachedEditCount;
+    private long _unpairedEditCount;
     private long _errorCount;
+    private readonly int _editPairingTimeoutSeconds;
 
     public string? AccountId => _accountId;
     public long UncachedDeleteCount => Interlocked.Read(ref _uncachedDeleteCount);
     public long UncachedEditCount => Interlocked.Read(ref _uncachedEditCount);
+    public long UnpairedEditCount => Interlocked.Read(ref _unpairedEditCount);
     public long ErrorCount => Interlocked.Read(ref _errorCount);
 
     public CaptureUpdateHandler(
@@ -38,8 +41,9 @@ public class CaptureUpdateHandler
         ICaptureScope? scope,
         TimeProvider? timeProvider = null,
         ILogger<CaptureUpdateHandler>? logger = null,
-        string? accountId = null)
-        : this(cache, scope, activityScope: null, timeProvider, logger, accountId)
+        string? accountId = null,
+        int editPairingTimeoutSeconds = 60)
+        : this(cache, scope, activityScope: null, timeProvider, logger, accountId, editPairingTimeoutSeconds)
     {
     }
 
@@ -49,7 +53,8 @@ public class CaptureUpdateHandler
         IActivityScope? activityScope,
         TimeProvider? timeProvider = null,
         ILogger<CaptureUpdateHandler>? logger = null,
-        string? accountId = null)
+        string? accountId = null,
+        int editPairingTimeoutSeconds = 60)
     {
         _cache = cache;
         // Scope berilmasa — hech narsa ushlanmaydi (fail-closed). null'ni
@@ -59,6 +64,7 @@ public class CaptureUpdateHandler
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
         _accountId = accountId;
+        _editPairingTimeoutSeconds = editPairingTimeoutSeconds > 0 ? editPairingTimeoutSeconds : 60;
     }
 
     /// <summary>
@@ -106,6 +112,14 @@ public class CaptureUpdateHandler
                 using var doc = JsonDocument.Parse(rawJson);
                 var root = doc.RootElement;
                 updateType = root.TryGetProperty("@type", out var t) ? t.GetString() : null;
+
+                // Sweep pending edits on each handled update using TimeProvider
+                long sweepNow = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+                int swept = _cache.SweepPendingEdits(sweepNow, _editPairingTimeoutSeconds);
+                if (swept > 0)
+                {
+                    Interlocked.Add(ref _unpairedEditCount, swept);
+                }
 
                 if (updateType == "updateOption")
                 {
@@ -177,7 +191,7 @@ public class CaptureUpdateHandler
     }
 
     private static bool IsCapturedType(string? type) =>
-        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent" or "updateUser" or "updateUserStatus";
+        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent" or "updateMessageEdited" or "updateUser" or "updateUserStatus";
 
     // Zaxira yo'l: my_id odatda updateOption bilan keladi, lekin u kelmasa
     // yoki obunadan oldin kelib qolsa, bufer cheksiz o'sadi va hech narsa
@@ -244,6 +258,9 @@ public class CaptureUpdateHandler
                 break;
             case "updateMessageContent":
                 HandleMessageContent(root);
+                break;
+            case "updateMessageEdited":
+                HandleMessageEdited(root);
                 break;
             case "updateUser":
                 HandleUpdateUser(root);
@@ -424,6 +441,34 @@ public class CaptureUpdateHandler
             _logger?.LogError("getMessage for edit baseline failed ({ErrorType}) chat {ChatId} message {MessageId}",
                 ex.GetType().Name, chatId, tdlibId);
         }
+    }
+
+    private void HandleMessageEdited(JsonElement root)
+    {
+        if (!root.TryGetProperty("chat_id", out var chatProp) || !root.TryGetProperty("message_id", out var idProp))
+            return;
+
+        long chatId = chatProp.GetInt64();
+        long tdlibId = idProp.GetInt64();
+
+        var peerId = TdIdMapper.ToPeerId(chatId);
+        if (peerId is null)
+            return;
+
+        var serverMsgId = TdIdMapper.ToServerMessageId(tdlibId);
+        if (serverMsgId is null)
+            return;
+
+        if (!_scope.ShouldCache(peerId))
+            return;
+
+        if (!_scope.ShouldAntiEdit(peerId))
+            return;
+
+        long editDate = root.TryGetProperty("edit_date", out var editProp) ? editProp.GetInt64() : 0;
+        long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+
+        _cache.PairMessageEdited(chatId, peerId, _accountId!, serverMsgId.Value, editDate, now);
     }
 
     private void HandleUpdateUser(JsonElement root)

@@ -14,22 +14,27 @@ public static class CaptureCacheRegistration
     public const string DefaultCachePath = "/var/lib/customsync-capture/message-cache.db";
     public const int DefaultRetentionDays = 30;
     public const int DefaultPruneIntervalHours = 6;
+    public const int DefaultEditPairingTimeoutSeconds = 60;
 
     public static IServiceCollection AddMessageCache(this IServiceCollection services, IConfiguration config)
     {
-        services.AddSingleton(_ => new MessageCache(
-            config["Capture:CacheDatabasePath"] ?? DefaultCachePath));
+        services.AddSingleton(sp => new MessageCache(
+            config["Capture:CacheDatabasePath"] ?? DefaultCachePath,
+            sp.GetService<TimeProvider>()));
 
         services.AddSingleton(sp =>
         {
             var retentionDays = ReadPositiveInt(config["Capture:CacheRetentionDays"], DefaultRetentionDays);
             var pruneIntervalHours = ReadPositiveInt(config["Capture:CachePruneIntervalHours"], DefaultPruneIntervalHours);
+            var pairingTimeout = ReadPositiveInt(config["Capture:EditPairingTimeoutSeconds"], DefaultEditPairingTimeoutSeconds);
 
             return new PeriodicCachePruner(
                 sp.GetRequiredService<MessageCache>(),
                 retentionDays,
                 TimeSpan.FromHours(pruneIntervalHours),
-                sp.GetService<ILogger<PeriodicCachePruner>>());
+                sp.GetService<ILogger<PeriodicCachePruner>>(),
+                timeProvider: sp.GetService<TimeProvider>(),
+                editPairingTimeoutSeconds: pairingTimeout);
         });
 
         return services;
