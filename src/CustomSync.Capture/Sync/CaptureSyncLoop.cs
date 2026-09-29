@@ -22,22 +22,28 @@ public class CaptureSyncLoop
         _logger = logger;
     }
 
+    private TimeSpan Interval => TimeSpan.FromSeconds(
+        int.TryParse(_config["Capture:Sync:IntervalSeconds"], out var val) && val > 0 ? val : 30);
+
+    /// <summary>
+    /// Keyingi siklgacha kutish: odatda interval, server/tarmoq xatosidan
+    /// keyin esa runner'ning o'sib boruvchi backoff'i.
+    /// </summary>
+    public TimeSpan NextDelay(bool lastCycleSucceeded)
+        => !lastCycleSucceeded && _runner.CycleBackoffSeconds > 0
+            ? TimeSpan.FromSeconds(_runner.CycleBackoffSeconds)
+            : Interval;
+
     public virtual async Task RunLoopAsync(CancellationToken ct)
     {
-        var intervalSec = int.TryParse(_config["Capture:Sync:IntervalSeconds"], out var val) && val > 0 ? val : 30;
-        var interval = TimeSpan.FromSeconds(intervalSec);
+        var interval = Interval;
 
         while (!ct.IsCancellationRequested)
         {
             try
             {
                 var success = await _runner.PushCycleAsync(ct);
-                TimeSpan delay = interval;
-                if (!success && _runner.CycleBackoffSeconds > 0)
-                {
-                    delay = TimeSpan.FromSeconds(_runner.CycleBackoffSeconds);
-                }
-                await Task.Delay(delay, _timeProvider, ct);
+                await Task.Delay(NextDelay(success), _timeProvider, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {

@@ -32,6 +32,8 @@ public class CaptureSyncRunner
     public int PoisonCount { get; private set; }
     public int CycleBackoffSeconds { get; private set; }
 
+    public const string PoisonedError = "poisoned: payload account_id/peer_id differ from the row (spec §0.14)";
+
     public CaptureSyncRunner(
         MessageCache cache,
         CaptureSyncHttpClient client,
@@ -112,6 +114,13 @@ public class CaptureSyncRunner
             _deviceState = new DeviceState(_deviceState.DeviceId, refreshed.RefreshToken);
             DeviceCredentials.SaveDeviceState(statePath, _deviceState);
 
+            if (string.IsNullOrEmpty(refreshed.AccessToken))
+            {
+                _accessToken = null;
+                _logger?.LogError("Refresh response had no access token; will refresh again next cycle.");
+                return null;
+            }
+
             _accessToken = refreshed.AccessToken;
             _tokenExpiresAt = refreshed.ExpiresAt;
         }
@@ -165,7 +174,11 @@ public class CaptureSyncRunner
         {
             if (!SyncCrypto.ValidateSection014(row.PayloadJson, row.AccountId, row.PeerId))
             {
+                // Qator saqlanadi (ma'lumot tashlanmaydi), lekin navbatdan
+                // chiqariladi: aks holda batch boshini egallab, ortidagi
+                // hamma qatorni abadiy to'sib qo'yardi.
                 PoisonCount++;
+                _cache.MarkOutboxRowError(row.Id, PoisonedError, long.MaxValue);
                 _logger?.LogError("Outbox row {Id} failed §0.14 validation: account_id or peer_id in payload_json does not match row. Row quarantined.", row.Id);
                 continue;
             }
@@ -249,8 +262,10 @@ public class CaptureSyncRunner
                     DuplicateCount++;
                     _cache.DeleteOutboxRowById(row.Id);
                 }
-                else if (result.Status == PushOutcome.Error)
+                else
                 {
+                    // `error` yoki protokolda yo'q holat: qator qoladi va
+                    // backoff bilan keyinroq qayta yuboriladi.
                     ErrorCount++;
                     var delay = CalculateRowBackoff(row.RetryCount + 1);
                     _cache.MarkOutboxRowError(row.Id, result.Message ?? "Server error", now + delay);

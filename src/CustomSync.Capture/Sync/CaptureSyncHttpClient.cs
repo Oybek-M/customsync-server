@@ -75,11 +75,37 @@ public class CaptureSyncHttpClient
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
+        // Server refresh token'ni allaqachon almashtirgan: qolgan maydonlar
+        // qanday bo'lmasin, yangi token chaqiruvchiga yetib borishi shart,
+        // aks holda eskisi o'lik va qurilmani qayta enroll qilish kerak.
         var newRefreshToken = root.GetProperty("refresh_token").GetString()!;
-        var newAccessToken = root.GetProperty("access_token").GetString()!;
-        var expiresAt = root.GetProperty("expires_at").GetInt64();
+        var newAccessToken = root.TryGetProperty("access_token", out var at) && at.ValueKind == JsonValueKind.String
+            ? at.GetString()!
+            : "";
+        var expiresAt = root.TryGetProperty("expires_at", out var exp) ? ParseExpiresAt(exp) : 0;
 
         return new RefreshResult(newRefreshToken, newAccessToken, expiresAt);
+    }
+
+    /// <summary>
+    /// Server `expires_at` ni `DateTime` (ISO 8601) sifatida yuboradi
+    /// (`JwtIssuer`). Son ham qabul qilinadi. Tushunarsiz qiymat → 0,
+    /// ya'ni token darhol eskirgan hisoblanadi va keyingi siklda yangilanadi.
+    /// </summary>
+    internal static long ParseExpiresAt(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var seconds))
+            return seconds;
+
+        if (value.ValueKind == JsonValueKind.String &&
+            DateTimeOffset.TryParse(
+                value.GetString(),
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var parsed))
+            return parsed.ToUnixTimeSeconds();
+
+        return 0;
     }
 
     public virtual async Task<PushResponse> PushRecordsAsync(

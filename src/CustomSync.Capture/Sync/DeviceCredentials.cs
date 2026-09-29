@@ -58,11 +58,19 @@ public static class DeviceCredentials
         }
 
         var tempPath = Path.Combine(dir, $".tmp_{Guid.NewGuid():N}");
-        File.WriteAllText(tempPath, content, Encoding.UTF8);
 
+        // Fayl darhol 0600 bilan yaratiladi: avval umask (odatda 0644)
+        // bilan yozib keyin chmod qilish master kalitni bir lahza boshqa
+        // foydalanuvchilarga ochiq qoldirardi.
+        var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            File.SetUnixFileMode(tempPath, unixMode);
+            options.UnixCreateMode = unixMode;
+        }
+        using (var stream = new FileStream(tempPath, options))
+        using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+        {
+            writer.Write(content);
         }
 
         File.Move(tempPath, targetPath, overwrite: true);

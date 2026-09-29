@@ -40,9 +40,19 @@ public class MessageCache
             }
 
             using var conn = OpenConnection();
+
+            // PRAGMA alohida: u qator qaytaradi va Microsoft.Data.Sqlite shu
+            // qatordan keyingi statement xatosini JIMGINA yutib, skriptning
+            // qolganini bajarmay qo'yadi (eski bazada jadvallar yaratilmay
+            // qolardi).
+            using (var walCmd = conn.CreateCommand())
+            {
+                walCmd.CommandText = "PRAGMA journal_mode = WAL;";
+                walCmd.ExecuteScalar();
+            }
+
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                PRAGMA journal_mode = WAL;
                 CREATE TABLE IF NOT EXISTS message_cache (
                     chat_id INTEGER NOT NULL,
                     message_id INTEGER NOT NULL,
@@ -72,7 +82,6 @@ public class MessageCache
                     UNIQUE (kind, account_id, peer_id, msg_id, occurred_at)
                 );
                 CREATE INDEX IF NOT EXISTS idx_capture_outbox_created_at ON capture_outbox (created_at);
-                CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);
                 CREATE TABLE IF NOT EXISTS activity_latest (
                     peer_id TEXT NOT NULL,
                     field TEXT NOT NULL,
@@ -108,15 +117,26 @@ public class MessageCache
             }
             else if (version == 1)
             {
+                // Bitta tranzaksiya: yarim qo'shilgan ustunlar bilan qolgan
+                // baza keyingi startda "duplicate column" bilan yiqilardi.
+                using var upgradeTx = conn.BeginTransaction();
                 using var upgradeCmd = conn.CreateCommand();
+                upgradeCmd.Transaction = upgradeTx;
                 upgradeCmd.CommandText = @"
                     ALTER TABLE capture_outbox ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
                     ALTER TABLE capture_outbox ADD COLUMN next_retry_at INTEGER;
                     ALTER TABLE capture_outbox ADD COLUMN last_error TEXT;
-                    CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);
                     PRAGMA user_version = 2;
                 ";
                 upgradeCmd.ExecuteNonQuery();
+                upgradeTx.Commit();
+            }
+
+            // Yangi ustunga bog'liq indeks migratsiyadan KEYIN.
+            using (var retryIdxCmd = conn.CreateCommand())
+            {
+                retryIdxCmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);";
+                retryIdxCmd.ExecuteNonQuery();
             }
         }
         catch (SqliteException ex)

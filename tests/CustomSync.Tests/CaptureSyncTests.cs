@@ -277,8 +277,10 @@ public class CaptureSyncTests
         Assert.Equal(1, runner.PoisonCount);
         Assert.Equal(0, httpCalls);
 
-        var rows = cache.GetEligibleOutboxRows(10, 200);
-        Assert.Single(rows); // Kept in database!
+        Assert.Single(cache.GetOutboxRows()); // Kept in database!
+        // ...lekin navbatdan chiqarilgan: har siklda qayta olinsa ortidagi
+        // qatorlarni to'sib qo'yardi.
+        Assert.Empty(cache.GetEligibleOutboxRows(10, 200));
     }
 
     // 7. Contract: the captured request body deserialises into CustomSync.Api.Endpoints.SyncEndpoints.PushRequest
