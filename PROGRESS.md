@@ -13,8 +13,9 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 4c — `edited.occurred_at = edit_date`** (`3b9b416` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 4c tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6 — sync klienti (synced scope settings)**. Prompt hali YOZILMAGAN. Scope snapshot'larini `setting` yozuvlaridan to'ldirish — §2 dagi 🔴 eslatmani o'qing |
-| Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Keyingi bajariladigan** | **Plan 05 Task 6a — sync klienti: shifrlash + outbox push**. Prompt tayyor: `docs/05-task6a-prompt.md` (2026-09-29) — **hali hech bir agentga BERILMAGAN** |
+| Undan keyin | **Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari (prompt 6a qabul qilingach yoziladi; oldin tdesktop javobi kerak — pastdagi savollar), keyin Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| ❓ tdesktop sessiyasidan kutilayotgan javob | (1) scope `setting` yozuvlari akkauntga bog'liqmi yoki global — qaysi `account_id` bilan yoziladi va bitta akkauntli capture qaysilarini qabul qilishi kerak (6b uchun); (2) egasi VPS xizmatiga master kalitni qanday oladi (hex eksport / tiklash kodi / parol o'rami) — deploy'dan oldin |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
