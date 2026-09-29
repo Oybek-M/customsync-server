@@ -709,7 +709,7 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | PostgreSQL | 17.2 ishlab turibdi (plan 16 deydi — muammo emas) |
 | `dotnet-ef` | global tool 9.0.1, EF Core 8 bilan ishlaydi |
 | `test-vectors.json` | `<tdesktop>\docs\sync-protocol\test-vectors.json` (laptop: `C:\TBuild\tdesktop`) |
-| ⚠️ PC NuGet (2026-09-27) | E: tozalangandan keyin `C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config` yo'q papkani (`E:\Application's datas\...\NuGetPackages`) ko'rsatadi → build `MSB4018`. Tizim fayliga tegilmadi. Aylanib o'tish: `fallbackPackageFolders` ichida `<clear/>` bo'lgan vaqtinchalik nuget.config bilan bir marta `dotnet restore --configfile <fayl>`, keyin odatiy build. Doimiy yechim — egasi: VS Installer'da "Repair" yoki o'sha config faylini o'chirish (admin) |
+| ⚠️ PC NuGet (2026-09-27) | E: tozalangandan keyin `C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config` yo'q papkani (`E:\Application's datas\...\NuGetPackages`) ko'rsatadi → build `MSB4018`. Tizim fayliga tegilmadi. E: papkasi paket MANBASI sifatida ham turibdi (`NU1301`). Aylanib o'tish: repo tashqarisida `packageSources` (faqat nuget.org) va `fallbackPackageFolders` ichida `<clear/>` bo'lgan vaqtinchalik nuget.config → bir marta `dotnet restore --configfile <fayl>`, keyin HAR DOIM `dotnet build --no-restore` / `dotnet test --no-build` (oddiy build qayta restore qilib yiqiladi; 2026-09-29 tasdiqlandi). Doimiy yechim — egasi: VS Installer'da "Repair" yoki o'sha config faylini o'chirish (admin) |
 | pg auth | `scram-sha-256` — parolsiz kirish yo'q |
 
 🔴 **Paket qo'shganda ALBATTA `--version 8.0.*`** — versiyasiz

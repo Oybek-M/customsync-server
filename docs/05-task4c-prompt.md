@@ -20,14 +20,22 @@ score. The only output that counts is committed source code plus tests.
   there — another session owns it.
 - Starting state: HEAD `7e3fda0` or later, `dotnet build` 0 warnings,
   `dotnet test` 266/266.
-- **PC only:** if `dotnet build` fails with `MSB4018 ... Unable to find
-  fallback package folder 'E:\Application's datas\...'`, do NOT edit
-  anything under `C:\Program Files (x86)` or the user NuGet config.
-  Write a temporary nuget.config outside the repo containing
-  `<packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources>`
-  and `<fallbackPackageFolders><clear/></fallbackPackageFolders>`, run
-  `dotnet restore --configfile <that file>` once, then build normally.
-  Never commit that file (PROGRESS.md §7).
+- **PC only (hostname `DESKTOP-5CAUS66`):** a stale Visual Studio NuGet
+  config points at a deleted `E:\Application's datas\...` folder, so a
+  plain `dotnet build` / `dotnet test` fails with `MSB4018` or `NU1301`.
+  Do NOT edit anything under `C:\Program Files (x86)` or the user NuGet
+  config. Instead:
+  1. write a temporary `nuget.config` **outside the repo** containing
+     `<packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources>`
+     and `<fallbackPackageFolders><clear/></fallbackPackageFolders>`;
+  2. `dotnet restore --configfile <that file>` (again only if you add a
+     package);
+  3. from then on **always** `dotnet build --no-restore` and
+     `dotnet test --no-build` (a plain build restores again and fails);
+     for deliberate breaks rebuild with
+     `dotnet build --no-restore --no-incremental`.
+  Never commit that file (PROGRESS.md §7). On the laptop none of this is
+  needed.
 
 ## WHY THIS TASK MATTERS
 
