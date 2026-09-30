@@ -773,6 +773,11 @@ public class CaptureUpdateHandlerTests : IDisposable
             await Task.Delay(20);
         }
 
+        // Parallel suite thread pool'ni band qilsa, Delay dan keyingi davom
+        // deadline'dan kech keladi va sikl qatorlarni qayta o'qimay chiqadi —
+        // natija bazada bo'lsa ham test eski bo'sh ro'yxatni ko'rardi.
+        rows = cache.GetOutboxRows();
+
         Assert.Single(rows);
         var payload = JsonNode.Parse(rows[0].PayloadJson)!.AsObject();
         Assert.Equal("Tartib testi xabari", payload["text"]!.GetValue<string>());

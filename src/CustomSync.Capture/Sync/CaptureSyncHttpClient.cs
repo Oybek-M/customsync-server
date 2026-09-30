@@ -186,7 +186,9 @@ public class CaptureSyncHttpClient
         string wrapId,
         CancellationToken ct = default)
     {
-        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/keys/wraps/{wrapId}";
+        // wrap_id serverdan keladi (ishonchsiz): `/` yoki `?` so'rovni boshqa
+        // endpoint'ga burmasligi uchun escape qilinadi.
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/keys/wraps/{Uri.EscapeDataString(wrapId)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
 

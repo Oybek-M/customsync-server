@@ -158,24 +158,27 @@ public class StatsTests : IClassFixture<CustomSyncWebApplicationFactory>
 
         await sync.PushAsync("test-device", records);
 
+        // Test bazasi yugurishlar orasida tozalanmaydi: top-500 ichida qidirish
+        // baza o'sgani sari bizning kichik peer'imizni tushirib qoldirardi.
+        // Butun ro'yxat olinadi va faqat o'z peer'larimiz tartibi tekshiriladi.
         var ourPeers = new HashSet<string> { peerA, peerB, peerC };
 
         // 1. Sort by bytes: peerA (10000) > peerC (2000) > peerB (500)
-        var byBytes = (await stats.PeersAsync("bytes", 500))
+        var byBytes = (await stats.PeersAsync("bytes", int.MaxValue))
             .Where(p => ourPeers.Contains(p.PeerHash))
             .Select(p => p.PeerHash)
             .ToList();
         Assert.Equal(new[] { peerA, peerC, peerB }, byBytes);
 
         // 2. Sort by count: peerB (5) > peerC (2) > peerA (1)
-        var byCount = (await stats.PeersAsync("count", 500))
+        var byCount = (await stats.PeersAsync("count", int.MaxValue))
             .Where(p => ourPeers.Contains(p.PeerHash))
             .Select(p => p.PeerHash)
             .ToList();
         Assert.Equal(new[] { peerB, peerC, peerA }, byCount);
 
         // 3. Sort by recent: peerC (300) > peerB (200) > peerA (100)
-        var byRecent = (await stats.PeersAsync("recent", 500))
+        var byRecent = (await stats.PeersAsync("recent", int.MaxValue))
             .Where(p => ourPeers.Contains(p.PeerHash))
             .Select(p => p.PeerHash)
             .ToList();

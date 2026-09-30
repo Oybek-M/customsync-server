@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -240,6 +241,20 @@ public static class SyncCliCommands
                     }
                 }
             }
+            else
+            {
+                // O'qib bo'lmaydigan fayl (buzilgan yoki ruxsati noto'g'ri)
+                // ham egasining yagona nusxasi bo'lishi mumkin — so'ramasdan
+                // ustiga yozilmaydi.
+                output.WriteLine($"Warning: {keyPath} exists but cannot be read as a master key (bad content or permissions). It will be replaced.");
+                var replaceConfirm = prompt.Prompt("Are you sure you want to replace the existing file? [y/N]: ", isSecret: false)?.Trim();
+                if (!string.Equals(replaceConfirm, "y", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(replaceConfirm, "yes", StringComparison.OrdinalIgnoreCase))
+                {
+                    output.WriteLine("Replacement cancelled. Master key was not saved.");
+                    return 1;
+                }
+            }
         }
 
         // 8. Save master key
@@ -254,6 +269,10 @@ public static class SyncCliCommands
         {
             output.WriteLine($"Error saving master key to {keyPath}: {ex.Message}");
             return 1;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(masterKey);
         }
     }
 
