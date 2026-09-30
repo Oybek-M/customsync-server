@@ -13,7 +13,7 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (`8c27f60` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 6a-2 tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari. Prompt hali YOZILMAGAN. Qaror: `account_hash` bo'yicha filtrlanmaydi, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib |
+| **Keyingi bajariladigan** | **Plan 05 Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari. Prompt tayyor: `docs/05-task6b-prompt.md` (2026-10-01) — **hali hech bir agentga BERILMAGAN**. Serverdagi pull'ga ixtiyoriy `kind` filtri ham shu task'da. Qaror: `account_hash` bo'yicha filtrlanmaydi, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib |
 | Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
@@ -496,6 +496,14 @@ audit bo'ladi. Shu vaqtgacha chegaradagi xavflar shu yerga yoziladi
 - Refresh rotatsiyasi: server token'ni almashtirib, javob klientga
   yetmasa (tarmoq uzilishi) qurilma bloklanadi — server tomonida
   oldingi token uchun qisqa imtiyoz oynasi yo'q (`DeviceService.RefreshAsync`).
+- 🔴 **Setting qiymatini orqaga qaytarish (replay).** Payload `occurred_at`
+  ga bog'lanmagan (AAD yo'q, payload ichida vaqt yo'q). Buzilgan server
+  eski setting payload'ini yangi `occurred_at` bilan qayta o'rab (record_id
+  ochiq maydonlardan qayta hisoblanadi) oq/qora ro'yxatni eski holatga
+  qaytara oladi — capture ham, tdesktop ham buni sezmaydi. Yopish faqat
+  protokol darajasida: `occurred_at` (va kind/msg_id) ni AAD yoki
+  payload'ga kiritish — ikkala tomon birga (6b tayyorlashda topildi,
+  2026-10-01).
 
 ### Plan 05 Task 4c tekshiruvi (2026-09-29) — qanday qabul qilindi
 
