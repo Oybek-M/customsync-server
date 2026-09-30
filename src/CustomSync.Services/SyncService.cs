@@ -212,10 +212,17 @@ public class SyncService(SyncDbContext db)
     }
 
     public async Task<PullResponse> PullAsync(
-        long since, int limit, CancellationToken ct = default)
+        long since, int limit, string? kind = null, CancellationToken ct = default)
     {
-        var rows = await db.Records.AsNoTracking()
-            .Where(r => r.Seq > since)
+        var query = db.Records.AsNoTracking()
+            .Where(r => r.Seq > since);
+
+        if (!string.IsNullOrEmpty(kind))
+        {
+            query = query.Where(r => r.Kind == kind);
+        }
+
+        var rows = await query
             .OrderBy(r => r.Seq)
             .Take(limit)
             .Select(r => new StoredRecord

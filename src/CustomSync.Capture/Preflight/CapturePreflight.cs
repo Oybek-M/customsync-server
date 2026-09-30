@@ -224,6 +224,24 @@ public static class CapturePreflight
             }
         }
 
+        var pullBatchStr = config["Capture:Sync:PullBatchSize"];
+        if (!string.IsNullOrEmpty(pullBatchStr))
+        {
+            if (!int.TryParse(pullBatchStr, out var pb) || pb <= 0)
+            {
+                errors.Add("Capture:Sync:PullBatchSize must be a positive integer.");
+            }
+        }
+
+        var maxPagesStr = config["Capture:Sync:MaxPullPagesPerCycle"];
+        if (!string.IsNullOrEmpty(maxPagesStr))
+        {
+            if (!int.TryParse(maxPagesStr, out var mp) || mp <= 0)
+            {
+                errors.Add("Capture:Sync:MaxPullPagesPerCycle must be a positive integer.");
+            }
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
     }
 

@@ -53,12 +53,16 @@ public static class SyncEndpoints
         group.MapGet("/pull", async (
             long since,
             int? limit,
+            string? kind,
             SyncService sync,
             SettingsService settings) =>
         {
+            if (kind is not null && !RecordKind.IsValid(kind))
+                return Results.BadRequest(new { error = "invalid_kind" });
+
             var configured = await settings.GetIntAsync("sync.pull_batch_size");
             var effective  = Math.Clamp(limit ?? configured, 1, configured);
-            return Results.Ok(await sync.PullAsync(since, effective));
+            return Results.Ok(await sync.PullAsync(since, effective, kind));
         });
     }
 }

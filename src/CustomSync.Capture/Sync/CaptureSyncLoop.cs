@@ -42,7 +42,7 @@ public class CaptureSyncLoop
         {
             try
             {
-                var success = await _runner.PushCycleAsync(ct);
+                var success = await _runner.SyncCycleAsync(ct);
                 await Task.Delay(NextDelay(success), _timeProvider, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)

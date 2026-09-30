@@ -315,6 +315,74 @@ public class SyncEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory>
     }
 
     // ----------------------------------------------------------------
+    // 8. Pull kind filtri: kind=setting faqat setting yozuvlarini qaytaradi,
+    // sahifalash bo'shliqlarsiz va takrorlarsiz; kind yo'q bo'lsa barchasi;
+    // noma'lum kind -> 400.
+    // ----------------------------------------------------------------
+    [Fact]
+    public async Task Pull_with_kind_filter_returns_only_matching_kind_paged()
+    {
+        var (client, _) = await EnrolDeviceAsync();
+        var peer = $"peer_{Guid.NewGuid():N}";
+
+        // Push 3 setting, 2 deleted, 2 edited
+        var recs = new List<object>
+        {
+            MakeRecord(peer, msgId: 101, kind: "setting"),
+            MakeRecord(peer, msgId: 102, kind: "deleted"),
+            MakeRecord(peer, msgId: 103, kind: "setting"),
+            MakeRecord(peer, msgId: 104, kind: "edited"),
+            MakeRecord(peer, msgId: 105, kind: "setting"),
+            MakeRecord(peer, msgId: 106, kind: "deleted"),
+            MakeRecord(peer, msgId: 107, kind: "edited")
+        };
+
+        var pushResp = await client.PostAsJsonAsync("/api/v1/sync/push", new { records = recs });
+        pushResp.EnsureSuccessStatusCode();
+        var pushBody = await pushResp.Content.ReadFromJsonAsync<PushResponseBody>();
+        Assert.NotNull(pushBody);
+        var since = SinceBeforePush(pushBody.Results);
+
+        // 1. Unknown kind -> 400
+        var unknownResp = await client.GetAsync($"/api/v1/sync/pull?since={since}&kind=unknown_kind");
+        Assert.Equal(HttpStatusCode.BadRequest, unknownResp.StatusCode);
+
+        // 2. No kind -> returns all kinds (unchanged)
+        var allResp = await client.GetAsync($"/api/v1/sync/pull?since={since}&limit=100");
+        allResp.EnsureSuccessStatusCode();
+        var allDoc = await allResp.Content.ReadFromJsonAsync<JsonElement>();
+        var allRecords = allDoc.GetProperty("records").EnumerateArray()
+            .Where(r => r.GetProperty("peer_hash").GetString() == peer)
+            .ToList();
+        Assert.Equal(7, allRecords.Count);
+
+        // 3. kind=setting paged with limit=2 (page 1: 2 items, page 2: 1 item)
+        var page1Resp = await client.GetAsync($"/api/v1/sync/pull?since={since}&limit=2&kind=setting");
+        page1Resp.EnsureSuccessStatusCode();
+        var page1Doc = await page1Resp.Content.ReadFromJsonAsync<JsonElement>();
+        var page1Records = page1Doc.GetProperty("records").EnumerateArray()
+            .Where(r => r.GetProperty("peer_hash").GetString() == peer)
+            .ToList();
+        Assert.Equal(2, page1Records.Count);
+        Assert.All(page1Records, r => Assert.Equal("setting", r.GetProperty("kind").GetString()));
+        long nextSince = page1Doc.GetProperty("next_since").GetInt64();
+        Assert.True(page1Doc.GetProperty("has_more").GetBoolean());
+
+        var page2Resp = await client.GetAsync($"/api/v1/sync/pull?since={nextSince}&limit=2&kind=setting");
+        page2Resp.EnsureSuccessStatusCode();
+        var page2Doc = await page2Resp.Content.ReadFromJsonAsync<JsonElement>();
+        var page2Records = page2Doc.GetProperty("records").EnumerateArray()
+            .Where(r => r.GetProperty("peer_hash").GetString() == peer)
+            .ToList();
+        Assert.Single(page2Records);
+        Assert.Equal("setting", page2Records[0].GetProperty("kind").GetString());
+
+        // Verify total setting records = 3 without gaps or duplicates
+        var allSettings = page1Records.Concat(page2Records).Select(r => r.GetProperty("msg_id").GetInt64()).ToList();
+        Assert.Equal(new long[] { 101, 103, 105 }, allSettings);
+    }
+
+    // ----------------------------------------------------------------
     // JSON deserialization yordamchisi
     // ----------------------------------------------------------------
     /// <summary>

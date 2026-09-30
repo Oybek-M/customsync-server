@@ -1,3 +1,4 @@
+using CustomSync.Capture.Capture;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -20,7 +21,19 @@ public static class CaptureSyncRegistration
         });
 
         services.AddSingleton<CaptureSyncHttpClient>();
-        services.AddSingleton<CaptureSyncRunner>();
+
+        services.AddSingleton<SyncedScopeSettingsSource>();
+        services.Replace(ServiceDescriptor.Singleton<ISyncedScopeSettingsSource>(sp => sp.GetRequiredService<SyncedScopeSettingsSource>()));
+        services.Replace(ServiceDescriptor.Singleton<ISyncedActivityScopeSettingsSource>(sp => sp.GetRequiredService<SyncedScopeSettingsSource>()));
+
+        services.AddSingleton<CaptureSyncRunner>(sp => new CaptureSyncRunner(
+            sp.GetRequiredService<MessageCache>(),
+            sp.GetRequiredService<CaptureSyncHttpClient>(),
+            config,
+            sp.GetService<TimeProvider>(),
+            sp.GetService<ILogger<CaptureSyncRunner>>(),
+            sp.GetService<SyncedScopeSettingsSource>()));
+
         services.AddSingleton<CaptureSyncLoop>();
 
         return services;

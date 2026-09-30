@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using CustomSync.Capture.Capture;
+using CustomSync.Core;
 using CustomSync.Core.Contracts;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -15,6 +16,8 @@ public class CaptureSyncRunner
     private readonly IConfiguration _config;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CaptureSyncRunner>? _logger;
+
+    private readonly SyncedScopeSettingsSource? _settingsSource;
 
     private byte[]? _masterKey;
     private DeviceState? _deviceState;
@@ -30,6 +33,8 @@ public class CaptureSyncRunner
     public int DuplicateCount { get; private set; }
     public int ErrorCount { get; private set; }
     public int PoisonCount { get; private set; }
+    public int PulledCount { get; private set; }
+    public int SkippedCount { get; private set; }
     public int CycleBackoffSeconds { get; private set; }
 
     public const string PoisonedError = "poisoned: payload account_id/peer_id differ from the row (spec §0.14)";
@@ -39,13 +44,15 @@ public class CaptureSyncRunner
         CaptureSyncHttpClient client,
         IConfiguration config,
         TimeProvider? timeProvider = null,
-        ILogger<CaptureSyncRunner>? logger = null)
+        ILogger<CaptureSyncRunner>? logger = null,
+        SyncedScopeSettingsSource? settingsSource = null)
     {
         _cache = cache;
         _client = client;
         _config = config;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
+        _settingsSource = settingsSource;
 
         int configuredBatch = int.TryParse(_config["Capture:Sync:PushBatchSize"], out var b) && b > 0 ? b : 500;
         _currentBatchSize = configuredBatch;
@@ -306,5 +313,221 @@ public class CaptureSyncRunner
         }
 
         return false;
+    }
+
+    public virtual async Task<bool> PullCycleAsync(CancellationToken ct = default)
+    {
+        if (!IsEnabled || _isStopped)
+        {
+            return false;
+        }
+
+        if (!EnsureCredentialsLoaded())
+        {
+            return false;
+        }
+
+        int pullBatchSize = int.TryParse(_config["Capture:Sync:PullBatchSize"], out var pb) && pb > 0 ? pb : 500;
+        int maxPages = int.TryParse(_config["Capture:Sync:MaxPullPagesPerCycle"], out var mp) && mp > 0 ? mp : 20;
+
+        var serverUrl = _config["Capture:Sync:ServerUrl"];
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            return false;
+        }
+
+        var token = await EnsureAccessTokenAsync(forceRefresh: false, ct);
+        if (token == null)
+        {
+            return false;
+        }
+
+        long cursor = _cache.GetPullCursor("pull_cursor");
+        bool anySettingsChanged = false;
+
+        var contentKey = SyncCrypto.DeriveContentKey(_masterKey!);
+        var peerKey = SyncCrypto.DerivePeerKey(_masterKey!);
+        var accountKey = SyncCrypto.DeriveAccountKey(_masterKey!);
+
+        for (int page = 0; page < maxPages; page++)
+        {
+            var pullResult = await _client.PullRecordsAsync(serverUrl, token, cursor, pullBatchSize, kind: "setting", ct);
+
+            if (pullResult.Status == PullStatus.Unauthorized)
+            {
+                token = await EnsureAccessTokenAsync(forceRefresh: true, ct);
+                if (token == null)
+                {
+                    return false;
+                }
+
+                pullResult = await _client.PullRecordsAsync(serverUrl, token, cursor, pullBatchSize, kind: "setting", ct);
+            }
+
+            if (pullResult.Status == PullStatus.NetworkError ||
+                pullResult.Status == PullStatus.ServerError ||
+                pullResult.Status == PullStatus.BadJson)
+            {
+                _cycleBackoffStep++;
+                CycleBackoffSeconds = (int)Math.Min(300, 1L << Math.Clamp(_cycleBackoffStep - 1, 0, 30));
+                _logger?.LogWarning("Sync pull encountered {Status}. Cycle backoff set to {Seconds}s.", pullResult.Status, CycleBackoffSeconds);
+                return false;
+            }
+
+            if (pullResult.Status != PullStatus.Success || pullResult.Response == null)
+            {
+                return false;
+            }
+
+            _cycleBackoffStep = 0;
+            CycleBackoffSeconds = 0;
+
+            var pageResp = pullResult.Response;
+            var candidates = new List<SyncedSettingRow>();
+
+            foreach (var record in pageResp.Records)
+            {
+                // 1. kind == "setting"
+                if (record.Kind != "setting")
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: kind is not setting.", record.RecordId);
+                    continue;
+                }
+
+                // 2. record_id recomputed matches
+                var expectedRecordId = RecordId.Compute(record.Kind, record.AccountHash, record.PeerHash, record.MsgId, record.OccurredAt);
+                if (record.RecordId != expectedRecordId)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: record_id mismatch.", record.RecordId);
+                    continue;
+                }
+
+                // 3. payload decrypts with content key
+                byte[] plaintext;
+                try
+                {
+                    plaintext = SyncCrypto.DecryptPayload(contentKey, record.Nonce, record.Payload);
+                }
+                catch (Exception ex)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning(ex, "Pull record {RecordId} skipped: payload decryption failed.", record.RecordId);
+                    continue;
+                }
+
+                // 4. payload is {key, value, account_id, peer_id}, all strings;
+                // peer_id == "0"; HMAC(peer_key, "0") == peer_hash; HMAC(account_key, account_id) == account_hash
+                string key, value, accountId, peerId;
+                try
+                {
+                    using var doc = JsonDocument.Parse(plaintext);
+                    if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                    {
+                        SkippedCount++;
+                        _logger?.LogWarning("Pull record {RecordId} skipped: payload is not a JSON object.", record.RecordId);
+                        continue;
+                    }
+
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("key", out var keyElem) || keyElem.ValueKind != JsonValueKind.String ||
+                        !root.TryGetProperty("value", out var valElem) || valElem.ValueKind != JsonValueKind.String ||
+                        !root.TryGetProperty("account_id", out var accElem) || accElem.ValueKind != JsonValueKind.String ||
+                        !root.TryGetProperty("peer_id", out var peerElem) || peerElem.ValueKind != JsonValueKind.String)
+                    {
+                        SkippedCount++;
+                        _logger?.LogWarning("Pull record {RecordId} skipped: payload fields missing or not strings.", record.RecordId);
+                        continue;
+                    }
+
+                    key = keyElem.GetString()!;
+                    value = valElem.GetString()!;
+                    accountId = accElem.GetString()!;
+                    peerId = peerElem.GetString()!;
+                }
+                catch (Exception ex)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning(ex, "Pull record {RecordId} skipped: payload JSON parsing failed.", record.RecordId);
+                    continue;
+                }
+
+                if (peerId != "0")
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: peer_id is not '0'.", record.RecordId);
+                    continue;
+                }
+
+                var expectedPeerHash = CryptoPrimitives.ComputePeerHash(peerKey, "0");
+                if (record.PeerHash != expectedPeerHash)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: peer_hash mismatch.", record.RecordId);
+                    continue;
+                }
+
+                var expectedAccountHash = CryptoPrimitives.ComputeAccountHash(accountKey, accountId);
+                if (record.AccountHash != expectedAccountHash)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: account_hash mismatch (§0.14).", record.RecordId);
+                    continue;
+                }
+
+                // 5. msg_id == ActivityMapper.DiscriminatorFor(key)
+                long expectedMsgId = ActivityMapper.DiscriminatorFor(key);
+                if (record.MsgId != expectedMsgId)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record {RecordId} skipped: msg_id discriminator mismatch.", record.RecordId);
+                    continue;
+                }
+
+                // 6. key is one of the 11 scope keys of §3.2.1 (other setting keys are ignored silently — not an error)
+                if (!SyncedScopeSettingsSource.AllScopeKeys.Contains(key))
+                {
+                    continue;
+                }
+
+                candidates.Add(new SyncedSettingRow(key, value, record.OccurredAt, record.RecordId));
+            }
+
+            long newCursor = pageResp.NextSince;
+            bool changed = _cache.MergeSyncedSettingsAndCommitCursor(candidates, newCursor);
+            if (changed)
+            {
+                anySettingsChanged = true;
+            }
+
+            PulledCount += candidates.Count;
+            cursor = newCursor;
+            _logger?.LogInformation("Sync pull page completed: {Count} setting candidate(s), next cursor {Cursor}.", candidates.Count, newCursor);
+
+            if (!pageResp.HasMore)
+            {
+                break;
+            }
+        }
+
+        if (anySettingsChanged && _settingsSource != null)
+        {
+            _settingsSource.RebuildSnapshotsFromStore();
+        }
+
+        return true;
+    }
+
+    public virtual async Task<bool> SyncCycleAsync(CancellationToken ct = default)
+    {
+        var pushOk = await PushCycleAsync(ct);
+        if (!pushOk && CycleBackoffSeconds > 0)
+        {
+            return false;
+        }
+
+        var pullOk = await PullCycleAsync(ct);
+        return pushOk && pullOk;
     }
 }

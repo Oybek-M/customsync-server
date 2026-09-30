@@ -48,6 +48,21 @@ public record GetWrapResponse(
     KeyWrapDetails? Wrap = null,
     string? ErrorMessage = null);
 
+public enum PullStatus
+{
+    Success,
+    Unauthorized,
+    BadRequest,
+    ServerError,
+    NetworkError,
+    BadJson
+}
+
+public record PullRecordsResult(
+    PullStatus Status,
+    PullResponse? Response = null,
+    string? ErrorMessage = null);
+
 public class CaptureSyncHttpClient
 {
     private readonly HttpClient _httpClient;
@@ -305,5 +320,76 @@ public class CaptureSyncHttpClient
         }
 
         return new PushResponse(PushStatus.Success, Results: resultsList);
+    }
+
+    public virtual async Task<PullRecordsResult> PullRecordsAsync(
+        string serverUrl,
+        string accessToken,
+        long since,
+        int limit,
+        string? kind = null,
+        CancellationToken ct = default)
+    {
+        var url = $"{serverUrl.TrimEnd('/')}/api/v1/sync/pull?since={since}&limit={limit}";
+        if (!string.IsNullOrEmpty(kind))
+        {
+            url += $"&kind={Uri.EscapeDataString(kind)}";
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger?.LogWarning(ex, "Network error during sync pull.");
+            return new PullRecordsResult(PullStatus.NetworkError, ErrorMessage: ex.Message);
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return new PullRecordsResult(PullStatus.Unauthorized);
+        }
+
+        if (response.StatusCode == HttpStatusCode.BadRequest)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            return new PullRecordsResult(PullStatus.BadRequest, ErrorMessage: err);
+        }
+
+        if ((int)response.StatusCode >= 500)
+        {
+            return new PullRecordsResult(PullStatus.ServerError, ErrorMessage: $"HTTP {(int)response.StatusCode}");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new PullRecordsResult(PullStatus.ServerError, ErrorMessage: $"HTTP {(int)response.StatusCode}");
+        }
+
+        try
+        {
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var pullResp = JsonSerializer.Deserialize<PullResponse>(json, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+            });
+
+            if (pullResp == null || pullResp.Records == null)
+            {
+                return new PullRecordsResult(PullStatus.BadJson, ErrorMessage: "Missing records in pull response");
+            }
+
+            return new PullRecordsResult(PullStatus.Success, Response: pullResp);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to parse pull response JSON.");
+            return new PullRecordsResult(PullStatus.BadJson, ErrorMessage: ex.Message);
+        }
     }
 }

@@ -1,23 +1,23 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-09-30**
+Oxirgi yangilanish: **2026-10-01**
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **337 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **352 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-09-30 tun, PC `DESKTOP-5CAUS66`)
+### ▶️ Qayerda to'xtadik (2026-10-01, PC `DESKTOP-5CAUS66`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (`8c27f60` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 6a-2 tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari. Prompt tayyor: `docs/05-task6b-prompt.md` (2026-10-01) — **hali hech bir agentga BERILMAGAN**. Serverdagi pull'ga ixtiyoriy `kind` filtri ham shu task'da. Qaror: `account_hash` bo'yicha filtrlanmaydi, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib |
-| Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6b — pull the owner's `setting` records into the capture scope** |
+| **Keyingi bajariladigan** | **Plan 05 Task 7** |
+| Undan keyin | Task 8–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b–10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 
@@ -275,6 +275,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 4c — `edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi | `3b9b416` + tekshiruv tuzatishlari | `pending_edits` SQLite jadvali (chat_id, message_id juftligi), `updateMessageContent` va `updateMessageEdited` ni ikki tomonlama juftlash (content-first yoki edit-first), oraliq versiyalarni saqlash, timeout zaxirasi (`msg_date`), `SweepPendingEdits`, `PeriodicCachePruner` va DI konfiguratsiyasi (`Capture:EditPairingTimeoutSeconds`, default 60s); 16+6 test (jami 288) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'chirishda kutayotgan tahrir yo'qolardi, sweep xatosi update'ni yutardi — tuzatildi |
 | 6a — Capture sync client: shifrlash va outbox push | `aea2772` + tekshiruv tuzatishlari | HKDF kalit derivatsiyasi (content, peer, account), AES-256-GCM shifrlash (12-byte random nonce, 16-byte tag, payload = ciphertext ‖ tag), outbox row -> SyncRecord konvertatsiyasi (account_hash faqat activity uchun "", peer_hash barcha turlar uchun account-less), §0.14 pre-validation (poisoned rows karantini), CLI buyruqlari (--set-key, --enroll, 0600 ruxsat tekshiruvi), in-memory access token va faylga avval yoziluvchi refresh token rotatsiyasi, TimeProvider davriy push sikli (30s interval, 500 qator/5MB batch, 400 backoff, 5xx/tarmoq xatosida 1s..300s eksponentsial backoff), SQLite schema user_version = 2 (retry_count, next_retry_at, last_error); 18 test (jami 306) | 11 buzish (a–k) + 14 mustaqil mutatsiya; token javobi (`expires_at` ISO sana) o'qilmasdi, zaharlangan qatorlar navbatni to'sardi, v1 baza migratsiyasi jadvallarni jimgina tashlab ketardi — tuzatildi (jami 317) |
 | 6a-2 — `--set-key` parol o'ramidan master kalitni ochish | `8c27f60` + tekshiruv tuzatishlari | `SyncCrypto.UnwrapMasterKey` (PBKDF2-SHA256 KEK + AES-256-GCM, salt 16B, nonce 12B, wrapped 48B, `MaxWrapIterations`), `SyncCrypto.Fingerprint` (SHA256["customsync-fingerprint-v1" ‖ master][0..8] hex), umumiy token refresh + faylga avval saqlash (`RefreshAndPersistTokenAsync`), runner 401 re-read state retry, `--set-key` interaktiv oqimi (wrap tanlash, 429 bir martalik tekshiruv, max 3 urinish, FP ko'rsatib tasdiqlash, mavjud kalitni almashtirish himoyasi, 0600 atomar yozish), maxfiy ma'lumotlar log/ekranga chiqmasligi; 14 test (jami 331) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'qib bo'lmaydigan kalit fayli tasdiqsiz almashtirilardi, serverdan kelgan `wrap_id` so'rov yo'lini o'zgartira olardi — tuzatildi (jami 337) |
+| 6b — Setting yozuvlarini pull qilish va capture scope snapshot'lari | `<commit>` | Server `/api/v1/sync/pull` da `kind` filtri (ixtiyoriy, 400 unknown kind); `CaptureSyncRunner.PullCycleAsync` (`kind=setting`, `PullBatchSize`, `MaxPullPagesPerCycle`, token rotatsiyasi); 6 bosqichli qat'iy yozuv validatsiyasi; `account_hash` bo'yicha filtrlanmaydi (§3.2.1a); LWW merge (eng katta `(occurred_at, record_id)` g'olib); bitta tranzaksiyada cursor va merge commit; SQLite v2 -> v3 migratsiyasi (`synced_settings`, `sync_state`); `SyncedScopeSettingsSource` (8 xabar kaliti -> `ScopeSettingsSnapshot`, 3 faollik kaliti -> `ActivityScopeSettingsSnapshot`, to'liq bo'lmaganda fail-closed `null`, atomar swap, startda bazadan yuklash); DI da `services.Replace`; 15 test (jami 352) | 11 ta ataylab buzish (a–k) to'liq ushlandi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -994,7 +995,27 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       1) `--enroll` orqali qurilmani serverda ro'yxatdan o'tkazish;
       2) `--set-key` orqali serverdagi parol o'ramidan master kalitni ochib `master.key` ga saqlash;
       3) `appsettings.Production.json` da `Capture:Sync:Enabled` ni `true` qilib xizmatni ishga tushirish.
-    - Task 6b hali boshlanmadi.
+37. **Setting yozuvlarini pull qilish, verifikatsiya va scope snapshot'lari (Plan 05 Task 6b)** —
+    - **Server kind filtri**: `/api/v1/sync/pull` ga ixtiyoriy `kind` query parametri qo'shildi (`PullAsync(since, limit, kind = null)`). Berilgan holda faqat shu turdagi qatorlar `seq > since` tartibida sahifalanadi, `next_since` oxirgi qaytgan `seq` (yoki 0 qator bo'lsa `since`), `has_more` odatdagidek. Noto'g'ri/noma'lum kind berilsa `400 Bad Request` qaytaradi; `kind` berilmaganda avvalgi xatti-harakat baytma-bayt saqlanadi.
+    - **Capture pull konfiguratsiyasi**: `Capture:Sync:PullBatchSize` (int, default 500) va `Capture:Sync:MaxPullPagesPerCycle` (int, default 20) `CapturePreflight` da musbat butun son ekani tekshiriladi.
+    - **Yozuvlarni tekshirish (6 bosqich)**:
+      1) `kind == "setting"`;
+      2) `record_id == RecordId.Compute(...)`;
+      3) `SyncCrypto.DecryptPayload(contentKey, nonce, payload)` AES-256-GCM orqali muvaffaqiyatli ochiladi;
+      4) Payload JSON `{key, value, account_id, peer_id}` barchasi satr, `peer_id == "0"`, `HMAC(peer_key, "0") == peer_hash`, `HMAC(account_key, account_id) == account_hash` (§0.14);
+      5) `msg_id == ActivityMapper.DiscriminatorFor(key)`;
+      6) `key` 11 ta kanonik scope kalitidan biri (noma'lum sozlama kalitlari xatosiz jimgina e'tiborsiz qoldiriladi).
+      - **Akkaunt ajratmasi bo'yicha muhim qaror (§3.2.1a)**: `setting` yozuvlari `account_hash` bo'yicha **filtrlanmaydi** — egasining master kaliti ochadigan har qanday akkauntdan kelgan sozlamalar qabul qilinadi.
+    - **LWW birlashtirish va atomar kursor tranzaksiyasi**: Har bir kalit bo'yicha eng katta `(occurred_at, record_id)` g'olib bo'ladi (`record_id` durang bo'lganda leksikografik taqqoslanadi). Eskiroq yozuv keyinroq kelsa ham yangirog'ini bosib ketmaydi. SQLite `synced_settings` va `sync_state` jadvallari bitta tranzaksiyada yangilanadi — sahifani birlashtirish va `pull_cursor` bir tranzaksiyada commit qilinadi. Krash bo'lganda kursor ham, sozlamalar ham o'zgarmaydi, keyingi siklda sahifa qayta o'qiladi (at-least-once, K4 idempotent).
+    - **SQLite v2 -> v3 migratsiyasi**: `PRAGMA user_version = 3` ga ko'tarildi. Yangi `synced_settings` va `sync_state` jadvallari tranzaksiya ichida yaratiladi, mavjud ma'lumotlar to'liq saqlanadi.
+    - **Scope snapshot'lari va fail-closed xavfsizlik**:
+      - `ScopeSettingsSnapshot` (8 xabar kaliti: `scope.whitelist`, `scope.blacklist`, `scope.wl_categories`, `scope.bl_categories`, `scope.antidelete_global`, `scope.antiedit_global`, `scope.antidelete_per_peer`, `scope.antiedit_per_peer`);
+      - `ActivityScopeSettingsSnapshot` (3 faollik kaliti: `scope.activity_track_all_contacts`, `scope.activity_include`, `scope.activity_exclude`).
+      - Barcha kalitlar mavjud va to'g'ri bo'lsagina snapshot yaratiladi; bitta kalit yetishmasa yoki bitta ro'yxatda nokanonik peer ID bo'lsa butun kalit bekor qilinadi va snapshot `null` bo'ladi.
+      - **Eski plan eslatmasi o'zgartirildi**: "missing activity keys → tdesktop defaults" qarori bekor qilinib, tdesktop har startda barcha 11 kalitni yuborgani sababli to'liq bo'lmagan to'plam "hali sinxronlanmagan" deb qaraladi va server standartiga (fail-closed / capture nothing) qaytadi.
+      - `SyncedScopeSettingsSource` `ISyncedScopeSettingsSource` va `ISyncedActivityScopeSettingsSource` ni amalga oshiradi, snapshot'lar `Interlocked.Exchange` orqali atomar almashtiriladi (o'quvchilar yarim qurilgan holatni ko'rmaydi). Xizmat ishga tushganda tarmoqqa chiqmasdan oldin SQLite'dagi qatorlardan snapshot tiklanadi.
+      - DI da `services.Replace` orqali `AddCaptureHandlers` qo'ygan `Null...` manbalar to'liq almashtiriladi.
+      - Maxfiylik: sozlama qiymatlari, payload'lar, tokenlar, kalitlar, `account_id` yoki `peer_id` hech qachon loglanmaydi.
 
 ---
 

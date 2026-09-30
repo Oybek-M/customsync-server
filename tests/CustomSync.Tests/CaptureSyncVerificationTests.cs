@@ -363,7 +363,7 @@ public class CaptureSyncVerificationTests : IDisposable
             cmd.CommandText = "SELECT COUNT(*) FROM pragma_index_list('pending_edits') WHERE name = 'idx_pending_edits_observed_at';";
             Assert.Equal(1L, Convert.ToInt64(cmd.ExecuteScalar()));
             cmd.CommandText = "PRAGMA user_version;";
-            Assert.Equal(2L, Convert.ToInt64(cmd.ExecuteScalar()));
+            Assert.Equal(3L, Convert.ToInt64(cmd.ExecuteScalar()));
         }
 
         var row = Assert.Single(cache.GetEligibleOutboxRows(10, 200));

@@ -103,6 +103,16 @@ public class MessageCache
                     PRIMARY KEY (chat_id, message_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_pending_edits_observed_at ON pending_edits (observed_at);
+                CREATE TABLE IF NOT EXISTS synced_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    occurred_at INTEGER NOT NULL,
+                    record_id TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS sync_state (
+                    name TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
             ";
             cmd.ExecuteNonQuery();
 
@@ -112,24 +122,50 @@ public class MessageCache
             if (version == 0)
             {
                 using var setVersionCmd = conn.CreateCommand();
-                setVersionCmd.CommandText = "PRAGMA user_version = 2;";
+                setVersionCmd.CommandText = "PRAGMA user_version = 3;";
                 setVersionCmd.ExecuteNonQuery();
             }
-            else if (version == 1)
+            else
             {
-                // Bitta tranzaksiya: yarim qo'shilgan ustunlar bilan qolgan
-                // baza keyingi startda "duplicate column" bilan yiqilardi.
-                using var upgradeTx = conn.BeginTransaction();
-                using var upgradeCmd = conn.CreateCommand();
-                upgradeCmd.Transaction = upgradeTx;
-                upgradeCmd.CommandText = @"
-                    ALTER TABLE capture_outbox ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
-                    ALTER TABLE capture_outbox ADD COLUMN next_retry_at INTEGER;
-                    ALTER TABLE capture_outbox ADD COLUMN last_error TEXT;
-                    PRAGMA user_version = 2;
-                ";
-                upgradeCmd.ExecuteNonQuery();
-                upgradeTx.Commit();
+                if (version == 1)
+                {
+                    // Bitta tranzaksiya: yarim qo'shilgan ustunlar bilan qolgan
+                    // baza keyingi startda "duplicate column" bilan yiqilardi.
+                    using var upgradeTx = conn.BeginTransaction();
+                    using var upgradeCmd = conn.CreateCommand();
+                    upgradeCmd.Transaction = upgradeTx;
+                    upgradeCmd.CommandText = @"
+                        ALTER TABLE capture_outbox ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0;
+                        ALTER TABLE capture_outbox ADD COLUMN next_retry_at INTEGER;
+                        ALTER TABLE capture_outbox ADD COLUMN last_error TEXT;
+                        PRAGMA user_version = 2;
+                    ";
+                    upgradeCmd.ExecuteNonQuery();
+                    upgradeTx.Commit();
+                    version = 2;
+                }
+
+                if (version == 2)
+                {
+                    using var upgradeTx2 = conn.BeginTransaction();
+                    using var upgradeCmd2 = conn.CreateCommand();
+                    upgradeCmd2.Transaction = upgradeTx2;
+                    upgradeCmd2.CommandText = @"
+                        CREATE TABLE IF NOT EXISTS synced_settings (
+                            key TEXT PRIMARY KEY,
+                            value TEXT NOT NULL,
+                            occurred_at INTEGER NOT NULL,
+                            record_id TEXT NOT NULL
+                        );
+                        CREATE TABLE IF NOT EXISTS sync_state (
+                            name TEXT PRIMARY KEY,
+                            value TEXT NOT NULL
+                        );
+                        PRAGMA user_version = 3;
+                    ";
+                    upgradeCmd2.ExecuteNonQuery();
+                    upgradeTx2.Commit();
+                }
             }
 
             // Yangi ustunga bog'liq indeks migratsiyadan KEYIN.
@@ -1322,4 +1358,205 @@ public class MessageCache
             Date: date,
             CachedAt: cachedAt);
     }
+
+    public virtual long GetPullCursor(string name = "pull_cursor")
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT value FROM sync_state WHERE name = @name;";
+            cmd.Parameters.AddWithValue("@name", name);
+            var result = cmd.ExecuteScalar();
+            if (result != null && long.TryParse(result.ToString(), out long cursor))
+            {
+                return cursor;
+            }
+            return 0;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to read pull cursor from sync_state.", ex);
+        }
+    }
+
+    public virtual bool MergeSyncedSettingsAndCommitCursor(
+        IReadOnlyList<SyncedSettingRow> candidates,
+        long newCursor,
+        Action? onBeforeCommit = null)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using (var beginCmd = conn.CreateCommand())
+            {
+                beginCmd.CommandText = "BEGIN IMMEDIATE;";
+                beginCmd.ExecuteNonQuery();
+            }
+
+            try
+            {
+                bool anyChanged = false;
+
+                foreach (var candidate in candidates)
+                {
+                    long? existingOccurredAt = null;
+                    string? existingRecordId = null;
+                    string? existingValue = null;
+
+                    using (var selCmd = conn.CreateCommand())
+                    {
+                        selCmd.CommandText = "SELECT occurred_at, record_id, value FROM synced_settings WHERE key = @key;";
+                        selCmd.Parameters.AddWithValue("@key", candidate.Key);
+                        using var reader = selCmd.ExecuteReader();
+                        if (reader.Read())
+                        {
+                            existingOccurredAt = reader.GetInt64(0);
+                            existingRecordId = reader.GetString(1);
+                            existingValue = reader.GetString(2);
+                        }
+                    }
+
+                    bool isNewer;
+                    if (!existingOccurredAt.HasValue)
+                    {
+                        isNewer = true;
+                    }
+                    else
+                    {
+                        // Spec §3.2.1a: greatest occurred_at wins; equal occurred_at -> greater record_id wins
+                        if (candidate.OccurredAt > existingOccurredAt.Value)
+                        {
+                            isNewer = true;
+                        }
+                        else if (candidate.OccurredAt == existingOccurredAt.Value)
+                        {
+                            isNewer = string.CompareOrdinal(candidate.RecordId, existingRecordId) > 0;
+                        }
+                        else
+                        {
+                            isNewer = false;
+                        }
+                    }
+
+                    if (isNewer)
+                    {
+                        using (var upsertCmd = conn.CreateCommand())
+                        {
+                            upsertCmd.CommandText = @"
+                                INSERT INTO synced_settings (key, value, occurred_at, record_id)
+                                VALUES (@key, @value, @occurred_at, @record_id)
+                                ON CONFLICT (key) DO UPDATE SET
+                                    value = excluded.value,
+                                    occurred_at = excluded.occurred_at,
+                                    record_id = excluded.record_id;";
+                            upsertCmd.Parameters.AddWithValue("@key", candidate.Key);
+                            upsertCmd.Parameters.AddWithValue("@value", candidate.Value);
+                            upsertCmd.Parameters.AddWithValue("@occurred_at", candidate.OccurredAt);
+                            upsertCmd.Parameters.AddWithValue("@record_id", candidate.RecordId);
+                            upsertCmd.ExecuteNonQuery();
+                        }
+
+                        if (existingValue != candidate.Value)
+                        {
+                            anyChanged = true;
+                        }
+                    }
+                }
+
+                // Always update cursor in the SAME transaction
+                using (var cursorCmd = conn.CreateCommand())
+                {
+                    cursorCmd.CommandText = @"
+                        INSERT INTO sync_state (name, value)
+                        VALUES ('pull_cursor', @cursor)
+                        ON CONFLICT (name) DO UPDATE SET
+                            value = excluded.value;";
+                    cursorCmd.Parameters.AddWithValue("@cursor", newCursor.ToString());
+                    cursorCmd.ExecuteNonQuery();
+                }
+
+                onBeforeCommit?.Invoke();
+
+                using (var commitCmd = conn.CreateCommand())
+                {
+                    commitCmd.CommandText = "COMMIT;";
+                    commitCmd.ExecuteNonQuery();
+                }
+
+                return anyChanged;
+            }
+            catch
+            {
+                try
+                {
+                    using var rollbackCmd = conn.CreateCommand();
+                    rollbackCmd.CommandText = "ROLLBACK;";
+                    rollbackCmd.ExecuteNonQuery();
+                }
+                catch { }
+                throw;
+            }
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to merge synced settings and commit cursor.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to merge synced settings and commit cursor.", ex);
+        }
+    }
+
+    public virtual IReadOnlyList<SyncedSettingRow> GetAllSyncedSettings()
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT key, value, occurred_at, record_id FROM synced_settings;";
+            using var reader = cmd.ExecuteReader();
+            var list = new List<SyncedSettingRow>();
+            while (reader.Read())
+            {
+                list.Add(new SyncedSettingRow(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.GetString(3)));
+            }
+            return list;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to read synced settings from database.", ex);
+        }
+    }
+
+    public virtual SyncedSettingRow? GetSyncedSetting(string key)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT key, value, occurred_at, record_id FROM synced_settings WHERE key = @key;";
+            cmd.Parameters.AddWithValue("@key", key);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                return new SyncedSettingRow(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt64(2),
+                    reader.GetString(3));
+            }
+            return null;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to read synced setting from database.", ex);
+        }
+    }
 }
+
+public record SyncedSettingRow(string Key, string Value, long OccurredAt, string RecordId);
