@@ -215,6 +215,15 @@ public static class CapturePreflight
             }
         }
 
+        var maxWrapIterStr = config["Capture:Sync:MaxWrapIterations"];
+        if (!string.IsNullOrEmpty(maxWrapIterStr))
+        {
+            if (!int.TryParse(maxWrapIterStr, out var maxIter) || maxIter <= 0)
+            {
+                errors.Add("Capture:Sync:MaxWrapIterations must be a positive integer.");
+            }
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
     }
 

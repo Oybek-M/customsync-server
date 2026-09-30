@@ -24,6 +24,30 @@ public record PushResponse(
     int? MaxBatch = null,
     string? ErrorMessage = null);
 
+public record KeyWrapSummary(string WrapId, string WrapType, string Label, string CreatedAt);
+
+public enum GetWrapStatus
+{
+    Success,
+    NotFound,
+    RateLimited,
+    Error
+}
+
+public record KeyWrapDetails(
+    string WrapId,
+    string WrapType,
+    string Label,
+    string Salt,
+    string Nonce,
+    string WrappedKey,
+    int Iterations);
+
+public record GetWrapResponse(
+    GetWrapStatus Status,
+    KeyWrapDetails? Wrap = null,
+    string? ErrorMessage = null);
+
 public class CaptureSyncHttpClient
 {
     private readonly HttpClient _httpClient;
@@ -106,6 +130,96 @@ public class CaptureSyncHttpClient
             return parsed.ToUnixTimeSeconds();
 
         return 0;
+    }
+
+    public virtual async Task<RefreshResult?> RefreshAndPersistTokenAsync(
+        string serverUrl,
+        string statePath,
+        DeviceState currentState,
+        CancellationToken ct = default)
+    {
+        var refreshed = await RefreshTokenAsync(serverUrl, currentState.DeviceId, currentState.RefreshToken, ct);
+        if (refreshed == null)
+        {
+            return null;
+        }
+
+        var newState = new DeviceState(currentState.DeviceId, refreshed.RefreshToken);
+        DeviceCredentials.SaveDeviceState(statePath, newState);
+        return refreshed;
+    }
+
+    public virtual async Task<IReadOnlyList<KeyWrapSummary>> ListKeyWrapsAsync(
+        string serverUrl,
+        string accessToken,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/keys/wraps";
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await _httpClient.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(body);
+
+        var list = new List<KeyWrapSummary>();
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var elem in doc.RootElement.EnumerateArray())
+            {
+                var wrapId = elem.TryGetProperty("wrap_id", out var idProp) ? idProp.GetString() ?? "" : "";
+                var wrapType = elem.TryGetProperty("wrap_type", out var typeProp) ? typeProp.GetString() ?? "" : "";
+                var label = elem.TryGetProperty("label", out var labelProp) ? labelProp.GetString() ?? "" : "";
+                var createdAt = elem.TryGetProperty("created_at", out var dateProp) ? dateProp.GetString() ?? "" : "";
+                list.Add(new KeyWrapSummary(wrapId, wrapType, label, createdAt));
+            }
+        }
+
+        return list;
+    }
+
+    public virtual async Task<GetWrapResponse> GetKeyWrapAsync(
+        string serverUrl,
+        string accessToken,
+        string wrapId,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/keys/wraps/{wrapId}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var response = await _httpClient.SendAsync(request, ct);
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            return new GetWrapResponse(GetWrapStatus.RateLimited, ErrorMessage: "Hourly rate limit reached (5 requests per hour).");
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new GetWrapResponse(GetWrapStatus.NotFound, ErrorMessage: "Wrap not found.");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return new GetWrapResponse(GetWrapStatus.Error, ErrorMessage: $"Server returned HTTP {(int)response.StatusCode}.");
+        }
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        var id = root.TryGetProperty("wrap_id", out var pId) ? pId.GetString() ?? wrapId : wrapId;
+        var type = root.TryGetProperty("wrap_type", out var pType) ? pType.GetString() ?? "" : "";
+        var label = root.TryGetProperty("label", out var pLabel) ? pLabel.GetString() ?? "" : "";
+        var salt = root.TryGetProperty("salt", out var pSalt) ? pSalt.GetString() ?? "" : "";
+        var nonce = root.TryGetProperty("nonce", out var pNonce) ? pNonce.GetString() ?? "" : "";
+        var wrappedKey = root.TryGetProperty("wrapped_key", out var pWrapped) ? pWrapped.GetString() ?? "" : "";
+        var iterations = root.TryGetProperty("iterations", out var pIter) ? pIter.GetInt32() : 0;
+
+        var details = new KeyWrapDetails(id, type, label, salt, nonce, wrappedKey, iterations);
+        return new GetWrapResponse(GetWrapStatus.Success, Wrap: details);
     }
 
     public virtual async Task<PushResponse> PushRecordsAsync(

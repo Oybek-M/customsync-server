@@ -90,11 +90,12 @@ public class CaptureSyncRunner
         {
             if (_deviceState == null) return null;
 
+            var statePath = _config["Capture:Sync:StatePath"] ?? "/var/lib/customsync-capture/device-state.json";
             RefreshResult? refreshed;
             try
             {
-                refreshed = await _client.RefreshTokenAsync(
-                    serverUrl, _deviceState.DeviceId, _deviceState.RefreshToken, ct);
+                refreshed = await _client.RefreshAndPersistTokenAsync(
+                    serverUrl, statePath, _deviceState, ct);
             }
             catch (Exception ex)
             {
@@ -104,15 +105,33 @@ public class CaptureSyncRunner
 
             if (refreshed == null)
             {
+                // Section 3: Before stopping on refresh 401, re-read state file once.
+                // If stored refresh token differs from what was used, retry.
+                var storedState = DeviceCredentials.LoadDeviceState(statePath, _logger);
+                if (storedState != null && storedState.RefreshToken != _deviceState.RefreshToken)
+                {
+                    _deviceState = storedState;
+                    try
+                    {
+                        refreshed = await _client.RefreshAndPersistTokenAsync(
+                            serverUrl, statePath, _deviceState, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogError(ex, "Failed to refresh access token on retry with newer state file.");
+                        return null;
+                    }
+                }
+            }
+
+            if (refreshed == null)
+            {
                 _isStopped = true;
                 _logger?.LogError("Device authorization revoked or refresh token invalid (HTTP 401). Sync stopped.");
                 return null;
             }
 
-            // CRITICAL: Persist rotated refresh token to disk BEFORE using new access token!
-            var statePath = _config["Capture:Sync:StatePath"] ?? "/var/lib/customsync-capture/device-state.json";
             _deviceState = new DeviceState(_deviceState.DeviceId, refreshed.RefreshToken);
-            DeviceCredentials.SaveDeviceState(statePath, _deviceState);
 
             if (string.IsNullOrEmpty(refreshed.AccessToken))
             {

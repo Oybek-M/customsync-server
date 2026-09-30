@@ -5,18 +5,18 @@ Oxirgi yangilanish: **2026-09-30**
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **317 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **331 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-09-30 tun, PC `DESKTOP-5CAUS66`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a — sync klienti: shifrlash + outbox push** (`aea2772` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 6a tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (kichik). Prompt tayyor: `docs/05-task6a2-prompt.md` (2026-09-30) — **hali hech bir agentga BERILMAGAN**. tdesktop master kalitni ko'rsatmaydi — yagona yo'l: enroll → `GET /api/v1/keys/wraps` → parol → PBKDF2 + AES-GCM ochish → FP ko'rsatib tasdiqlash → `0600` fayl. Vektorlar: `test-vectors.json` `key_wrap`, `fingerprint` (spec §4.4.0) |
-| Undan keyin | **Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari (prompt hali yozilmagan), keyin Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (14 test, jami 331). |
+| **Keyingi bajariladigan** | **Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari (prompt hali yozilmagan), keyin Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| Undan keyin | Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6b–10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 
@@ -257,7 +257,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c + 6a tekshirildi; keyingi: 6b)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c + 6a/6a-2 tekshirildi; keyingi: 6b)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -269,6 +269,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 4b — Activity capture (status, name, username) | `457b92f` + tekshiruv tuzatishlari | Activity kuzatuvi (`updateUser`, `updateUserStatus`); tdesktop bilan baytma-bayt moslik (status holatlari, `langFullName`, username, discriminator SHA256[0:8]); 60s offline shovqin filtri; `activity_latest` kesh jadvali; 4 qatlamli `IActivityScope` va preflight Check 6; 12 yangi test (jami 261 test) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; discriminator CustomSync.Capture ichida tdesktop bilan 100% mos qilindi; boshlang'ich kuzatuvda bo'sh qiymatlar tashlanadi |
 | 4c — `edited` yozuvlarida Telegram'ning `edit_date` ishlatilishi | `3b9b416` + tekshiruv tuzatishlari | `pending_edits` SQLite jadvali (chat_id, message_id juftligi), `updateMessageContent` va `updateMessageEdited` ni ikki tomonlama juftlash (content-first yoki edit-first), oraliq versiyalarni saqlash, timeout zaxirasi (`msg_date`), `SweepPendingEdits`, `PeriodicCachePruner` va DI konfiguratsiyasi (`Capture:EditPairingTimeoutSeconds`, default 60s); 16+6 test (jami 288) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'chirishda kutayotgan tahrir yo'qolardi, sweep xatosi update'ni yutardi — tuzatildi |
 | 6a — Capture sync client: shifrlash va outbox push | `aea2772` + tekshiruv tuzatishlari | HKDF kalit derivatsiyasi (content, peer, account), AES-256-GCM shifrlash (12-byte random nonce, 16-byte tag, payload = ciphertext ‖ tag), outbox row -> SyncRecord konvertatsiyasi (account_hash faqat activity uchun "", peer_hash barcha turlar uchun account-less), §0.14 pre-validation (poisoned rows karantini), CLI buyruqlari (--set-key, --enroll, 0600 ruxsat tekshiruvi), in-memory access token va faylga avval yoziluvchi refresh token rotatsiyasi, TimeProvider davriy push sikli (30s interval, 500 qator/5MB batch, 400 backoff, 5xx/tarmoq xatosida 1s..300s eksponentsial backoff), SQLite schema user_version = 2 (retry_count, next_retry_at, last_error); 18 test (jami 306) | 11 buzish (a–k) + 14 mustaqil mutatsiya; token javobi (`expires_at` ISO sana) o'qilmasdi, zaharlangan qatorlar navbatni to'sardi, v1 baza migratsiyasi jadvallarni jimgina tashlab ketardi — tuzatildi (jami 317) |
+| 6a-2 — `--set-key` parol o'ramidan master kalitni ochish | bu commit | `SyncCrypto.UnwrapMasterKey` (PBKDF2-SHA256 KEK + AES-256-GCM, salt 16B, nonce 12B, wrapped 48B, `MaxWrapIterations`), `SyncCrypto.Fingerprint` (SHA256["customsync-fingerprint-v1" ‖ master][0..8] hex), umumiy token refresh + faylga avval saqlash (`RefreshAndPersistTokenAsync`), runner 401 re-read state retry, `--set-key` interaktiv oqimi (wrap tanlash, 429 bir martalik tekshiruv, max 3 urinish, FP ko'rsatib tasdiqlash, mavjud kalitni almashtirish himoyasi, 0600 atomar yozish), maxfiy ma'lumotlar log/ekranga chiqmasligi; 14 test (jami 331) | 10 ta ataylab buzish (a–j) to'liq tasdiqlandi; 3 marta qayta yurgizildi (331/331 x3) |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -892,6 +893,15 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **CLI va fayl xavfsizligi**: `--set-key` (interaktiv 64 hex belgili kiritish, ekranga chiqarmasdan, atomar yozish), `--enroll` (interaktiv enrollment code va device name, `POST /api/v1/devices/enroll` chaqirib natijani atomar yozish). Linux/macOS tizimlarida fayl ruxsatnomasi `0600` ekani tekshiriladi (boshqacha bo'lsa xato beradi; Windows'da esa hujjatlashtirilgan sabab bilan o'tkazib yuboriladi).
     - **Token aylanishi va krash oynasi (Crash Window)**: Access token faqat xotirada saqlanadi, muddati tugashiga 60s qolganda yoki 401 qaytganda yangilanadi. Yangilangan `refresh_token` yangi access token ishlatilishidan **AVVAL** diskka (`StatePath`) atomar yozilishi shart. Agar server token'ni yangilasa, lekin yangi token diskka yozilishidan oldin xizmat to'xtab qolsa/krash bo'lsa (refresh-token rotation crash window), serverdagi eski refresh token bekor qilingan bo'ladi va keyingi refresh 401 qaytaradi. Bunday holatda sync mijozi xavfsiz to'xtaydi, outbox qatorlari bazada saqlanib qoladi va egasi xizmatni `--enroll` orqali qayta ro'yxatdan o'tkazishi kerak. Refresh vaqtidagi 401 xatoligi outbox'ni o'chirmaydi.
     - **Outbox push va qayta ishlash**: Push natijasida `created`, `duplicate`, `superseded` bo'lgan qatorlar bazadan **faqat birlamchi kalit `id` bo'yicha** o'chiriladi (unique key bo'yicha emas — parvoz vaqtidagi yangi versiyalar o'chib ketmasligi uchun). `error` yoki javobda tushib qolgan qatorlar uchun `retry_count` oshirilib, `next_retry_at` (1s..300s eksponentsial backoff) belgilanadi. `400 batch_too_large` xatoligida batch hajmi ikkiga bo'linadi (min 1). 5xx yoki tarmoq xatolarida butun sikl kechiktiriladi (1s..300s).
+36. **`--set-key` parol o'ramidan master kalitni ochish va `Capture:Sync:MaxWrapIterations` (Plan 05 Task 6a-2)** —
+    - **Parol o'ramidan kalitni ochish**: Spec §4.4.0 talabiga binoan tdesktop master kalitni to'g'ridan-to'g'ri ko'rsatmaydi — u serverdagi parol o'rami (`passphrase` wrap) orqali ochiladi. `SyncCrypto.UnwrapMasterKey` PBKDF2-SHA256 (KEK) va AES-256-GCM yordamida master kalitni oladi. KEK va oraliq buferlar xotirada darhol tozalanishi (`CryptographicOperations.ZeroMemory`) kafolatlangan. Noto'g'ri parol yoki teg mos kelmasligi `KeyUnwrapStatus.WrongPassphrase` qaytaradi va istisno bilan yiqilmaydi.
+    - **Iteratsiyalar chegarasi va Preflight**: DoS va CPU qotib qolishining oldini olish uchun `Capture:Sync:MaxWrapIterations` (standart 10,000,000) sozlamasi va CapturePreflight da musbat butun son ekani tekshiruvi kiritildi.
+    - **Token aylanishi va 401 holatini qayta tekshirish**: Token refresh va yangilangan refresh tokenni yangi access token ishlatilishidan avval faylga saqlash mantig'i umumiy `RefreshAndPersistTokenAsync` ga birlashtirildi. Agar runner refresh paytida 401 xatoligi olsa, `--set-key` yangi token yozgan bo'lishi ehtimolini hisobga olib diskdagi holat faylini qayta o'qiydi va tokenni yangilangan bo'lsa refresh'ni bir marta qayta urinadi.
+    - **Egasi uchun joylashtirish (deployment) ketma-ketligi**:
+      1) `--enroll` orqali qurilmani serverda ro'yxatdan o'tkazish;
+      2) `--set-key` orqali serverdagi parol o'ramidan master kalitni ochib `master.key` ga saqlash;
+      3) `appsettings.Production.json` da `Capture:Sync:Enabled` ni `true` qilib xizmatni ishga tushirish.
+    - Task 6b hali boshlanmadi.
 
 ---
 

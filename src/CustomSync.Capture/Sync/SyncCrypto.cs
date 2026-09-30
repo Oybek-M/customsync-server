@@ -130,4 +130,103 @@ public static class SyncCrypto
             Payload = payload
         };
     }
+
+    public static KeyUnwrapResult UnwrapMasterKey(
+        string passphrase,
+        byte[]? salt,
+        int iterations,
+        byte[]? nonce,
+        byte[]? wrappedKey,
+        int maxIterations = 10_000_000)
+    {
+        if (salt == null || salt.Length != 16 ||
+            nonce == null || nonce.Length != 12 ||
+            wrappedKey == null || wrappedKey.Length != 48 ||
+            iterations < 1 || iterations > maxIterations)
+        {
+            return KeyUnwrapResult.InvalidWrap();
+        }
+
+        byte[]? kek = null;
+        byte[]? master = null;
+        try
+        {
+            var passphraseBytes = Encoding.UTF8.GetBytes(passphrase);
+            try
+            {
+                kek = Rfc2898DeriveBytes.Pbkdf2(
+                    passphraseBytes,
+                    salt,
+                    iterations,
+                    HashAlgorithmName.SHA256,
+                    32);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(passphraseBytes);
+            }
+
+            var ciphertext = wrappedKey.AsSpan(0, 32);
+            var tag = wrappedKey.AsSpan(32, 16);
+            master = new byte[32];
+
+            using var aes = new AesGcm(kek, tagSizeInBytes: 16);
+            aes.Decrypt(nonce, ciphertext, tag, master, associatedData: ReadOnlySpan<byte>.Empty);
+
+            var result = master;
+            master = null;
+            return KeyUnwrapResult.Success(result);
+        }
+        catch (CryptographicException)
+        {
+            return KeyUnwrapResult.WrongPassphrase();
+        }
+        finally
+        {
+            if (kek != null)
+            {
+                CryptographicOperations.ZeroMemory(kek);
+            }
+            if (master != null)
+            {
+                CryptographicOperations.ZeroMemory(master);
+            }
+        }
+    }
+
+    public static string Fingerprint(byte[] masterKey)
+    {
+        if (masterKey == null || masterKey.Length != 32)
+            throw new ArgumentException("Master key must be exactly 32 bytes.", nameof(masterKey));
+
+        byte[] prefix = Encoding.UTF8.GetBytes("customsync-fingerprint-v1");
+        byte[] buffer = new byte[prefix.Length + masterKey.Length];
+        Buffer.BlockCopy(prefix, 0, buffer, 0, prefix.Length);
+        Buffer.BlockCopy(masterKey, 0, buffer, prefix.Length, masterKey.Length);
+
+        try
+        {
+            byte[] hash = SHA256.HashData(buffer);
+            return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(buffer);
+        }
+    }
 }
+
+public enum KeyUnwrapStatus
+{
+    Success,
+    WrongPassphrase,
+    InvalidWrap
+}
+
+public sealed record KeyUnwrapResult(KeyUnwrapStatus Status, byte[]? MasterKey = null)
+{
+    public static KeyUnwrapResult Success(byte[] masterKey) => new(KeyUnwrapStatus.Success, masterKey);
+    public static KeyUnwrapResult WrongPassphrase() => new(KeyUnwrapStatus.WrongPassphrase);
+    public static KeyUnwrapResult InvalidWrap() => new(KeyUnwrapStatus.InvalidWrap);
+}
+

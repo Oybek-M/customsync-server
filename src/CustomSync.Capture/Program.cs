@@ -16,7 +16,8 @@ bool isInteractiveLogin = args.Contains("--login");
 if (args.Contains("--set-key"))
 {
     var prompt = new ConsolePrompt();
-    return CustomSync.Capture.Sync.SyncCliCommands.SetKey(builder.Configuration, prompt);
+    using var http = new HttpClient();
+    return await CustomSync.Capture.Sync.SyncCliCommands.SetKeyAsync(builder.Configuration, prompt, http);
 }
 
 if (args.Contains("--enroll"))
