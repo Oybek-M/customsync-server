@@ -13,7 +13,7 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6a — sync klienti: shifrlash + outbox push** (`aea2772` + tekshiruv tuzatishlari). Tekshiruv bo'limi: "Plan 05 Task 6a tekshiruvi" |
-| **Keyingi bajariladigan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (kichik; prompt hali YOZILMAGAN). tdesktop master kalitni ko'rsatmaydi — yagona yo'l: enroll → `GET /api/v1/keys/wraps` → parol → PBKDF2 + AES-GCM ochish → FP ko'rsatib tasdiqlash → `0600` fayl. Vektorlar: `test-vectors.json` `key_wrap`, `fingerprint` (spec §4.4.0) |
+| **Keyingi bajariladigan** | **Plan 05 Task 6a-2 — `--set-key` parol o'ramidan** (kichik). Prompt tayyor: `docs/05-task6a2-prompt.md` (2026-09-30) — **hali hech bir agentga BERILMAGAN**. tdesktop master kalitni ko'rsatmaydi — yagona yo'l: enroll → `GET /api/v1/keys/wraps` → parol → PBKDF2 + AES-GCM ochish → FP ko'rsatib tasdiqlash → `0600` fayl. Vektorlar: `test-vectors.json` `key_wrap`, `fingerprint` (spec §4.4.0) |
 | Undan keyin | **Task 6b** — pull + `setting` yozuvlari → scope snapshot'lari (prompt hali yozilmagan), keyin Task 7–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6b–10 ⏸ |
