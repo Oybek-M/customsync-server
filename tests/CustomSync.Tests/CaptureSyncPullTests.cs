@@ -280,7 +280,15 @@ public class CaptureSyncPullTests : IDisposable
             overrideNonce: missingNonce, overridePayload: missingWire);
 
         // Step 4c: peer_id != "0"
-        var badPeerIdPlaintext = Encoding.UTF8.GetBytes($"{{\"key\":\"{key}\",\"value\":\"{value}\",\"account_id\":\"{accountId}\",\"peer_id\":\"12345\"}}");
+        // JsonSerializer bilan: qo'lda yig'ilgan satrda value ichidagi qo'shtirnoq
+        // JSON'ni buzardi va yozuv 4b bosqichida (noto'g'ri sabab bilan) rad etilardi.
+        var badPeerIdPlaintext = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string>
+        {
+            ["key"] = key,
+            ["value"] = value,
+            ["account_id"] = accountId,
+            ["peer_id"] = "12345"
+        });
         var (badPeerWire, badPeerNonce) = SyncCrypto.EncryptPayload(contentKey, badPeerIdPlaintext);
         var r4c = CreateSettingRecord(masterKey, key, value, accountId, 105, seq: 6,
             overrideNonce: badPeerNonce, overridePayload: badPeerWire);
@@ -1273,5 +1281,189 @@ public class CaptureSyncPullTests : IDisposable
             Assert.DoesNotContain(sensitivePeerId, msg, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(sensitiveValue, msg, StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    // TeamLead tekshiruvi (6b): server javobidagi null yozuv yoki null maydon
+    // PullCycleAsync'ni NullReferenceException bilan yiqitmasligi kerak —
+    // u boshqa buzilgan yozuvlar kabi o'tkazib yuboriladi, qolganlari
+    // saqlanadi va kursor siljiydi (aks holda bitta yozuv pull'ni abadiy to'xtatadi).
+    [Fact]
+    public async Task P01_Null_record_or_null_fields_are_skipped_not_thrown()
+    {
+        var masterKey = new byte[32];
+        RandomNumberGenerator.Fill(masterKey);
+
+        var good = CreateSettingRecord(masterKey, "scope.whitelist", "[\"42\"]", "111222333", 100);
+        var opts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var goodJson = JsonSerializer.Serialize(good, opts);
+        var nullKindJson = JsonSerializer.Serialize(good with { Seq = 2 }, opts)
+            .Replace("\"kind\":\"setting\"", "\"kind\":null");
+        var nullHashesJson = JsonSerializer.Serialize(good with { Seq = 3 }, opts)
+            .Replace($"\"account_hash\":\"{good.AccountHash}\"", "\"account_hash\":null")
+            .Replace($"\"record_id\":\"{good.RecordId}\"", "\"record_id\":null");
+        var nullBytesJson = JsonSerializer.Serialize(good with { Seq = 4 }, opts);
+        nullBytesJson = System.Text.RegularExpressions.Regex.Replace(nullBytesJson, "\"payload\":\"[^\"]*\"", "\"payload\":null");
+        Assert.Contains("\"kind\":null", nullKindJson);
+        Assert.Contains("\"account_hash\":null", nullHashesJson);
+        Assert.Contains("\"payload\":null", nullBytesJson);
+        var page = $"{{\"records\":[{nullKindJson},null,{nullHashesJson},{nullBytesJson},{goodJson}],\"next_since\":40,\"has_more\":false}}";
+
+        var dbPath = CreateTempFile("db");
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var keyPath = CreateTempFile("key");
+        var statePath = CreateTempFile("json");
+        DeviceCredentials.SaveMasterKey(keyPath, masterKey);
+        DeviceCredentials.SaveDeviceState(statePath, new DeviceState("dev-1", "rt-1"));
+
+        var handler = new MockHttpMessageHandler((req, ct) =>
+        {
+            if (req.RequestUri!.AbsolutePath.Contains("/refresh"))
+            {
+                return Task.FromResult(JsonOk(new
+                {
+                    refresh_token = "rt-1",
+                    access_token = "at-1",
+                    expires_at = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+                }));
+            }
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(page, Encoding.UTF8, "application/json")
+            });
+        });
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:Sync:Enabled"] = "true",
+            ["Capture:Sync:ServerUrl"] = "https://localhost:5001",
+            ["Capture:Sync:MasterKeyPath"] = keyPath,
+            ["Capture:Sync:StatePath"] = statePath
+        }).Build();
+
+        var runner = new CaptureSyncRunner(cache, new CaptureSyncHttpClient(new HttpClient(handler)), config);
+
+        var success = await runner.PullCycleAsync();
+
+        Assert.True(success);
+        Assert.Equal(4, runner.SkippedCount);
+        Assert.Equal("[\"42\"]", cache.GetSyncedSetting("scope.whitelist")!.Value);
+        Assert.Equal(40, cache.GetPullCursor("pull_cursor"));
+    }
+
+    private sealed class RecordingRunner(MessageCache cache, IConfiguration config, CancellationTokenSource stop, bool pushResult = true)
+        : CaptureSyncRunner(cache, new CaptureSyncHttpClient(new HttpClient()), config)
+    {
+        public List<string> Calls { get; } = new();
+
+        public override Task<bool> PushCycleAsync(CancellationToken ct = default)
+        {
+            Calls.Add("push");
+            return Task.FromResult(pushResult);
+        }
+
+        public override Task<bool> PullCycleAsync(CancellationToken ct = default)
+        {
+            Calls.Add("pull");
+            stop.Cancel();
+            return Task.FromResult(true);
+        }
+    }
+
+    // TeamLead tekshiruvi (6b): ishlab chiqarish sikli (CaptureSyncLoop) har
+    // aylanishda push'dan keyin pull ham qilishi kerak — aks holda
+    // runner'dagi butun pull kodi hech qachon chaqirilmaydi.
+    [Fact]
+    public async Task P02_Loop_runs_push_then_pull_each_cycle()
+    {
+        var dbPath = CreateTempFile("db");
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:Sync:IntervalSeconds"] = "1"
+        }).Build();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var runner = new RecordingRunner(cache, config, cts);
+        var loop = new CaptureSyncLoop(runner, TimeProvider.System, config);
+
+        await loop.RunLoopAsync(cts.Token);
+
+        Assert.Equal(new[] { "push", "pull" }, runner.Calls);
+    }
+
+    // TeamLead tekshiruvi (6b): pull'da 401 kelsa token majburan yangilanadi
+    // va shu sahifa bir marta qayta so'raladi (prompt §2).
+    [Fact]
+    public async Task P03_Pull_401_refreshes_token_and_retries_once()
+    {
+        var masterKey = new byte[32];
+        RandomNumberGenerator.Fill(masterKey);
+        var good = CreateSettingRecord(masterKey, "scope.whitelist", "[\"42\"]", "111222333", 100);
+
+        var dbPath = CreateTempFile("db");
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var keyPath = CreateTempFile("key");
+        var statePath = CreateTempFile("json");
+        DeviceCredentials.SaveMasterKey(keyPath, masterKey);
+        DeviceCredentials.SaveDeviceState(statePath, new DeviceState("dev-1", "rt-1"));
+
+        int refreshes = 0;
+        var pullTokens = new List<string?>();
+        var handler = new MockHttpMessageHandler((req, ct) =>
+        {
+            if (req.RequestUri!.AbsolutePath.Contains("/refresh"))
+            {
+                refreshes++;
+                return Task.FromResult(JsonOk(new
+                {
+                    refresh_token = $"rt-{refreshes + 1}",
+                    access_token = $"at-{refreshes}",
+                    expires_at = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+                }));
+            }
+            pullTokens.Add(req.Headers.Authorization?.Parameter);
+            if (pullTokens.Count == 1)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+            }
+            return Task.FromResult(JsonOk(new PullResponse { Records = new[] { good }, NextSince = 7, HasMore = false }));
+        });
+
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:Sync:Enabled"] = "true",
+            ["Capture:Sync:ServerUrl"] = "https://localhost:5001",
+            ["Capture:Sync:MasterKeyPath"] = keyPath,
+            ["Capture:Sync:StatePath"] = statePath
+        }).Build();
+
+        var runner = new CaptureSyncRunner(cache, new CaptureSyncHttpClient(new HttpClient(handler)), config);
+
+        Assert.True(await runner.PullCycleAsync());
+
+        Assert.Equal(2, refreshes);
+        Assert.Equal(new[] { "at-1", "at-2" }, pullTokens);
+        Assert.Equal("[\"42\"]", cache.GetSyncedSetting("scope.whitelist")!.Value);
+        Assert.Equal(7, cache.GetPullCursor("pull_cursor"));
+    }
+
+    // TeamLead tekshiruvi (6b): push backoff'siz muvaffaqiyatsiz bo'lsa ham
+    // (masalan, butun partiya 400 bilan rad etilgan) pull bajariladi —
+    // aks holda tiqilib qolgan push egasining sozlamalarini abadiy to'sadi.
+    [Fact]
+    public async Task P04_Push_failure_without_backoff_does_not_block_pull()
+    {
+        var dbPath = CreateTempFile("db");
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+        var config = new ConfigurationBuilder().Build();
+        using var cts = new CancellationTokenSource();
+        var runner = new RecordingRunner(cache, config, cts, pushResult: false);
+
+        Assert.False(await runner.SyncCycleAsync());
+
+        Assert.Equal(new[] { "push", "pull" }, runner.Calls);
     }
 }

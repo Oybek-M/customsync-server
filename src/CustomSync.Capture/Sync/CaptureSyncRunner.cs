@@ -387,6 +387,17 @@ public class CaptureSyncRunner
 
             foreach (var record in pageResp.Records)
             {
+                // 0. JSON'dagi null ("required" faqat maydon borligini tekshiradi):
+                // tekshirilmasa NullReferenceException butun sahifani qayta-qayta yiqitadi.
+                if (record is null || record.Kind is null || record.RecordId is null ||
+                    record.AccountHash is null || record.PeerHash is null ||
+                    record.Nonce is null || record.Payload is null)
+                {
+                    SkippedCount++;
+                    _logger?.LogWarning("Pull record skipped: record or required field is null.");
+                    continue;
+                }
+
                 // 1. kind == "setting"
                 if (record.Kind != "setting")
                 {
