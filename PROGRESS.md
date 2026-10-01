@@ -13,7 +13,7 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 7** — capture sessiyasini ko'rinmas saqlash (`64b10f3` + tekshiruv tuzatishi `e3c2ac0`) |
-| **Keyingi bajariladigan** | **Plan 05 Task 8** (media siyosati) — prompt HALI YOZILMAGAN. Task 8 `downloadFile` ni allow-list'ga ongli ravishda qo'shadi |
+| **Keyingi bajariladigan** | **Plan 05 Task 8** (media) — prompt TAYYOR: `docs/05-task8-prompt.md` (2026-10-01, laptop). Gemini bajaradi, TeamLead tekshiradi |
 | Undan keyin | Task 9–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
@@ -637,6 +637,12 @@ audit bo'ladi. Shu vaqtgacha chegaradagi xavflar shu yerga yoziladi
   **joriy** sozlamalar o'chib ketadi va qurilmalar ularni boshqa
   ololmaydi. `setting` uchun bu kalitni yoqishni taqiqlash yoki
   retention'dan chiqarish kerak (2026-10-01, laptop'da topildi).
+- Media: tdesktop media sync'ni hali qilmagan, capture birinchi media
+  yuklovchi bo'ladi (Task 8). Kelishilmagan: blob nonce'i qayerdan
+  olinadi (taklif: `HEAD`/`GET` `X-Nonce`), `MediaRef.size` ma'nosi,
+  capture yaratgan fayllar uchun `media_index` qiymatlari. tdesktop
+  kelgan `rel_path` ni qo'llasa, uni ildizdan chiqmaydigan qilib
+  tekshirishi shart (buzilgan server/qurilma `../` yuborishi mumkin).
 - capture `"true"`/`"false"` ni katta-kichik harfga qaramay qabul
   qiladi (`"TRUE"` ham), spec faqat kichik harfni aytadi.
 
@@ -765,14 +771,44 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 8 (media siyosati)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 8 (media)
 
-Task 7 tugadi va tekshirildi (`64b10f3` + `e3c2ac0`, 376 test). Task 8
-prompti hali yozilmagan. Unga majburiy kiradi: `downloadFile` ni
-allow-list'ga qo'shish (`TdRequestPolicy.AllowedRequestTypes`) va uning
-testi; `openMessageContent` / `openStory` hech qachon (media yuklash
-"eshitildi"/"ko'rildi" belgisini qo'ymasligi kerak); spec §0.4
-`media_index`, §0.8 yo'llar yozilmaydi, §0.9 kvota.
+Prompt: `docs/05-task8-prompt.md`. Tayyorlashda server media
+protokolini o'qib chiqdim — u hech bir klient tomonidan ishlatilmagan va
+shu holida ishlamaydi. Shuning uchun Task 8 ga server tuzatishlari ham
+kiritildi:
+- `GET` faqat baytlarni qaytaradi, pull faqat hash'larni — **nonce'ni
+  olishning yo'li yo'q**, ya'ni yuklab olingan blob'ni hech kim ocha
+  olmasdi. Endi `HEAD`/`GET` `X-Nonce` qaytaradi;
+- `PUT` da `X-Nonce` bo'lmasa server jimgina 12 ta nol bayt saqlardi,
+  noto'g'ri base64 — 500. Endi 400;
+- 🔴 `{hash}` umuman tekshirilmasdi, yo'l esa `Path.Combine(root,
+  hash[..2], hash)`: `..x` kabi hash faylni media ildizidan TASHQARIGA
+  yozardi. Endi faqat `^[0-9a-f]{64}$`, `MediaService` ning o'zida ham;
+- push'da mavjud bo'lmagan hash'ga havola jimgina saqlanardi (FK yo'q),
+  spec §5.3 esa xato va'da qiladi. Endi `media_hash_missing`.
+
+Ikki ongli qaror (plan'dan chetlashish, §8 ga ham yoziladi):
+- **Kech yuklash.** Plan "yuklab olingan fayl shifrlanib yuboriladi"
+  deydi. Lekin hech bir yozuv havola qilmaydigan blob boshqa qurilmalarga
+  ko'rinmaydi va tozalanmaydi (`orphaned_at` faqat yozuvlar purge
+  qilinganda qo'yiladi) — kvotani bekorga yeydi. Shuning uchun fayl
+  faqat `deleted` yozuvi unga havola qilganda yuklanadi.
+- **`media_index` hali yuborilmaydi.** `rel_path`, `layer`, `kind`,
+  `status` qiymatlari tdesktop bilan kelishilmagan, yozuvlar esa serverda
+  abadiy. Havola — yozuvning umumiy `media` massivi (spec §3 misoli).
+
+Capture sozlamalari server uslubidagi `capture.download_media` o'rniga
+`Capture:Media:*` (capture `server_settings` ni o'qimaydi). `MaxBytes`
+yuqori chegarasi 25 MiB: API Kestrel'ning standart ~28.6 MB so'rov
+chegarasi bilan ishlaydi, `media.max_upload_bytes` (50 MB) unga hech
+qachon yetmaydi — bu nomuvofiqlik alohida ochiq ish (§5).
+
+**tdesktop sessiyasiga uzatiladi (Task 8 tugagach, CHANGELOG matni bilan):**
+media blob nonce'i `HEAD`/`GET` ning `X-Nonce` sarlavhasidan olinadi
+(dedup tufayli yozuvdagi nonce boshqa qurilmaniki bo'lishi mumkin);
+`MediaRef.size` = ochiq matn hajmi; capture yaratgan media uchun
+`media_index` maydonlari kelishilishi kerak.
 
 ### Oldingi qadam tarixi — plan 05 Task 7 (sessiya ko'rinmasligi)
 
@@ -1021,6 +1057,7 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | Nima | Qayerda hal qilinadi |
 |---|---|
 | `sync.push_max_bytes` sozlamasi mavjud, lekin qo'llanilmaydi | 01b keyingi revizyasi |
+| API Kestrel'ning standart so'rov chegarasi (~28.6 MB) bilan ishlaydi, `media.max_upload_bytes` = 50 MB va Nginx 50 MB — 28.6 MB dan katta media hech qachon qabul qilinmaydi (413). Chegarani `server_settings` dan o'qib Kestrel'ga berish kerak (K1) | deploy oldidan, server |
 | Media PUT/GET blobni butunlay xotiraga yuklaydi (50MB) | Plan 04 yoki 09 |
 | `record_media` da yetim qatorlar (tombstone o'chirgach qoladi, FK yo'q) | Plan 04 (storage lifecycle) |
 | Server eksporti media bloblarni o'z ichiga olmaydi | Ataylab; spec §0.7 |
