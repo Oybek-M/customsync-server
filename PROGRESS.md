@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-01**
+Oxirgi yangilanish: **2026-10-01** (kech, laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -13,13 +13,14 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6b** — egasining `setting` yozuvlarini pull qilib capture scope'ga qo'yish (`b4c2645` + tekshiruv tuzatishi) |
-| **Keyingi bajariladigan** | **Plan 05 Task 7** — prompt HALI YOZILMAGAN (planni o'qib, TeamLead yozadi) |
+| **Keyingi bajariladigan** | **Plan 05 Task 7** — prompt TAYYOR: `docs/05-task7-prompt.md` (2026-10-01, laptop). Gemini bajaradi, TeamLead tekshiradi |
 | Undan keyin | Task 8–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
+| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 356/356. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
 
 2026-10-01: Task 6b (Gemini, `b4c2645`) tekshirilib qabul qilindi —
 1 nuqson (buzilgan yozuv pull'ni butunlay to'xtatardi) va 4 test
@@ -562,6 +563,13 @@ audit bo'ladi. Shu vaqtgacha chegaradagi xavflar shu yerga yoziladi
   kelajakda `bot` qo'shsa) butun kalitni yaroqsiz deb biladi →
   xabar snapshot'i `null`, capture jimgina server standartiga tushadi.
   Kategoriya kalitlari ro'yxatini tdesktop bilan qotirish kerak.
+- A24 dan keyin (`CHANGELOG` 2026-09-30) `setting` ning `occurred_at` i
+  = qiymat versiyasi, o'zgartirilmagan kalit uchun `1` (1970). Server
+  retention `occurred_at` bo'yicha ishlaydi: `retention.setting_days`
+  hozir `0` (cheksiz), lekin admin uni musbat qilsa, uzoq o'zgarmagan
+  **joriy** sozlamalar o'chib ketadi va qurilmalar ularni boshqa
+  ololmaydi. `setting` uchun bu kalitni yoqishni taqiqlash yoki
+  retention'dan chiqarish kerak (2026-10-01, laptop'da topildi).
 - capture `"true"`/`"false"` ni katta-kichik harfga qaramay qabul
   qiladi (`"TRUE"` ham), spec faqat kichik harfni aytadi.
 
@@ -690,7 +698,24 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 6 (sync klienti: synced scope settings)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 7 (sessiya ko'rinmasligi)
+
+Prompt: `docs/05-task7-prompt.md`. Plan Task 7 ning o'zi faqat
+`setOption online=false` va "`viewMessages`/`openChat`/`readAllChatMentions`
+chaqirilmasin" deydi. Promptda kuchaytirildi:
+- **allow-list** (deny-list emas) — `TdClient` ning `SendAsync` va
+  `Execute` ikkala eshigida; `openMessageContent` (ovozli xabar
+  "eshitildi"), `openStory` (story "ko'rildi"), `sendChatAction`
+  ("yozmoqda…") kabi planda nomi yo'q usullar ham shunda yopiladi;
+- `setOption` faqat `online=false` (`optionValueEmpty` standartga
+  qaytarib yuborardi — u ham rad etiladi);
+- `getOption online` bilan tasdiqlash, tasdiqlanmasa exit 1 (fail closed);
+- `Worker` darajasidagi test (preflight seam orqali) — "ulanmagan
+  himoya" xatosi to'rtinchi marta takrorlanmasin.
+Ochiq savol (Task 10 da o'lchanadi): `online=false` da Telegram
+update'larni kechiktirmay yetkazadimi — TDLib hujjatida yozilmagan.
+
+### Oldingi qadam tarixi — plan 05 Task 6 (sync klienti: synced scope settings)
 
 Task 4c tugadi va tekshirildi (266 + 16 delegate + 6 tekshiruv testi = 288; tekshiruv bo'limi yuqorida).
 Qilingan ishlar (Task 4c):
