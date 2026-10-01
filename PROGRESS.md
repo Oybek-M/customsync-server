@@ -5,15 +5,15 @@ Oxirgi yangilanish: **2026-10-01** (kech, laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **370 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **376 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-01, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 7** — capture sessiyasini ko'rinmas saqlash (`TdRequestPolicy`, invisibility gate & verification) |
-| **Keyingi bajariladigan** | **Plan 05 Task 8** |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 7** — capture sessiyasini ko'rinmas saqlash (`64b10f3` + tekshiruv tuzatishi `e3c2ac0`) |
+| **Keyingi bajariladigan** | **Plan 05 Task 8** (media siyosati) — prompt HALI YOZILMAGAN. Task 8 `downloadFile` ni allow-list'ga ongli ravishda qo'shadi |
 | Undan keyin | Task 9–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
@@ -21,6 +21,13 @@ Branch `Oybek`, ish daraxti toza.
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 370/370. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
+
+2026-10-01 (kech, laptop): Task 7 (Gemini, `64b10f3`) tekshirilib qabul
+qilindi — 3 nuqson (ulardan biri Task 7 ning o'zi keltirgan regressiya:
+noto'g'ri `TdJsonPath` preflight'dan o'tib, native xato bilan yiqilardi)
+va 2 test bo'shlig'i tuzatildi (`e3c2ac0`). Delegate PROGRESS'da Task 7 ni
+o'zi "tekshirib qabul qilingan" deb yozgan va hisobotning 5–6-bandlarini
+tashlab ketgan edi — javoblari tekshiruv bo'limida.
 
 2026-10-01: Task 6b (Gemini, `b4c2645`) tekshirilib qabul qilindi —
 1 nuqson (buzilgan yozuv pull'ni butunlay to'xtatardi) va 4 test
@@ -282,7 +289,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 6a — Capture sync client: shifrlash va outbox push | `aea2772` + tekshiruv tuzatishlari | HKDF kalit derivatsiyasi (content, peer, account), AES-256-GCM shifrlash (12-byte random nonce, 16-byte tag, payload = ciphertext ‖ tag), outbox row -> SyncRecord konvertatsiyasi (account_hash faqat activity uchun "", peer_hash barcha turlar uchun account-less), §0.14 pre-validation (poisoned rows karantini), CLI buyruqlari (--set-key, --enroll, 0600 ruxsat tekshiruvi), in-memory access token va faylga avval yoziluvchi refresh token rotatsiyasi, TimeProvider davriy push sikli (30s interval, 500 qator/5MB batch, 400 backoff, 5xx/tarmoq xatosida 1s..300s eksponentsial backoff), SQLite schema user_version = 2 (retry_count, next_retry_at, last_error); 18 test (jami 306) | 11 buzish (a–k) + 14 mustaqil mutatsiya; token javobi (`expires_at` ISO sana) o'qilmasdi, zaharlangan qatorlar navbatni to'sardi, v1 baza migratsiyasi jadvallarni jimgina tashlab ketardi — tuzatildi (jami 317) |
 | 6a-2 — `--set-key` parol o'ramidan master kalitni ochish | `8c27f60` + tekshiruv tuzatishlari | `SyncCrypto.UnwrapMasterKey` (PBKDF2-SHA256 KEK + AES-256-GCM, salt 16B, nonce 12B, wrapped 48B, `MaxWrapIterations`), `SyncCrypto.Fingerprint` (SHA256["customsync-fingerprint-v1" ‖ master][0..8] hex), umumiy token refresh + faylga avval saqlash (`RefreshAndPersistTokenAsync`), runner 401 re-read state retry, `--set-key` interaktiv oqimi (wrap tanlash, 429 bir martalik tekshiruv, max 3 urinish, FP ko'rsatib tasdiqlash, mavjud kalitni almashtirish himoyasi, 0600 atomar yozish), maxfiy ma'lumotlar log/ekranga chiqmasligi; 14 test (jami 331) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'qib bo'lmaydigan kalit fayli tasdiqsiz almashtirilardi, serverdan kelgan `wrap_id` so'rov yo'lini o'zgartira olardi — tuzatildi (jami 337) |
 | 6b — Setting yozuvlarini pull qilish va capture scope snapshot'lari | `b4c2645` + tekshiruv tuzatishi | Server `/api/v1/sync/pull` da `kind` filtri (ixtiyoriy, 400 unknown kind); `CaptureSyncRunner.PullCycleAsync` (`kind=setting`, `PullBatchSize`, `MaxPullPagesPerCycle`, token rotatsiyasi); 6 bosqichli qat'iy yozuv validatsiyasi; `account_hash` bo'yicha filtrlanmaydi (§3.2.1a); LWW merge (eng katta `(occurred_at, record_id)` g'olib); bitta tranzaksiyada cursor va merge commit; SQLite v2 -> v3 migratsiyasi (`synced_settings`, `sync_state`); `SyncedScopeSettingsSource` (8 xabar kaliti -> `ScopeSettingsSnapshot`, 3 faollik kaliti -> `ActivityScopeSettingsSnapshot`, to'liq bo'lmaganda fail-closed `null`, atomar swap, startda bazadan yuklash); DI da `services.Replace`; 15 test (jami 352) | 11 buzish (a–k) + 20 mustaqil mutatsiya; javobdagi `null` yozuv/maydon pull'ni `NullReferenceException` bilan har siklda yiqitardi — tuzatildi; 4 test bo'shlig'i yopildi (jami 356) |
-| 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `HEAD` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
+| 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `64b10f3` + `e3c2ac0` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -408,6 +415,65 @@ tirik qoldi. Topilgan va tuzatilgan (`CaptureSyncVerificationTests`):
    kod chiqarilmasligi (S10), `BuildRecord` ichidagi §0.14 (S11).
 
 Tuzatishdan keyin 14/14 ushlanadi. 317/317 x3.
+
+### Plan 05 Task 7 tekshiruvi (2026-10-01, laptop) — qanday qabul qilindi
+
+Testlar mustaqil yurgizildi (370/370 uch marta, build 0 ogohlantirish;
+laptop'da yangi `test-vectors.json` `origin` dan olindi). Mavjud
+`CaptureClientTests` dagi o'zgarish to'g'ri: ular `methodA` kabi o'ylab
+topilgan nomlarni ishlatardi, darvoza endi ularni rad etadi.
+
+Darvozaning o'zi yaxshi yozilgan: qat'iy (`Ordinal`) taqqoslash,
+dublikat kalitlar `Utf8JsonReader` bilan, `setOption` faqat
+`online=false`, tekshirilgan obyektning o'zi yuboriladi. Lekin:
+
+1. **Darvozani chetlab o'tish mumkin edi.** U faqat `TdClient` da turardi,
+   `td_send`/`td_execute` esa `public` edi: Capture ichidagi istalgan kod
+   `new NativeTdTransport().Send(...)` deb ruxsatsiz so'rovni native
+   kodga yetkazardi. Arxitektura testi (Test11) faqat konstruktor
+   parametrlarini tekshiradi va buni ko'rmasdi. Endi ikkala P/Invoke
+   `private`, ularga yagona yo'l — avval tekshiradigan
+   `TdJsonInterop.Send/Execute`; rad etish native kutubxona yuklanishidan
+   OLDIN bo'ladi (empirik tasdiqlandi: kutubxonasiz mashinada
+   `DllNotFoundException` emas, `TdRequestNotAllowedException`).
+2. **Task 7 ning o'zi keltirgan regressiya.** `Worker` endi probe'ni
+   `CapturePreflight` ga tekshiruvchi sifatida beradi, va shu yo'lda
+   sozlangan-u mavjud bo'lmagan `TdJsonPath` uchun xato qo'shilmasdi:
+   preflight o'tib ketardi, keyin `td_create_client_id` da ushlanmagan
+   `DllNotFoundException`. Ya'ni VPS'da yo'ldagi bitta harf xatosi toza
+   "fayl yo'q" + exit 1 o'rniga yiqilishga olib kelardi. Bundan tashqari
+   probe `CapturePreflight` dagi mantiqning nusxasi edi. Endi yuklash
+   tekshiruvi bitta joyda (probe), yuklanmasa sabab har doim yoziladi.
+3. **Exit kod testi qo'shni test qoldirgan qiymatdan o'tib ketishi mumkin
+   edi.** `Environment.ExitCode` jarayon uchun global; Test13 uni boshida
+   nolga qaytarmasdi, Test22 esa 1 qoldirardi. Endi `Worker` ni
+   yurgizadigan barcha testlar uni nolga qaytaradi, tiklaydi va bitta
+   parallel bo'lmagan kolleksiyada (`ProcessExitCodeCollection`) yuradi.
+   Test13 TDLib `error` holatini ham qamraydi (promptda so'ralgan edi).
+
+Mayda: `Worker` probe'ni `GetService` + `null` zaxirasi bilan olardi
+(promptda aniq taqiqlangan) — `GetRequiredService` ga o'tkazildi.
+
+Buzishlar: o'zimning 5 tam (exit kod qo'yilmasa, probe doim `true`,
+`openStory` allow-list'ga, `optionValueEmpty` muvaffaqiyat, dublikat
+tekshiruvi o'chiq) — probe'dan boshqasi ushlandi. Tuzatishdan keyin
+yana 5 ta (shu jumladan `td_send` qayta ochilsa, native darvoza olib
+tashlansa, mavjud bo'lmagan yo'l xatosiz o'tsa) — beshtasi ham ushlandi.
+376 test.
+
+**Hisobotda tashlab ketilgan 5–6-bandlar** (o'zim tekshirdim):
+- TDLib rasmiy hujjati (`core.telegram.org/tdlib/options`) faqat shuni
+  aytadi: `online` — yoziladigan Boolean, "joriy foydalanuvchining onlayn
+  holati". Standart qiymat, `getOption online` javobining shakli va
+  `online=false` da update'lar yetkazilishiga ta'siri — **tasdiqlanmagan**.
+  Kod tasdiqlanmagan javobda fail-closed (exit 1), ya'ni eng yomon holat —
+  xizmat ishga tushmaydi, jimgina onlayn ko'rinish emas.
+- Darvoza to'xtatmaydigan qolgan yo'llar (Task 10 qo'lda tekshiruviga):
+  (a) `authorizationStateReady` bilan bizning `setOption` orasidagi
+  qisqa oyna — TDLib standartda onlayn deb e'lon qiladimi, noma'lum;
+  (b) Telegram server o'qish so'rovlari (`getMessage`, `getMe`) uchun
+  "last seen" ni yangilaydimi — noma'lum; (c) `online=false` da
+  o'chirish update'lari kechikmay keladimi — ishlash savoli.
 
 ### Plan 05 Task 6b tekshiruvi (2026-10-01) — qanday qabul qilindi
 
@@ -699,7 +765,16 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 7 (sessiya ko'rinmasligi)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 8 (media siyosati)
+
+Task 7 tugadi va tekshirildi (`64b10f3` + `e3c2ac0`, 376 test). Task 8
+prompti hali yozilmagan. Unga majburiy kiradi: `downloadFile` ni
+allow-list'ga qo'shish (`TdRequestPolicy.AllowedRequestTypes`) va uning
+testi; `openMessageContent` / `openStory` hech qachon (media yuklash
+"eshitildi"/"ko'rildi" belgisini qo'ymasligi kerak); spec §0.4
+`media_index`, §0.8 yo'llar yozilmaydi, §0.9 kvota.
+
+### Oldingi qadam tarixi — plan 05 Task 7 (sessiya ko'rinmasligi)
 
 Prompt: `docs/05-task7-prompt.md`. Plan Task 7 ning o'zi faqat
 `setOption online=false` va "`viewMessages`/`openChat`/`readAllChatMentions`
