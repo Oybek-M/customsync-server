@@ -462,7 +462,11 @@ public class CaptureMediaTests : IDisposable
         await File.WriteAllBytesAsync(mediaFile, fileBytes);
         var expectedSha256 = Convert.ToHexString(SHA256.HashData(fileBytes)).ToLowerInvariant();
 
-        cache.QueueCapturedMedia("user456", 200, 777, 200, "messagePhoto", fileBytes.Length);
+        var storeDir = Path.Combine(Path.GetTempPath(), "test-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(storeDir);
+        var mediaStore = new MediaStore(storeDir);
+
+        cache.QueueCapturedMedia("456", 200, 777, 200, "messagePhoto", fileBytes.Length);
 
         var tdClient = new MockTdClient
         {
@@ -521,20 +525,21 @@ public class CaptureMediaTests : IDisposable
         var config = new MediaCaptureConfig
         {
             Enabled = true,
-            PeerIds = new HashSet<string> { "user456" },
-            MaxBytes = 10485760
+            PeerIds = new HashSet<string> { "456" },
+            MaxBytes = 10485760,
+            StorageDirectory = storeDir
         };
 
         var loggerProvider = new TestLoggerProvider();
         var loggerFactory = LoggerFactory.Create(b => b.AddProvider(loggerProvider).SetMinimumLevel(LogLevel.Trace));
-        var downloader = new MediaDownloader(tdClient, cache, config, logger: loggerFactory.CreateLogger<MediaDownloader>());
+        var downloader = new MediaDownloader(tdClient, cache, config, mediaStore, new MockDiskSpaceProbe(100L * 1024 * 1024 * 1024), logger: loggerFactory.CreateLogger<MediaDownloader>());
         bool processed = await downloader.ProcessPendingOnceAsync();
         Assert.True(processed, string.Join(" | ", loggerProvider.Messages));
 
-        var mediaRow = cache.GetCapturedMedia("user456", 200);
+        var mediaRow = cache.GetCapturedMedia("456", 200);
         Assert.NotNull(mediaRow);
         Assert.True(mediaRow.Status == "downloaded", $"Status was {mediaRow.Status}, attempts: {mediaRow.Attempts}, logs: {string.Join(" | ", loggerProvider.Messages)}");
-        Assert.Equal(mediaFile, mediaRow.LocalPath);
+        Assert.Equal(mediaStore.PathFor("456", 200), mediaRow.LocalPath);
         Assert.Equal(expectedSha256, mediaRow.Sha256);
         Assert.Equal(fileBytes.Length, mediaRow.Size);
     }
@@ -1122,5 +1127,10 @@ public class CaptureMediaTests : IDisposable
         public CancellationToken ApplicationStopping => CancellationToken.None;
         public CancellationToken ApplicationStopped => CancellationToken.None;
         public void StopApplication() { }
+    }
+
+    private class MockDiskSpaceProbe(long? freeBytes) : IDiskSpaceProbe
+    {
+        public long? GetAvailableFreeBytes(string path) => freeBytes;
     }
 }

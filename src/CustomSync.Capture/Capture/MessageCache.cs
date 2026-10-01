@@ -125,6 +125,7 @@ public class MessageCache
                     local_path TEXT,
                     sha256 TEXT,
                     size INTEGER,
+                    created_at INTEGER NOT NULL,
                     PRIMARY KEY (peer_id, msg_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_captured_media_status_next ON captured_media (status, next_attempt_at);
@@ -137,7 +138,7 @@ public class MessageCache
             if (version == 0)
             {
                 using var setVersionCmd = conn.CreateCommand();
-                setVersionCmd.CommandText = "PRAGMA user_version = 4;";
+                setVersionCmd.CommandText = "PRAGMA user_version = 5;";
                 setVersionCmd.ExecuteNonQuery();
             }
             else
@@ -201,6 +202,7 @@ public class MessageCache
                             local_path TEXT,
                             sha256 TEXT,
                             size INTEGER,
+                            created_at INTEGER NOT NULL,
                             PRIMARY KEY (peer_id, msg_id)
                         );
                         CREATE INDEX IF NOT EXISTS idx_captured_media_status_next ON captured_media (status, next_attempt_at);
@@ -210,6 +212,56 @@ public class MessageCache
                     upgradeTx3.Commit();
                     version = 4;
                 }
+
+                if (version == 4)
+                {
+                    using var upgradeTx4 = conn.BeginTransaction();
+                    using var upgradeCmd4 = conn.CreateCommand();
+                    upgradeCmd4.Transaction = upgradeTx4;
+
+                    long now = (_timeProvider ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
+
+                    // Tuzoq: Initialize CREATE TABLE IF NOT EXISTS ni versiya
+                    // qadamlaridan oldin yurgizadi, shuning uchun v1-v3 bazalar
+                    // yangi ta'rifni allaqachon olgan bo'lishi mumkin.
+                    // Faqat created_at ustuni yo'q bo'lsa ALTER TABLE qilinadi.
+                    bool hasCreatedAt = false;
+                    using (var infoCmd = conn.CreateCommand())
+                    {
+                        infoCmd.Transaction = upgradeTx4;
+                        infoCmd.CommandText = "PRAGMA table_info(captured_media);";
+                        using var reader = infoCmd.ExecuteReader();
+                        while (reader.Read())
+                        {
+                            var colName = reader.GetString(1);
+                            if (string.Equals(colName, "created_at", StringComparison.OrdinalIgnoreCase))
+                            {
+                                hasCreatedAt = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!hasCreatedAt)
+                    {
+                        upgradeCmd4.CommandText = $@"
+                            ALTER TABLE captured_media ADD COLUMN created_at INTEGER NOT NULL DEFAULT {now};
+                            PRAGMA user_version = 5;
+                        ";
+                        upgradeCmd4.ExecuteNonQuery();
+                    }
+                    else
+                    {
+                        upgradeCmd4.CommandText = $@"
+                            UPDATE captured_media SET created_at = {now} WHERE created_at = 0;
+                            PRAGMA user_version = 5;
+                        ";
+                        upgradeCmd4.ExecuteNonQuery();
+                    }
+
+                    upgradeTx4.Commit();
+                    version = 5;
+                }
             }
 
             // Yangi ustunga bog'liq indeks migratsiyadan KEYIN.
@@ -217,6 +269,12 @@ public class MessageCache
             {
                 retryIdxCmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_capture_outbox_retry ON capture_outbox (next_retry_at);";
                 retryIdxCmd.ExecuteNonQuery();
+            }
+
+            using (var mediaCreatedIdxCmd = conn.CreateCommand())
+            {
+                mediaCreatedIdxCmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_captured_media_created_at ON captured_media (created_at);";
+                mediaCreatedIdxCmd.ExecuteNonQuery();
             }
         }
         catch (SqliteException ex)
@@ -1617,8 +1675,9 @@ public class MessageCache
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
                 INSERT OR IGNORE INTO captured_media
-                (peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, size)
-                VALUES (@peer_id, @msg_id, @chat_id, @message_id, @content_type, 'pending', 0, @next_attempt_at, @size);";
+                (peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, size, created_at)
+                VALUES (@peer_id, @msg_id, @chat_id, @message_id, @content_type, 'pending', 0, @next_attempt_at, @size, @created_at);";
+            long now = (_timeProvider ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
             cmd.Parameters.AddWithValue("@peer_id", peerId);
             cmd.Parameters.AddWithValue("@msg_id", msgId);
             cmd.Parameters.AddWithValue("@chat_id", chatId);
@@ -1626,6 +1685,7 @@ public class MessageCache
             cmd.Parameters.AddWithValue("@content_type", contentType);
             cmd.Parameters.AddWithValue("@next_attempt_at", (object?)nextAttemptAt ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@size", (object?)size ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@created_at", now);
             return cmd.ExecuteNonQuery() > 0;
         }
         catch (SqliteException ex)
@@ -1641,7 +1701,7 @@ public class MessageCache
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size
+                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size, created_at
                 FROM captured_media
                 WHERE peer_id = @peer_id AND msg_id = @msg_id;";
             cmd.Parameters.AddWithValue("@peer_id", peerId);
@@ -1666,7 +1726,7 @@ public class MessageCache
             using var conn = OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = @"
-                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size
+                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size, created_at
                 FROM captured_media
                 WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= @now)
                 ORDER BY (next_attempt_at IS NULL) DESC, next_attempt_at ASC, attempts ASC
@@ -1683,6 +1743,233 @@ public class MessageCache
         {
             throw new MessageCacheException("Failed to get due pending media.", ex);
         }
+    }
+
+    public virtual void DeferMediaRow(string peerId, long msgId, long nextAttemptAt)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE captured_media
+                SET next_attempt_at = @next_attempt_at
+                WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.Parameters.AddWithValue("@next_attempt_at", nextAttemptAt);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to defer media row.", ex);
+        }
+    }
+
+    public virtual long GetDownloadedMediaTotalSize()
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COALESCE(SUM(size), 0) FROM captured_media WHERE status = 'downloaded' AND local_path IS NOT NULL;";
+            return Convert.ToInt64(cmd.ExecuteScalar());
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to calculate downloaded media size.", ex);
+        }
+    }
+
+    public virtual bool IsMediaReferenced(string localPath)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT 1 FROM captured_media WHERE local_path = @local_path LIMIT 1;";
+            cmd.Parameters.AddWithValue("@local_path", localPath);
+            return cmd.ExecuteScalar() != null;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to check if media is referenced.", ex);
+        }
+    }
+
+    public virtual (int RowsPruned, int FilesDeleted) ApplyMediaRetention(
+        long now,
+        int retentionDays,
+        CustomSync.Capture.Media.MediaStore mediaStore,
+        Microsoft.Extensions.Logging.ILogger? logger = null)
+    {
+        var filesToDelete = new List<string>();
+        int rowsPruned = 0;
+        long cutoff = now - (retentionDays * 86400L);
+
+        try
+        {
+            using var conn = OpenConnection();
+            using var tx = conn.BeginTransaction();
+
+            var candidates = new List<(string PeerId, long MsgId, long ChatId, long MessageId, string Status, string? LocalPath, long CreatedAt)>();
+            using (var readCmd = conn.CreateCommand())
+            {
+                readCmd.Transaction = tx;
+                readCmd.CommandText = @"
+                    SELECT peer_id, msg_id, chat_id, message_id, status, local_path, created_at
+                    FROM captured_media;";
+                using var reader = readCmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    candidates.Add((
+                        reader.GetString(0),
+                        reader.GetInt64(1),
+                        reader.GetInt64(2),
+                        reader.GetInt64(3),
+                        reader.GetString(4),
+                        reader.IsDBNull(5) ? null : reader.GetString(5),
+                        reader.GetInt64(6)));
+                }
+            }
+
+            foreach (var row in candidates)
+            {
+                // Rule 4 (OVERRIDE): Media of a pending deletion is never lost.
+                // A captured_media row whose deleted record is still in capture_outbox is never pruned
+                // and its file is never deleted - whatever its status or age.
+                bool hasPendingDeletedOutbox = false;
+                using (var outboxCmd = conn.CreateCommand())
+                {
+                    outboxCmd.Transaction = tx;
+                    outboxCmd.CommandText = @"
+                        SELECT 1 FROM capture_outbox
+                        WHERE kind = 'deleted' AND peer_id = @peer_id AND msg_id = @msg_id
+                        LIMIT 1;";
+                    outboxCmd.Parameters.AddWithValue("@peer_id", row.PeerId);
+                    outboxCmd.Parameters.AddWithValue("@msg_id", row.MsgId);
+                    hasPendingDeletedOutbox = outboxCmd.ExecuteScalar() != null;
+                }
+
+                if (hasPendingDeletedOutbox)
+                {
+                    continue; // Rule 4: untouched
+                }
+
+                // Check if message is in message_cache
+                bool isMessageCached = false;
+                using (var cacheCmd = conn.CreateCommand())
+                {
+                    cacheCmd.Transaction = tx;
+                    cacheCmd.CommandText = @"
+                        SELECT 1 FROM message_cache
+                        WHERE chat_id = @chat_id AND message_id = @message_id
+                        LIMIT 1;";
+                    cacheCmd.Parameters.AddWithValue("@chat_id", row.ChatId);
+                    cacheCmd.Parameters.AddWithValue("@message_id", row.MessageId);
+                    isMessageCached = cacheCmd.ExecuteScalar() != null;
+                }
+
+                bool isOrphan = !isMessageCached;
+
+                if (row.Status is "uploaded" or "failed" or "skipped")
+                {
+                    // Rule 1: uploaded, failed, skipped: the file is deleted, local_path set to NULL;
+                    // the row itself is deleted once created_at < now - window.
+                    if (!string.IsNullOrEmpty(row.LocalPath))
+                    {
+                        if (mediaStore.IsManaged(row.LocalPath))
+                        {
+                            filesToDelete.Add(row.LocalPath);
+                        }
+                        using var updateCmd = conn.CreateCommand();
+                        updateCmd.Transaction = tx;
+                        updateCmd.CommandText = @"
+                            UPDATE captured_media SET local_path = NULL
+                            WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+                        updateCmd.Parameters.AddWithValue("@peer_id", row.PeerId);
+                        updateCmd.Parameters.AddWithValue("@msg_id", row.MsgId);
+                        updateCmd.ExecuteNonQuery();
+                    }
+
+                    if (row.CreatedAt < cutoff)
+                    {
+                        using var delCmd = conn.CreateCommand();
+                        delCmd.Transaction = tx;
+                        delCmd.CommandText = @"
+                            DELETE FROM captured_media
+                            WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+                        delCmd.Parameters.AddWithValue("@peer_id", row.PeerId);
+                        delCmd.Parameters.AddWithValue("@msg_id", row.MsgId);
+                        delCmd.ExecuteNonQuery();
+                        rowsPruned++;
+                    }
+                }
+                else if (row.Status == "pending")
+                {
+                    // Rule 2: pending: deleted when created_at < now - window, or when orphan.
+                    if (row.CreatedAt < cutoff || isOrphan)
+                    {
+                        using var delCmd = conn.CreateCommand();
+                        delCmd.Transaction = tx;
+                        delCmd.CommandText = @"
+                            DELETE FROM captured_media
+                            WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+                        delCmd.Parameters.AddWithValue("@peer_id", row.PeerId);
+                        delCmd.Parameters.AddWithValue("@msg_id", row.MsgId);
+                        delCmd.ExecuteNonQuery();
+                        rowsPruned++;
+                    }
+                }
+                else if (row.Status == "downloaded")
+                {
+                    // Rule 3: downloaded and orphan: file and row deleted
+                    if (isOrphan)
+                    {
+                        if (!string.IsNullOrEmpty(row.LocalPath) && mediaStore.IsManaged(row.LocalPath))
+                        {
+                            filesToDelete.Add(row.LocalPath);
+                        }
+
+                        using var delCmd = conn.CreateCommand();
+                        delCmd.Transaction = tx;
+                        delCmd.CommandText = @"
+                            DELETE FROM captured_media
+                            WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+                        delCmd.Parameters.AddWithValue("@peer_id", row.PeerId);
+                        delCmd.Parameters.AddWithValue("@msg_id", row.MsgId);
+                        delCmd.ExecuteNonQuery();
+                        rowsPruned++;
+                    }
+                }
+            }
+
+            tx.Commit();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to apply media retention.", ex);
+        }
+
+        // Rule 1, 3: Delete files only AFTER transaction commits
+        int filesDeleted = 0;
+        foreach (var file in filesToDelete)
+        {
+            try
+            {
+                if (File.Exists(file))
+                {
+                    File.Delete(file);
+                    filesDeleted++;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning("Failed to delete media file during retention ({ErrorType}).", ex.GetType().Name);
+            }
+        }
+
+        return (rowsPruned, filesDeleted);
     }
 
     public virtual void UpdateMediaDownloaded(string peerId, long msgId, string localPath, string sha256, long size)
@@ -1793,7 +2080,8 @@ public class MessageCache
             NextAttemptAt: reader.IsDBNull(7) ? null : reader.GetInt64(7),
             LocalPath: reader.IsDBNull(8) ? null : reader.GetString(8),
             Sha256: reader.IsDBNull(9) ? null : reader.GetString(9),
-            Size: reader.IsDBNull(10) ? null : reader.GetInt64(10));
+            Size: reader.IsDBNull(10) ? null : reader.GetInt64(10),
+            CreatedAt: reader.GetInt64(11));
     }
 }
 
@@ -1810,4 +2098,5 @@ public record CapturedMediaRow(
     long? NextAttemptAt,
     string? LocalPath,
     string? Sha256,
-    long? Size);
+    long? Size,
+    long CreatedAt);

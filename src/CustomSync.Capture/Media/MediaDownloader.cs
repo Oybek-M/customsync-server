@@ -11,8 +11,14 @@ public class MediaDownloader
     private readonly ITdClient _client;
     private readonly MessageCache _cache;
     private readonly MediaCaptureConfig _config;
+    private readonly MediaStore _mediaStore;
+    private readonly IDiskSpaceProbe _diskSpaceProbe;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<MediaDownloader>? _logger;
+
+    private DateTimeOffset? _lastDiskGuardWarningTime;
+    private bool _warnedUnknownFreeSpace;
+
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
 
@@ -20,14 +26,33 @@ public class MediaDownloader
         ITdClient client,
         MessageCache cache,
         MediaCaptureConfig config,
+        MediaStore mediaStore,
+        IDiskSpaceProbe diskSpaceProbe,
         TimeProvider? timeProvider = null,
         ILogger<MediaDownloader>? logger = null)
     {
         _client = client;
         _cache = cache;
         _config = config;
+        _mediaStore = mediaStore;
+        _diskSpaceProbe = diskSpaceProbe;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
+    }
+
+    public MediaDownloader(
+        ITdClient client,
+        MessageCache cache,
+        MediaCaptureConfig config,
+        TimeProvider? timeProvider = null,
+        ILogger<MediaDownloader>? logger = null)
+        : this(client, cache, config, new MediaStore(config.StorageDirectory), new AmpleDiskSpaceProbe(), timeProvider, logger)
+    {
+    }
+
+    private class AmpleDiskSpaceProbe : IDiskSpaceProbe
+    {
+        public long? GetAvailableFreeBytes(string path) => 100L * 1024 * 1024 * 1024; // 100 GB
     }
 
     public virtual void Start(CancellationToken ct = default)
@@ -82,6 +107,44 @@ public class MediaDownloader
 
     private async Task ProcessRowAsync(CapturedMediaRow row, long now, CancellationToken ct)
     {
+        // Disk guard, checked before any TDLib request for the row
+        long rowSize = row.Size.HasValue && row.Size.Value > 0 ? row.Size.Value : 0;
+        long? freeBytes = _diskSpaceProbe.GetAvailableFreeBytes(_mediaStore.StorageDirectory);
+        if (!freeBytes.HasValue && !_warnedUnknownFreeSpace)
+        {
+            _warnedUnknownFreeSpace = true;
+            _logger?.LogWarning("Cannot determine free disk space for media store filesystem.");
+        }
+
+        bool diskTooFull = freeBytes.HasValue && (freeBytes.Value - rowSize) < _config.MinFreeBytes;
+        long currentDownloadedTotal = _cache.GetDownloadedMediaTotalSize();
+        bool budgetExceeded = (currentDownloadedTotal + rowSize) > _config.MaxTotalBytes;
+
+        if (diskTooFull || budgetExceeded)
+        {
+            // Defer the row by 300 seconds without changing attempts
+            _cache.DeferMediaRow(row.PeerId, row.MsgId, now + 300);
+
+            var nowUtc = _timeProvider.GetUtcNow();
+            if (_lastDiskGuardWarningTime == null || (nowUtc - _lastDiskGuardWarningTime.Value) >= TimeSpan.FromMinutes(10))
+            {
+                _lastDiskGuardWarningTime = nowUtc;
+                if (diskTooFull)
+                {
+                    _logger?.LogWarning(
+                        "Deferring media download due to low disk space (free: {FreeMB:F1}MB, needed min: {MinFreeMB:F1}MB).",
+                        freeBytes!.Value / (1024.0 * 1024.0), _config.MinFreeBytes / (1024.0 * 1024.0));
+                }
+                else
+                {
+                    _logger?.LogWarning(
+                        "Deferring media download due to media total size budget (current: {CurrentMB:F1}MB, max: {MaxMB:F1}MB).",
+                        currentDownloadedTotal / (1024.0 * 1024.0), _config.MaxTotalBytes / (1024.0 * 1024.0));
+                }
+            }
+            return;
+        }
+
         try
         {
             var req = JsonSerializer.Serialize(new Dictionary<string, object?>
@@ -172,13 +235,35 @@ public class MediaDownloader
                     return;
                 }
 
-                byte[] hashBytes;
-                using (var stream = File.OpenRead(localPath))
+                try
                 {
-                    hashBytes = await SHA256.HashDataAsync(stream, ct);
+                    var (storePath, sha256, copiedSize) = await _mediaStore.CopyInAsync(row.PeerId, row.MsgId, localPath, _config.MaxBytes, ct);
+                    _cache.UpdateMediaDownloaded(row.PeerId, row.MsgId, storePath, sha256, copiedSize);
                 }
-                var sha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
-                _cache.UpdateMediaDownloaded(row.PeerId, row.MsgId, localPath, sha256, fi.Length);
+                catch (MediaFileTooLargeException)
+                {
+                    _logger?.LogInformation("Media file exceeded MaxBytes during copy; marked skipped.");
+                    _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
+                    return;
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError("Failed to copy media into store ({ErrorType}).", ex.GetType().Name);
+                    int attempts = row.Attempts + 1;
+                    if (attempts >= _config.MaxAttempts)
+                    {
+                        _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, null);
+                    }
+                    else
+                    {
+                        long nextAttempt = now + CalculateBackoff(attempts);
+                        _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, nextAttempt);
+                    }
+                }
             }
             else
             {

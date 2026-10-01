@@ -1189,7 +1189,7 @@ public class CaptureSyncPullTests : IDisposable
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "PRAGMA user_version;";
             var version = Convert.ToInt32(cmd.ExecuteScalar());
-            Assert.Equal(4, version);
+            Assert.Equal(5, version);
         }
 
         // Check all existing rows are intact

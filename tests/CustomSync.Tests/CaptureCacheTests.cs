@@ -65,7 +65,7 @@ public class CaptureCacheTests : IDisposable
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA user_version;";
         var version = Convert.ToInt32(cmd.ExecuteScalar());
-        Assert.Equal(4, version);
+        Assert.Equal(5, version);
     }
 
     [Fact]
@@ -576,7 +576,7 @@ public class CaptureCacheTests : IDisposable
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "PRAGMA user_version;";
-            Assert.Equal(4, Convert.ToInt32(cmd.ExecuteScalar()));
+            Assert.Equal(5, Convert.ToInt32(cmd.ExecuteScalar()));
         }
 
         // 2. All existing rows intact

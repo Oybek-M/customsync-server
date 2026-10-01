@@ -61,6 +61,23 @@ public class Worker : BackgroundService
         // native kutubxonaga P/Invoke qiladi, ya'ni kutubxona yo'q mashinada
         // konstruktor inyeksiyasi preflight'gacha xostni yiqitardi.
         var client = _services.GetRequiredService<ITdClient>();
+
+        // Set log verbosity level before authorization
+        try
+        {
+            int logVerbosity = _configuration.GetValue<int?>("Capture:Tdlib:LogVerbosity") ?? 1;
+            var verbosityReq = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["@type"] = "setLogVerbosityLevel",
+                ["new_verbosity_level"] = logVerbosity
+            });
+            client.Execute(verbosityReq);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Failed to set TDLib log verbosity level: {ExceptionType}", ex.GetType().Name);
+        }
+
         var authenticator = _services.GetRequiredService<TdAuthenticator>();
         var gate = new AuthorizationGate(client, authenticator,
             _services.GetService<ILogger<AuthorizationGate>>());
@@ -86,6 +103,7 @@ public class Worker : BackgroundService
         }
 
         _services.GetRequiredService<CustomSync.Capture.Media.MediaDownloader>().Start(stoppingToken);
+        _services.GetRequiredService<CustomSync.Capture.Maintenance.StorageMaintenance>().Start(stoppingToken);
 
         _logger.LogInformation("Capture service authorized and running.");
 

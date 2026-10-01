@@ -2,6 +2,7 @@
 # "Environment=ASPNETCORE_URLS=http://127.0.0.1:5080\r" ni o'qiydi va
 # \r qiymatning bir qismiga aylanadi -- Kestrel bunday manzilda
 # tinglay olmaydi. Nginx ham CRLF da tushunarsiz parse xatosi beradi.
-deploy/customsync.service    text eol=lf
-deploy/nginx-customsync.conf text eol=lf
-*.sh                         text eol=lf
+deploy/customsync.service        text eol=lf
+deploy/customsync-capture.service text eol=lf
+deploy/nginx-customsync.conf     text eol=lf
+*.sh                             text eol=lf

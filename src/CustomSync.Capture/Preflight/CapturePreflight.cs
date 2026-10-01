@@ -248,20 +248,39 @@ public static class CapturePreflight
         }
 
         var maxBytesStr = config["Capture:Media:MaxBytes"];
+        long effectiveMaxBytes = 10485760;
         if (!string.IsNullOrEmpty(maxBytesStr))
         {
             if (!long.TryParse(maxBytesStr, out var mb) || mb < 1 || mb > 26214400)
             {
                 errors.Add("Capture:Media:MaxBytes must be an integer between 1 and 26214400.");
             }
+            else
+            {
+                effectiveMaxBytes = mb;
+            }
         }
 
+        var maxTotalBytesStr = config["Capture:Media:MaxTotalBytes"];
+        if (!string.IsNullOrEmpty(maxTotalBytesStr))
+        {
+            if (!long.TryParse(maxTotalBytesStr, out var mtb) || mtb < effectiveMaxBytes || mtb > 1099511627776L)
+            {
+                errors.Add($"Capture:Media:MaxTotalBytes must be an integer between {effectiveMaxBytes} and 1099511627776.");
+            }
+        }
+
+        int effectiveDownloadTimeout = 60;
         var mediaTimeoutStr = config["Capture:Media:DownloadTimeoutSeconds"];
         if (!string.IsNullOrEmpty(mediaTimeoutStr))
         {
             if (!int.TryParse(mediaTimeoutStr, out var to) || to <= 0)
             {
                 errors.Add("Capture:Media:DownloadTimeoutSeconds must be a positive integer.");
+            }
+            else
+            {
+                effectiveDownloadTimeout = to;
             }
         }
 
@@ -274,7 +293,156 @@ public static class CapturePreflight
             }
         }
 
+        // 9. Storage maintenance configuration check
+        var minFreeBytesStr = config["Capture:Storage:MinFreeBytes"];
+        if (!string.IsNullOrEmpty(minFreeBytesStr))
+        {
+            if (!long.TryParse(minFreeBytesStr, out var mfb) || mfb < 0)
+            {
+                errors.Add("Capture:Storage:MinFreeBytes must be a non-negative integer.");
+            }
+        }
+
+        var maintIntervalStr = config["Capture:Storage:MaintenanceIntervalMinutes"];
+        if (!string.IsNullOrEmpty(maintIntervalStr))
+        {
+            if (!int.TryParse(maintIntervalStr, out var mim) || mim < 1 || mim > 1440)
+            {
+                errors.Add("Capture:Storage:MaintenanceIntervalMinutes must be an integer between 1 and 1440.");
+            }
+        }
+
+        var tdFilesMaxBytesStr = config["Capture:Storage:TdlibFilesMaxBytes"];
+        if (!string.IsNullOrEmpty(tdFilesMaxBytesStr))
+        {
+            if (!long.TryParse(tdFilesMaxBytesStr, out var tfmb) || tfmb < 16777216L || tfmb > 1099511627776L)
+            {
+                errors.Add("Capture:Storage:TdlibFilesMaxBytes must be an integer between 16777216 and 1099511627776.");
+            }
+        }
+
+        var tdFilesTtlStr = config["Capture:Storage:TdlibFilesTtlHours"];
+        if (!string.IsNullOrEmpty(tdFilesTtlStr))
+        {
+            if (!int.TryParse(tdFilesTtlStr, out var ttlh) || ttlh < 1 || ttlh > 8760)
+            {
+                errors.Add("Capture:Storage:TdlibFilesTtlHours must be an integer between 1 and 8760.");
+            }
+        }
+
+        var tdImmunityStr = config["Capture:Storage:TdlibImmunitySeconds"];
+        if (!string.IsNullOrEmpty(tdImmunityStr))
+        {
+            if (!int.TryParse(tdImmunityStr, out var imm) || imm < 600 || imm > 604800)
+            {
+                errors.Add("Capture:Storage:TdlibImmunitySeconds must be an integer between 600 and 604800.");
+            }
+            else if (imm < 2 * effectiveDownloadTimeout)
+            {
+                errors.Add($"Capture:Storage:TdlibImmunitySeconds ({imm}) must be at least twice Capture:Media:DownloadTimeoutSeconds ({2 * effectiveDownloadTimeout}).");
+            }
+        }
+
+        var logVerbosityStr = config["Capture:Tdlib:LogVerbosity"];
+        if (!string.IsNullOrEmpty(logVerbosityStr))
+        {
+            if (!int.TryParse(logVerbosityStr, out var lv) || lv < 0 || lv > 2)
+            {
+                errors.Add("Capture:Tdlib:LogVerbosity must be an integer between 0 and 2.");
+            }
+        }
+
+        // StorageDirectory check when media is enabled
+        bool isMediaEnabled = false;
+        if (!string.IsNullOrEmpty(mediaEnabledStr))
+        {
+            bool.TryParse(mediaEnabledStr, out isMediaEnabled);
+        }
+
+        if (isMediaEnabled)
+        {
+            var storageDir = config["Capture:Media:StorageDirectory"];
+            if (string.IsNullOrWhiteSpace(storageDir))
+            {
+                storageDir = "/var/lib/customsync-capture/media";
+            }
+
+            if (!Path.IsPathRooted(storageDir))
+            {
+                errors.Add($"Capture:Media:StorageDirectory '{storageDir}' must be an absolute (rooted) path.");
+            }
+            else
+            {
+                var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                string fullStore = NormalizeDirPath(storageDir);
+
+                CheckConflictingDir(config["Telegram:DatabaseDirectory"], "Telegram:DatabaseDirectory", fullStore, comparison, errors);
+                CheckConflictingDir(config["Telegram:FilesDirectory"], "Telegram:FilesDirectory", fullStore, comparison, errors);
+
+                CheckConflictingFile(cacheDbPath, "Capture:CacheDatabasePath", fullStore, comparison, errors);
+                CheckConflictingFile(config["Capture:Sync:StatePath"] ?? "/var/lib/customsync-capture/device-state.json", "Capture:Sync:StatePath", fullStore, comparison, errors);
+                CheckConflictingFile(config["Capture:Sync:MasterKeyPath"] ?? "/var/lib/customsync-capture/master.key", "Capture:Sync:MasterKeyPath", fullStore, comparison, errors);
+
+                if (!errors.Any(e => e.Contains("Capture:Media:StorageDirectory")))
+                {
+                    try
+                    {
+                        var store = new CustomSync.Capture.Media.MediaStore(storageDir);
+                        store.EnsureDirectoryCreated();
+                        var testFile = Path.Combine(storageDir, $".preflight_test_{Guid.NewGuid():N}");
+                        File.WriteAllText(testFile, "test");
+                        File.Delete(testFile);
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add($"Capture:Media:StorageDirectory '{storageDir}' cannot be created or is not writable: {ex.Message}");
+                    }
+                }
+            }
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
+    }
+
+    private static string NormalizeDirPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    }
+
+    private static void CheckConflictingDir(string? otherDir, string configName, string fullStore, StringComparison comparison, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(otherDir)) return;
+        try
+        {
+            string fullOther = NormalizeDirPath(otherDir);
+            if (string.Equals(fullStore, fullOther, comparison) ||
+                fullStore.StartsWith(fullOther + Path.DirectorySeparatorChar, comparison) ||
+                fullOther.StartsWith(fullStore + Path.DirectorySeparatorChar, comparison))
+            {
+                errors.Add($"Capture:Media:StorageDirectory must not be equal to, inside, or contain {configName} ('{otherDir}').");
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static void CheckConflictingFile(string? filePath, string configName, string fullStore, StringComparison comparison, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return;
+        try
+        {
+            string fullFile = Path.GetFullPath(filePath);
+            if (string.Equals(fullStore, fullFile, comparison) ||
+                fullFile.StartsWith(fullStore + Path.DirectorySeparatorChar, comparison))
+            {
+                errors.Add($"Capture:Media:StorageDirectory must not contain {configName} file ('{filePath}').");
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static void CheckDirectory(string? dirPath, string name, List<string> errors)

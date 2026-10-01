@@ -42,10 +42,18 @@ public static class CaptureHandlerRegistration
                 : new ActivityScopeEvaluator(null, null, false, settingsSource);
         });
 
+        services.TryAddSingleton<IDiskSpaceProbe, SystemDiskSpaceProbe>();
+
         services.TryAddSingleton<MediaCaptureConfig>(sp =>
         {
             var config = sp.GetService<IConfiguration>();
             return MediaCaptureConfig.From(config);
+        });
+
+        services.TryAddSingleton<MediaStore>(sp =>
+        {
+            var cfg = sp.GetRequiredService<MediaCaptureConfig>();
+            return new MediaStore(cfg.StorageDirectory);
         });
 
         services.TryAddSingleton<MediaDownloader>(sp =>
@@ -54,8 +62,27 @@ public static class CaptureHandlerRegistration
                 sp.GetRequiredService<ITdClient>(),
                 sp.GetRequiredService<MessageCache>(),
                 sp.GetRequiredService<MediaCaptureConfig>(),
+                sp.GetRequiredService<MediaStore>(),
+                sp.GetRequiredService<IDiskSpaceProbe>(),
                 sp.GetService<TimeProvider>(),
                 sp.GetService<ILogger<MediaDownloader>>());
+        });
+
+        services.TryAddSingleton<CustomSync.Capture.Maintenance.StorageMaintenance>(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            int retentionDays = CaptureCacheRegistration.ReadPositiveInt(
+                config?["Capture:CacheRetentionDays"], 30);
+
+            return new CustomSync.Capture.Maintenance.StorageMaintenance(
+                sp.GetRequiredService<MessageCache>(),
+                sp.GetRequiredService<MediaStore>(),
+                sp.GetRequiredService<ITdClient>(),
+                sp.GetRequiredService<IDiskSpaceProbe>(),
+                sp.GetRequiredService<MediaCaptureConfig>(),
+                retentionDays,
+                sp.GetService<ILogger<CustomSync.Capture.Maintenance.StorageMaintenance>>(),
+                timeProvider: sp.GetService<TimeProvider>());
         });
 
         services.AddSingleton(sp =>

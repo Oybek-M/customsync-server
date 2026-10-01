@@ -1,0 +1,57 @@
+[Unit]
+Description=CustomSync capture service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# DIQQAT: Type=notify EMAS. Xizmat Microsoft.Extensions.Hosting.Systemd
+# paketini ishlatmaydi, ya'ni systemd'ga "tayyorman" signalini hech qachon
+# yubormaydi. Type=notify bo'lsa systemd TimeoutStartSec kutadi va jarayonni o'ldiradi.
+Type=exec
+User=customsync-capture
+Group=customsync-capture
+WorkingDirectory=/var/www/customsync-capture
+ExecStart=/usr/bin/dotnet /var/www/customsync-capture/CustomSync.Capture.dll
+Restart=always
+RestartSec=15
+
+# DIQQAT: ASPNETCORE_ENVIRONMENT EMAS. Capture xizmati generic host
+# (Microsoft.Extensions.Hosting) ishlatadi, u esa ASPNETCORE_ENVIRONMENT ni
+# o'qimaydi. Shuning uchun DOTNET_ENVIRONMENT ishlatiladi.
+Environment=DOTNET_ENVIRONMENT=Production
+Environment=LD_LIBRARY_PATH=/var/www/customsync-capture
+
+StandardOutput=journal
+StandardError=journal
+
+MemoryMax=1200M
+MemoryHigh=900M
+CPUQuota=100%
+UMask=0077
+
+StateDirectory=customsync-capture
+StateDirectoryMode=0700
+
+# ProtectSystem=strict butun fayl tizimini faqat-o'qish qiladi.
+# TDLib ma'lumotlar bazasi, fayllar, SQLite kesh, media do'koni va qurilma holati
+# /var/lib/customsync-capture ostida joylashadi.
+ReadWritePaths=/var/lib/customsync-capture
+
+# Qattiqlashtirish (Hardening)
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+
+# DIQQAT: MemoryDenyWriteExecute QO'LLANILMAYDI. U .NET JIT kompilyatorini buzadi.
+
+[Install]
+WantedBy=multi-user.target

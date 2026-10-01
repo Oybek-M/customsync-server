@@ -1011,7 +1011,7 @@ public class CaptureSyncTests
             using var vCmd = conn.CreateCommand();
             vCmd.CommandText = "PRAGMA user_version;";
             var v = Convert.ToInt32(vCmd.ExecuteScalar());
-            Assert.Equal(4, v); // Upgraded to v4!
+            Assert.Equal(5, v); // Upgraded to v5!
         }
 
         var eligible = cache.GetEligibleOutboxRows(10, 200);

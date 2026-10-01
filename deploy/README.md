@@ -171,3 +171,40 @@ ikkinchisi foydasiz.
 **MUHIM:** `/backup` VPS ning O'ZIDA bo'lmasligi kerak — VPS yo'qolsa
 zaxira ham yo'qoladi. Uni boshqa xostga ko'chiring. Plan 04 buni
 avtomatlashtiradi.
+
+---
+
+## Capture xizmati (customsync-capture)
+
+⚠️ **OGOHLANTIRISH: Birgalikdagi xavfsizlik auditi (joint security audit) yakunlanmaguncha VPS ga deploy qilish TO'XTATILGAN.** Capture xizmati egasining Telegram akkauntiga to'liq kirish huquqiga va master kalitga ega.
+
+### 1. Alohida tizim foydalanuvchisi va StateDirectory
+
+Backend API ochiq internetga qaragan, Capture xizmati esa maxfiy sessiya va kalitlarni saqlaydi. Shuning uchun ular bir-biridan ajratilgan:
+
+```bash
+sudo useradd -r -s /bin/false customsync-capture
+```
+
+`customsync-capture.service` da `StateDirectory=customsync-capture` va `StateDirectoryMode=0700` sozlangan. Bu systemd tomonidan `/var/lib/customsync-capture` katalogini faqat `customsync-capture` foydalanuvchisi uchun to'liq huquq (0700) bilan xavfsiz yaratilishini ta'minlaydi.
+
+### 2. CLI buyruqlari (--login, --enroll, --set-key)
+
+Barcha sozlash buyruqlarini FAQAT `customsync-capture` foydalanuvchisi nomidan bajaring:
+
+```bash
+# Telegram sessiyasiga kirish:
+sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
+    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --login
+
+# Sinxronizatsiya qurilmasi sifatida ro'yxatdan o'tish:
+sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
+    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --enroll <kod>
+
+# Master kalitni o'rnatish:
+sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
+    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --set-key <kalit>
+```
+
+Root sifatida bajarilsa fayllar root egaligida yaratilib qoladi va keyinchalik xizmat ularni o'qiy olmaydi.
+
