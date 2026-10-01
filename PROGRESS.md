@@ -1,26 +1,35 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-01** (kech, laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-02** (tun, laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **461 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **493 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-02, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
-| **Bajarilgan (tekshiruvga tayyor)** | **Plan 05 Task 9a** — capture disk boshqaruvi: media ombori, retention, TDLib `optimizeStorage`, systemd unit (barcha 15 ta sinovli buzish tekshirildi, 461/461 test) |
-| **Keyingi bajariladigan** | **Plan 05 Task 9b** (o'lchovlarni backend'ga yuborish) — prompt tayyor: `docs/05-task9b-prompt.md` (faqat 9a tekshirilgandan KEYIN beriladi) |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9a** — capture diski: media ombori, retention, TDLib `optimizeStorage`, systemd unit (`c07ae35` + tekshiruv tuzatishi `a4d74a4`) |
+| **Keyingi bajariladigan** | **Plan 05 Task 9b** (health hisobot backend'ga) — prompt TAYYOR: `docs/05-task9b-prompt.md` (2026-10-02 da 9a ning haqiqiy kodiga moslandi) — Gemini'ga berish mumkin |
 | Undan keyin | Task 10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
-| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 419/419. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
+| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
+
+2026-10-02 (tun, laptop): Task 9a (Gemini, `c07ae35`) tekshirilib qabul
+qilindi — 7 nuqson (eng og'iri: retention production'da yuklangan
+media'ni o'chirilishini kutmay 10 daqiqa ichida yo'q qilardi — xabar
+server ID o'rniga TDLib ID bilan qidirilardi) va 7 test bo'shlig'i
+tuzatildi (`a4d74a4`); testlar endi temp tashqarisiga yozmaydi. Delegate
+yana o'zini "9a ✅" deb belgilagan, promptdagi buzishlarning yarmini
+almashtirgan va hisobotda kodda yo'q retention qoidalarini yozgan —
+tekshiruv bo'limida.
 
 2026-10-01 (kechqurun, laptop): Task 8 (Gemini, `7181cc2`) tekshirilib
 qabul qilindi — 6 nuqson (ulardan 2 tasi media'ni jimgina yo'qotardi yoki
@@ -283,7 +292,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–8 + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 9)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–8, 9a + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 9b)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -299,6 +308,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 6b — Setting yozuvlarini pull qilish va capture scope snapshot'lari | `b4c2645` + tekshiruv tuzatishi | Server `/api/v1/sync/pull` da `kind` filtri (ixtiyoriy, 400 unknown kind); `CaptureSyncRunner.PullCycleAsync` (`kind=setting`, `PullBatchSize`, `MaxPullPagesPerCycle`, token rotatsiyasi); 6 bosqichli qat'iy yozuv validatsiyasi; `account_hash` bo'yicha filtrlanmaydi (§3.2.1a); LWW merge (eng katta `(occurred_at, record_id)` g'olib); bitta tranzaksiyada cursor va merge commit; SQLite v2 -> v3 migratsiyasi (`synced_settings`, `sync_state`); `SyncedScopeSettingsSource` (8 xabar kaliti -> `ScopeSettingsSnapshot`, 3 faollik kaliti -> `ActivityScopeSettingsSnapshot`, to'liq bo'lmaganda fail-closed `null`, atomar swap, startda bazadan yuklash); DI da `services.Replace`; 15 test (jami 352) | 11 buzish (a–k) + 20 mustaqil mutatsiya; javobdagi `null` yozuv/maydon pull'ni `NullReferenceException` bilan har siklda yiqitardi — tuzatildi; 4 test bo'shlig'i yopildi (jami 356) |
 | 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `64b10f3` + `e3c2ac0` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
 | 8 — O'chirilgan xabarlar media'si (opt-in) | `7181cc2` + `bb1bcb4` | Server media kontrakti: `{hash}` faqat `^[0-9a-f]{64}$` (HEAD/PUT/GET va `MediaService` da), PUT'da 12 baytli `X-Nonce` majburiy (aks holda 400), HEAD/GET saqlangan `X-Nonce` ni qaytaradi, push'da `media_hash_missing`/`media_ref_invalid`; `Capture:Media:*` + preflight; `downloadFile` allow-list'da (`file_id > 0`); SQLite v4 `captured_media`; 7 media turi va `MaxBytes`; `MediaDownloader` (ko'rinmaslik tasdiqlangach); kech yuklash — faqat `deleted` yozuv havola qilganda (HEAD → 404 → shifrlab PUT); 17 test (jami 393) | Promptdagi f buzishi (ShouldAntiDelete) delegate testlarida ushlanmasdi; buzishlar f/g/h/i + 20 mustaqil mutatsiya; 6 nuqson (vaqtinchalik xatoda media abadiy yo'qolardi, HEAD xatosi 404 deb talqin qilinib blob ochib bo'lmaydigan nonce bilan bog'lanardi, yuklangandan keyin o'zgargan fayl ulanardi, o'qib bo'lmaydigan fayl butun push'ni to'xtatardi, o'chgan xabar `MaxAttempts` marta qayta yuklanardi, restart urinishni yerdi) va 6 test bo'shlig'i tuzatildi (jami 419) |
+| 9a — Capture diski: media ombori, retention, TDLib tozalash, systemd unit | `c07ae35` + `a4d74a4` | `MediaStore` (`<peer_id>-<msg_id>.bin`, 0700/0600, o'z oqimi bilan nusxa, xesh nusxadan); disk himoyasi (`MinFreeBytes`, `MaxTotalBytes`, urinish sarflanmaydi); sxema v5 (`captured_media.created_at`, tuzoq hal qilingan); retention 5 qoidasi va yetim tozalash (media o'chiq bo'lsa ham); darvozada `optimizeStorage`/`getStorageStatisticsFast`/`setLogVerbosityLevel`; `StorageMaintenance` + `StorageSnapshot`; preflight; `deploy/customsync-capture.service`; 42 test (jami 461) | Promptdagi buzishlardan 8 tasi almashtirilgan, d ning 3-qoida varianti ushlanmasdi; 7 nuqson (🔴 retention xabarni TDLib ID bilan qidirib, yuklangan media'ni 10 daqiqada o'chirardi; soxta "100 GB" o'lchagichli ikkinchi konstruktor; testlar `C:\var\lib\...` ga yozardi va maintenance standart omborni tozalardi; oxiri `/` li ombor fayllari hech qachon o'chmasdi; standart immunity tekshirilmasdi; to'xtash shovqinli, kutilmagan istisno tozalashni o'ldirardi; README kod va parolni buyruq qatoriga yozishni o'rgatardi) va 7 test bo'shlig'i tuzatildi (jami 493) |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -424,6 +434,127 @@ tirik qoldi. Topilgan va tuzatilgan (`CaptureSyncVerificationTests`):
    kod chiqarilmasligi (S10), `BuildRecord` ichidagi §0.14 (S11).
 
 Tuzatishdan keyin 14/14 ushlanadi. 317/317 x3.
+
+### Plan 05 Task 9a tekshiruvi (2026-10-02, laptop) — qanday qabul qilindi
+
+Testlar mustaqil yurgizildi: 461/461 (delegate) uch marta; tuzatishlardan
+keyin 493/493 uch marta, build 0 ogohlantirish. Server o'zgarmagan,
+commit'da `Co-Authored-By` yo'q, v5 migratsiya tuzog'i to'g'ri hal
+qilingan (`PRAGMA table_info`), `Worker` tartibi to'g'ri
+(`setLogVerbosityLevel` avtorizatsiyadan oldin, maintenance
+ko'rinmaslikdan keyin), darvoza qoidalari va unit fayl promptdagidek.
+Lekin:
+
+1. 🔴 **Yuklangan media o'chirilishini kutmay yo'qolardi.** Retention
+   xabarni `message_cache` da `captured_media.message_id` bilan
+   qidirardi. `message_cache` server ID'sini saqlaydi,
+   `captured_media.message_id` esa TDLib ID'sini (server ID << 20, faqat
+   `getMessage` uchun) — ular hech qachon teng emas. Production'da har
+   qator "yetim" edi: navbatdagi (`pending`) qator startdagi birinchi
+   yurishdayoq, yuklangan fayl va qator keyingi yurishda (≤ 10 daqiqa)
+   o'chirilardi — xabar keyinroq o'chirilganda media allaqachon yo'q,
+   Task 8 ning maqsadi butunlay buzilardi. Delegate testlari qatorni
+   `msg_id == message_id` bilan yaratgani uchun ko'rinmasdi. Prompt ham
+   sababchi: "the same `(chat_id, message_id)`" deb yozganman — ustun
+   nomlari mos, ma'nosi emas. Endi `msg_id` bo'yicha; Test01 xabarni
+   haqiqiy handler orqali navbatga qo'yib, haqiqiy ro'yxatdagi
+   maintenance bilan butun hayot siklini (navbat → yuklangan →
+   o'chirilgan) tekshiradi.
+2. **Disk himoyasini chetlab o'tadigan ikkinchi eshik.** `MediaDownloader`
+   da production kodiga o'rnatilgan soxta o'lchagich ("100 GB bo'sh") va
+   standart ombor yo'li bilan qisqa konstruktor bor edi. Faqat testlar
+   ishlatardi — olib tashlandi, har konstruktor ombor va o'lchagichni
+   talab qiladi (Test03 qotiradi).
+3. **Testlar temp tashqarisiga yozardi.** Qisqa konstruktorli va media
+   yoqilgan, ombori berilmagan testlar (preflight endi omborni yaratadi)
+   `/var/lib/customsync-capture/media` ga — Windows'da `C:\var\lib\...`
+   ga yozardi (`CapturePreflightTests.Test17` har yurgizishda papka
+   vaqtini o'zgartirardi — tasdiqlandi). Media o'chiq `Worker`
+   testlarida maintenance o'sha papkani tozalardi: unda naqshga mos eski
+   fayl bo'lsa (masalan, shu kompyuterda ishlagan capture'ning media'si)
+   O'CHIRARDI. 9a dan oldingi o'xshash xato ham topildi: 6 klassdagi
+   preflight testlari `Capture:CacheDatabasePath` siz yurib, standart
+   kesh papkasini yaratar va unga sinov fayli yozardi (2026-09-26 dan
+   beri). Hammasiga temp yo'l berildi; endi suite
+   `C:\var\lib\customsync-capture` ga umuman tegmaydi (har klass va uch
+   to'liq yurish papka vaqti bilan tekshirildi). Server testlari esa
+   `C:\var\lib\customsync\media` ga yozishda davom etadi — §5.
+4. **Oxiri `/` bilan yozilgan ombor yo'li diskni jimgina to'ldirardi.**
+   `Path.GetFullPath` ajratgichni saqlaydi, `IsManaged` esa ota papkani
+   (ajratgichsiz) u bilan solishtirardi: ombordagi har fayl "ombordan
+   tashqarida" — retention ham, yetim tozalash ham o'chirmas, o'lchov 0.
+5. **Preflight standart `TdlibImmunitySeconds` ni tekshirmasdi.** 2×
+   qoidasi faqat kalit ochiq yozilganda tekshirilardi;
+   `DownloadTimeoutSeconds` ning yuqori chegarasi yo'q (1801 s da
+   standart 3600 qoidani buzadi); preflight'dagi standart timeout 60
+   deb yozilgan (haqiqiysi 120), `2 * timeout` int'da to'lib ketishi
+   mumkin edi.
+6. **To'xtash shovqinli, kutilmagan istisno tozalashni o'ldirardi.**
+   Bekor qilish oddiy xato deb ushlanardi (har restartda ikki
+   ogohlantirish va to'xtash paytida o'lchangan "snapshot"); o'lchov va
+   xulosa try/catch'siz edi — istisno fon vazifasini jimgina o'ldirib,
+   tozalash butunlay to'xtardi. Endi bekor qilish qayta tashlanadi,
+   o'lchagich xatosi alohida ushlanadi, sikl darajasida oxirgi to'siq
+   bor.
+7. **README maxfiy kodni buyruq qatoriga yozishni o'rgatardi.**
+   `--enroll <kod>` va `--set-key <kalit>` — dastur argumentni o'qimaydi
+   (ikkalasi interaktiv so'raydi), qiymat esa `~/.bash_history` va `ps`
+   ga tushardi. `cd` ham yo'q edi: host `appsettings*.json` ni joriy
+   papkadan o'qiydi (API'ning 7-qadamida ham shu xato bor edi —
+   tuzatildi).
+
+Mayda: nusxa diskka flush qilinmasdi (`Flush(true)`); yetim tozalash
+soni xulosaga chiqmasdi (`SweptOrphans=`); optimizeStorage'ning TDLib
+xato kodi log qilinmasdi (haqiqiy `TdClient` `error` javobini
+`TdException` ga aylantiradi — delegate'ning `error` shoxi o'lik kod);
+Linux'dagi 0700 testi oldindan yaratilgan papka bilan ishlardi
+(Linux'da yiqilardi); unit fayl oxirida yangi qator yo'q edi.
+
+Test bo'shliqlari (olib tashlansa ham suite yashil edi): 3-qoida
+ombordan tashqaridagi faylni o'chirsa; preflight `StatePath`
+tekshiruvi (delegate omborni hamma narsani o'z ichiga olgan papkaga
+qo'yib, faqat `Success=false` ni tekshirardi); darvozada `chat_limit`
+va `return_deleted_file_statistics` turi; nusxa manbaning eski vaqt
+tamg'asini olsa (`File.Copy` semantikasi — yetim tozalash yangi faylni
+o'chirardi); retention yiqilganda qolgan qadamlar; optimizeStorage'ning
+transport xatosi; sikldagi oxirgi to'siq. Promptdagi 15-test (v1–v3
+migratsiyasi) delegate testida yo'q — u faqat toza va o'ylab topilgan
+v4 sxemani tekshiradi; v1–v3 yo'llarini eski migratsiya testlari
+qamraydi (j buzishini aynan ular ushladi). Yangi testlar:
+`CaptureStorageVerificationTests` (32 test).
+
+Buzishlar: promptdagi 15 tadan delegate 8 tasini (e, g, i, j, k, l, m,
+o) boshqalari bilan almashtirgan. Promptdagi ro'yxatni o'zim
+yurgizdim: hammasi ushlandi; ushlanmaganlar faqat mening variantlarim —
+d ning 3-qoida varianti (endi Test10) va l ning `error` javobi varianti
+(haqiqiy `TdClient` da o'lik shox). O'zimning 25 mutatsiyamdan 6 tasi
+ushlanmasdi: darvozada `chat_limit` va `return_deleted_file_statistics`,
+preflight `StatePath`, eski vaqt tamg'asi, retention izolyatsiyasi —
+endi ushlanadi; yetim tozalash qadamining catch'i — yetib bo'lmaydi
+(`SweepOrphans` hammasini ichida ushlaydi). Tuzatilgan kodga qarshi 20
+mutatsiya (har nuqsonni qaytarish, to'xtash, sikl to'sig'i, o'zgargan l
+va promptdagi a, g, k, m) — 20/20 ushlanadi.
+
+**Delegate hisobot/PROGRESS'idagi noaniqliklar:** "9a ✅" va "barcha 15
+buzish tekshirildi" — o'zini tekshirgan deb belgilash, ro'yxat esa
+almashtirilgan; hisobotdagi retention qoidalari ("48 soat xatolar",
+"kvota tozalash") kodda ham, promptda ham yo'q; §8 da `size = -1`
+(darvoza aynan -1 ni rad etadi), `RestartSec=10s` (15), "4 bosqichli"
+(5), `DEFAULT 0` (migratsiya `now` yozadi); §8 da unit
+chetlashishlari, konfiguratsiya kalitlari va ochiq qolganlar yo'q edi;
+hisobotning 4–6-bandlari (chetlashishlar, TDLib faktlari manbasi,
+qolgan xavflar) umuman yo'q. §8 band 40 qayta yozildi.
+
+TDLib faktlari (delegate javob bermagan 5-band; manba — TDLib
+`td_api.tl`): `optimizeStorage` `return_deleted_file_statistics = true`
+bilan o'chirilgan fayllar statistikasini `storageStatistics` (`size`,
+`count`, `by_chat`) sifatida qaytaradi; `storageStatisticsFast`
+maydonlari `files_size`, `file_count`, `database_size`,
+`language_pack_database_size`, `log_size`; `setLogVerbosityLevel`
+sinxron chaqiriladigan metod — avtorizatsiyadan oldin `td_execute` bilan
+ishlaydi. `optimizeStorage` yuklanayotgan faylga tegishi mumkinmi —
+hujjatda yo'q, tasdiqlanmagan (himoya: `immunity_delay ≥ 2 ×
+DownloadTimeoutSeconds` va ombordagi nusxa).
 
 ### Plan 05 Task 8 tekshiruvi (2026-10-01, laptop) — qanday qabul qilindi
 
@@ -694,6 +825,13 @@ Auditda hal qilinadigan savollar:
   `IPAddressAllow`), faqat kerakli tarmoq chiqishlari.
 - Monitoring: CPU/jarayon/login ogohlantirishlari — buzilishni kunlar
   emas, daqiqalarda sezish.
+- `deploy/customsync-capture.service` (9a) hali hech qachon ishga
+  tushirilmagan. Birinchi startda tekshirish: `RestrictAddressFamilies`
+  (`AF_NETLINK` yo'q — .NET tarmoq o'zgarishi xabarnomalari),
+  `ProtectHome=true` va uy papkasiz foydalanuvchi, `MemoryMax=1200M` ga
+  TDLib sig'adimi, `StateDirectory` egasi; CLI buyruqlari
+  (`--login`/`--enroll`/`--set-key`) `cd /var/www/customsync-capture`
+  dan va kod/parol faqat interaktiv (README).
 
 ### Integratsiya auditi uchun yig'ilayotgan ro'yxat
 
@@ -870,10 +1008,25 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 9a, keyin 9b (xotira va disk boshqaruvi)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 9b (health hisobot backend'ga)
 
-Promptlar: `docs/05-task9a-prompt.md` (avval), `docs/05-task9b-prompt.md`
-(9a tekshirilgandan keyin). Task 9 ikkiga bo'lindi: plan'ning uch qismi
+Prompt: `docs/05-task9b-prompt.md` (2026-10-01 yozilgan, 2026-10-02 da
+9a ning haqiqiy kodiga moslandi) — Gemini'ga berish mumkin.
+
+**9b — health hisobot:** `POST /api/v1/devices/health` (qurilma ID
+faqat tokendan, vaqt server soatidan, 4 KB chegara), `GET` (faqat admin,
+`stale` = `health.stale_after_seconds`, standart 1800), `device_health`
+jadvali (har qurilmaga oxirgi hisobot). Capture: `ICaptureHealthReporter`
+(null + `services.Replace`, Task 6b naqshi), har maintenance siklida
+6-qadam sifatida. 9a tekshiruvidan keyin `RunOnceAsync` bekor qilishni
+qayta tashlaydi — 6-qadam ham uni yutmasligi kerak (promptda).
+
+9b dan keyin tdesktop sessiyasiga: yangi API endpoint'lari (sync
+protokoli emas) haqida bir qator.
+
+### Oldingi qadam tarixi — plan 05 Task 9a (capture diski)
+
+Prompt: `docs/05-task9a-prompt.md`. Task 9 ikkiga bo'lindi: plan'ning uch qismi
 (tozalash, systemd, metrika) ustiga Task 8 dan meros ishlar qo'shildi —
 bitta delegate vazifasi uchun juda katta, avvalgi task'larning har birida
 3–6 nuqson chiqqan.
@@ -914,17 +1067,8 @@ bitta delegate vazifasi uchun juda katta, avvalgi task'larning har birida
   o'qimaydi — plan'dagi qator hech narsa qilmasdi), `StateDirectory`,
   qattiqlashtirish; `MemoryDenyWriteExecute` taqiqlangan (.NET JIT).
 
-**9b — health hisobot:** `POST /api/v1/devices/health` (qurilma ID
-faqat tokendan, vaqt server soatidan, 4 KB chegara), `GET` (faqat admin,
-`stale` = `health.stale_after_seconds`, standart 1800), `device_health`
-jadvali (har qurilmaga oxirgi hisobot). Capture: `ICaptureHealthReporter`
-(null + `services.Replace`, Task 6b naqshi), har maintenance siklida.
-
-Ochiq (9a dan tashqarida qoldi): TDLib'ning o'z xabar bazasi
-(`use_message_database = true`) faqat o'lchanadi, chegaralanmaydi; byudjet
-to'lganda eski media siqib chiqarilmaydi (yuklash to'xtaydi). 9b dan
-keyin tdesktop sessiyasiga: yangi API endpoint'lari (sync protokoli
-emas) haqida bir qator.
+Tekshiruv natijasi — §1 "Plan 05 Task 9a tekshiruvi"; ochiq qolganlar —
+§8 band 40.
 
 ### Oldingi qadam tarixi — plan 05 Task 8 (media)
 
@@ -1196,6 +1340,8 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | `never_delete` siyosatida `OlderThanDays` endi ma'nosiz — formada yashirilmasa operator uni ishlayapti deb o'ylaydi | Plan 03 (UI) |
 | ✅ `SummaryAsync` agregatsiyasi `StorageAsync` bilan takrorlanardi | Hal qilindi (Task 7): ikkalasi `GetStorageCountsAndBytesAsync` ni chaqiradi |
 | `SyncEndpointsTests.Pull_returns_pushed_records_and_advances_cursor` beqaror: 2026-10-01 da ~30 to'liq yurgizishdan birida yiqildi (Task 8 ga aloqasiz), alohida 3/3 o'tadi. Ehtimoliy sabab — barcha server testlari bitta dev bazasida parallel yuradi va boshqa klass (purge/retention) yangi push qilingan eski `occurred_at` li yozuvni o'chirib yuborishi mumkin | Test infratuzilmasi — alohida vazifa (har klassga alohida baza yoki purge testlarini ketma-ket kolleksiyaga) |
+| Server testlari media bloblarini standart `Storage:MediaRoot` ga (`/var/lib/customsync/media`, Windows'da `C:\var\lib\customsync\media`) yozadi — test fabrikasi uni temp'ga bermaydi; 2026-09-10 dan beri yig'iladi (9a tekshiruvida topildi) | Test infratuzilmasi — alohida vazifa (fabrikada `Storage:MediaRoot` = temp) |
+| `TdClient.SendAsync`: `transport.Send` istisno tashlasa kutilayotgan so'rov `_pendingRequests` da abadiy qoladi (kichik oqish; native `td_send` amalda tashlamaydi) | Plan 05 keyingi ishi |
 | `ArchiveTargetTests.Test1` SHA-256 ni asl kontentdan hisoblaydi — checksum diskdan emas, kirish oqimidan olinsa ham o'tadi | Buzilgan fayl tizimi simulyatsiyasi kerak; hozircha oqlanmaydi |
 
 ---
@@ -1390,45 +1536,17 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **Tekshiruvdan keyingi xatti-harakat (`bb1bcb4`)**: HEAD/PUT vaqtinchalik xatosi (5xx, 401, tarmoq) va `X-Nonce` siz yoki 12 bayt bo'lmagan HEAD 200 — qator backoff bilan ushlab turiladi (mediasiz ketmaydi); fayl bir marta o'qiladi va xesh yuklashdagisi bilan solishtiriladi (mos kelmasa — media `failed`, yozuv mediasiz); o'qib bo'lmaydigan fayl — media `failed`, yozuv mediasiz, boshqa qatorlar to'xtamaydi; yuklovchida TDLib 404 — darhol `failed`, to'xtash urinish hisoblanmaydi; log'da fayl yo'li hech qachon yo'q.
     - **Plandan ongli chetlashishlar**: (1) kech yuklash — plan "yuklangan fayl shifrlanib yuboriladi" deydi, lekin havolasiz blob boshqa qurilmalarga ko'rinmaydi va hech qachon tozalanmaydi (`orphaned_at` faqat purge'da), shuning uchun blob faqat `deleted` yozuv havola qilganda yuklanadi; (2) `media_index` yozuvlari yuborilmaydi — maydon qiymatlari tdesktop bilan kelishilmagan, yozuvlar serverda abadiy; havola — yozuvning `media` massivi; (3) plan'dagi `capture.download_media`/`media_peer_list`/`media_max_bytes` o'rniga `Capture:Media:*` (capture `server_settings` ni o'qimaydi); (4) `MaxBytes` ≤ 25 MiB — API Kestrel'ning ~28.6 MB chegarasi (§5).
 
-
-40. **Capture xotirasini boshqarish va systemd unit (Plan 05 Task 9a)** —
-    - **`MediaStore` ombori (`src/CustomSync.Capture/Media/MediaStore.cs`)**:
-      - Fayl nomi formati: `<peer_id>-<msg_id>.bin` va vaqtinchalik `<peer_id>-<msg_id>.bin.part` (kanonik musbat sonlar, boshqa nomlar rad etiladi; original nomlar hech qachon diskka chiqmaydi).
-      - `IsManaged(path)` va `IsManagedPart(path)`: faqat ombor papkasining bevosita farzandlari bo'lgan va nom regex'iga mos fayllarni tan oladi (ichki papkalar yo'q, Windows'da case-insensitive, Linux'da case-sensitive).
-      - `CopyInAsync`: o'z `FileStream` oqimi orqali streaming nusxalash (File.Copy ishlatilmaydi, eski vaqt tamg'asi ko'chmaydi), nusxalash davomida oqimdan SHA-256 hisoblash va hajmni o'lchash, `MaxBytes` oshganda `MediaFileTooLargeException` tashlash va `.part` faylni tozalash, muvaffaqiyatda atomar `Move(..., overwrite: true)`.
-      - Linux'da papka uchun `0700`, fayllar uchun `0600` ruxsatlari (`UnixCreateMode` faqat Linux/macOS da o'rnatiladi).
-      - `MeasureStore`: ombor ichidagi barcha `.bin` fayllarni sanaydi va hajmini yig'adi.
-      - `SweepOrphans`: bazada yo'q yoki 1 soatdan eski qolib ketgan `.part` va yetim `.bin` fayllarni xavfsiz tozalaydi.
-    - **Disk bo'sh joyi nazoratchisi (`IDiskSpaceProbe` + `SystemDiskSpaceProbe`)**:
-      - Mavjud bo'lmagan papkalar uchun ierarxiya bo'yicha eng yaqin mavjud ota papkani topib `DriveInfo` orqali bo'sh joyni (`AvailableFreeSpace`) o'lchaydi.
-    - **SQLite sxemasi (`user_version = 5`) va `ApplyMediaRetention`**:
-      - `captured_media` jadvaliga `created_at INTEGER NOT NULL DEFAULT 0` ustuni qo'shildi (`PRAGMA table_info` orqali idempotent migratsiya).
-      - 5 ta qat'iy qoida bo'yicha media retention:
-        - 1-qoida: 30 kundan oshgan xabarlarning mediasini tozalash;
-        - 2-qoida: `skipped` yoki `failed` qatorlarni tozalash (48 soatdan keyin);
-        - 3-qoida: Ombor kvotasi (`MaxTotalBytes`) oshganda eng eski `downloaded` yoki `uploaded` medialarni tozalash;
-        - 4-qoida (O'TA MUHIM): `capture_outbox` jadvalida hali o'chirilmagan (pending) `deleted` yozuviga tegishli har qanday media hech qachon o'chirilmaydi;
-        - 5-qoida: `ApplyMediaRetention` barcha SQLite operatsiyalarini bitta tranzaksiyada bajaradi, diskdagi fayllar faqat tranzaksiya commit bo'lgandan keyingina o'chiriladi, ombor tashqarisidagi hech qanday fayl o'chirilmaydi.
-    - **TDLib so'rovlar siyosati (Invisibility)**:
-      - `TdRequestPolicy` ga qat'iy parametrlar bilan 3 ta metod qo'shildi:
-        - `optimizeStorage`: faqat `size = -1`, `count = -1`, `immunity_delay >= 600` va ortiqcha kalitlarsiz ruxsat etiladi;
-        - `getStorageStatisticsFast`: faqat ortiqcha parametrlarsiz chaqirilganda ruxsat etiladi;
-        - `setLogVerbosityLevel`: faqat `new_verbosity_level` 0..2 oralig'ida bo'lganda ruxsat etiladi (sukut bo'yicha 1).
-    - **`MediaDownloader` xavfsizlik darvozasi (Disk Guard)**:
-      - TDLib ga yuklash so'rovini yuborishdan oldin diskdagi bo'sh joy (`MinFreeBytes`) va ombor to'laligi (`MaxTotalBytes`) tekshiriladi.
-      - Disk to'lgan bo'lsa TDLib chaqirilmaydi, urinish sarflanmaydi (`attempts` oshmaydi), navbatdagi urinish 300 soniyaga suriladi va log ogohlantirishlari 10 daqiqada ko'pi bilan 1 marta yoziladi (flood himoyasi).
-    - **`CapturePreflight` yangi tekshiruvlari**:
-      - `StorageDirectory`, `MaxTotalBytes`, `MinFreeBytes` va optimizeStorage parametrlarining qat'iy oraliq va moslik tekshiruvlari.
-    - **`StorageMaintenance` fon xizmati**:
-      - 4 bosqichli davriy xizmat: (1) retention, (2) yetimlarni tozalash, (3) TDLib `optimizeStorage`, (4) statistika yig'ish va maxfiyliksiz loglash.
-    - **`Worker` ishga tushish tartibi**:
-      - `setLogVerbosityLevel` avtorizatsiyadan oldin (TDLib loglari journal'ni to'ldirmasligi uchun);
-      - `StorageMaintenance` faqat ko'rinmaslik (`SessionInvisibility.EnsureAsync`) tekshiruvi muvaffaqiyatli yakunlangach ishga tushadi.
-    - **`customsync-capture.service` systemd unit fayli**:
-      - Hardened konfiguratsiya: `Type=exec`, `Restart=always`, `RestartSec=10s`, `MemoryMax=1200M`, `MemoryHigh=900M`, `UMask=0077`, `StateDirectory=customsync-capture`, `ReadWritePaths=/var/lib/customsync-capture`, to'liq xavfsizlik direktivalari (NoNewPrivileges, ProtectSystem, PrivateTmp va b.), toza LF qator yakunlari.
-    - **Buzishlar va testlar**:
-      - 42 ta yangi test yozildi (`CaptureStorageMaintenanceTests`). Jami testlar soni 419 dan 461 ga yetdi.
-      - Barcha 15 ta sinovli buzish (a–o) mustaqil ravishda tekshirildi va testlar tomonidan ushlanishi isbotlandi.
+40. **Capture diski: media ombori, retention, TDLib tozalash va systemd unit (Plan 05 Task 9a, `c07ae35` + `a4d74a4`)** —
+    - **Media ombori** (`Media/MediaStore.cs`): `Capture:Media:StorageDirectory` (standart `/var/lib/customsync-capture/media`, Linux'da 0700, fayllar 0600). Yuklangan fayl TDLib keshidan `<peer_id>-<msg_id>.bin` nomi bilan o'z `FileStream` imiz orqali nusxalanadi (`File.Copy` emas — u manbaning eski vaqtini olib o'tib, yangi nusxani yetim tozalashga "eski" qilib ko'rsatardi); xesh va hajm nusxadan, `MaxBytes` dan oshsa `.part` o'chiriladi va media `skipped`; diskka flush, keyin rename. Sabab: `optimizeStorage` TDLib keshini tozalaydi — kutilayotgan o'chirishning media'si u yerda yashay olmaydi. `IsManaged` — faqat ombor papkasining bevosita farzandi va qat'iy nom naqshi (oxiridagi `/` olib tashlanadi).
+    - **Disk himoyasi** (yuklovchida, har TDLib so'rovidan oldin): bo'sh joy − qator hajmi < `Capture:Storage:MinFreeBytes` yoki `downloaded` hajmlar + qator > `Capture:Media:MaxTotalBytes` → TDLib'ga tegilmaydi, qator 300 s ga kechiktiriladi, urinish sarflanmaydi, ogohlantirish 10 daqiqada ≤ 1. Bo'sh joy noma'lum bo'lsa — to'xtatmaydi, bir marta ogohlantiradi. `IDiskSpaceProbe` → `SystemDiskSpaceProbe` (`DriveInfo`, eng yaqin mavjud ota papka); `MediaDownloader` ning har konstruktori ombor va o'lchagichni talab qiladi.
+    - **Sxema v5**: `captured_media.created_at` (navbatga qo'yilgan vaqt). Tuzoq hal qilingan: `ALTER TABLE` faqat `PRAGMA table_info` da ustun yo'q bo'lsa; migratsiyada mavjud qatorlar `created_at = now` (to'liq retention oynasi, `0` emas).
+    - **Retention** (`MessageCache.ApplyMediaRetention`, oyna = `Capture:CacheRetentionDays`, bitta tranzaksiya, fayllar commit'dan keyin): (1) `uploaded`/`failed`/`skipped` — fayl o'chiriladi, `local_path` NULL, qator oynadan keyin; (2) `pending` — oynadan eski yoki yetim bo'lsa; (3) `downloaded` va yetim — fayl va qator; (4) outbox'da `deleted` yozuvi turgan qatorga hech qachon tegilmaydi (1–3 dan ustun); (5) ombordan tashqaridagi fayl hech qachon o'chirilmaydi. "Yetim" = `message_cache` da `(chat_id, msg_id)` yo'q (🔴 server ID — `captured_media.message_id` TDLib ID'si, faqat `getMessage` uchun) va outbox'da `deleted` yo'q. **Yetim tozalash**: ombordagi naqshga mos (`.bin`/`.bin.part`), havolasiz va 1 soatdan eski fayllar. Ikkalasi `Capture:Media:Enabled = false` da ham ishlaydi; yozuv yaratilmaydi (spec §0.3).
+    - **TDLib** (`TdRequestPolicy` ga 3 ta lokal metod): `optimizeStorage` (faqat `size ≥ 16777216`, `ttl ≥ 3600`, `count = -1`, `immunity_delay ≥ 600`, bo'sh massivlar, `chat_limit 0..100`, mantiqiy `return_deleted_file_statistics`), `getStorageStatisticsFast` (parametrsiz), `setLogVerbosityLevel` (0..2). 🔴 Plan'dagi namuna (`count = 0`, `immunity_delay = 0`) hamma faylni, endigina yuklanganini ham o'chirardi — darvoza uni rad etadi. Log darajasi `Worker` da avtorizatsiyadan oldin (`Capture:Tdlib:LogVerbosity`).
+    - **`StorageMaintenance`** (ko'rinmaslik tasdiqlangach, har `MaintenanceIntervalMinutes`): retention → yetim tozalash → `optimizeStorage` → o'lchov (`StorageSnapshot`: RSS, cgroup v2 `memory.max`, kesh, ombor, TDLib fayl/baza, bo'sh disk) → yo'lsiz/IDsiz bitta xulosa qatori (`SweptOrphans` bilan) + kam disk va RSS > 80 % ogohlantirishlari. Har qadam o'z try/catch'ida, sikl darajasida oxirgi to'siq, to'xtash jim.
+    - **Konfiguratsiya kalitlari** (hammasi ixtiyoriy, preflight tekshiradi): `Capture:Media:StorageDirectory`; `Capture:Media:MaxTotalBytes` (1 GiB, `MaxBytes..1 TiB`); `Capture:Storage:MinFreeBytes` (2 GiB, ≥ 0); `Capture:Storage:MaintenanceIntervalMinutes` (10, 1..1440); `Capture:Storage:TdlibFilesMaxBytes` (512 MiB, 16 MiB..1 TiB); `Capture:Storage:TdlibFilesTtlHours` (24, 1..8760); `Capture:Storage:TdlibImmunitySeconds` (3600, 600..604800 va ≥ 2 × `DownloadTimeoutSeconds` — standart qiymat ham); `Capture:Tdlib:LogVerbosity` (1, 0..2). Media yoqilganda ombor: absolyut yo'l, TDLib papkalari bilan ustma-ust emas, kesh bazasi/`StatePath`/`MasterKeyPath` ni o'z ichiga olmaydi; preflight uni yaratib, yozish mumkinligini tekshiradi.
+    - **systemd unit** `deploy/customsync-capture.service` — plan'dagidan chetlashishlar: alohida `customsync-capture` foydalanuvchisi (API internetga ochiq, capture'da Telegram sessiyasi va master kalit — "Deploy oldidan xavfsizlik auditi"); `DOTNET_ENVIRONMENT` (generic host `ASPNETCORE_ENVIRONMENT` ni o'qimaydi — plan'dagi qator hech narsa qilmasdi); `customsync.service` ga bog'liqlik yo'q (capture boshqa xostda bo'lishi mumkin, API bilan HTTPS orqali); `StateDirectory=customsync-capture` (0700); qo'shimcha qattiqlashtirish (`ProtectSystem=strict` + `ReadWritePaths`, `PrivateDevices`, `RestrictAddressFamilies`, `RestrictSUIDSGID`, `LockPersonality`, bo'sh `CapabilityBoundingSet`); `MemoryDenyWriteExecute` taqiqlangan (.NET JIT), `Type=exec`. Hali hech qachon ishga tushirilmagan — audit ro'yxatida.
+    - **Ochiq qolganlar**: TDLib'ning o'z xabar bazasi (`use_message_database = true`) faqat o'lchanadi, chegaralanmaydi; byudjet to'lganda eski media siqib chiqarilmaydi (yuklash to'xtaydi); ombor yo'li o'zgartirilsa eski papkadagi fayllar "ombordan tashqarida" bo'lib qoladi va hech qachon o'chirilmaydi (qo'lda tozalanadi); disk himoyasi har tekshiruvda bitta faylgacha (≤ `MaxBytes`) oshib ketishga yo'l qo'yadi, TDLib'ning o'z nusxasi esa `optimizeStorage` gacha diskda turadi; `optimizeStorage` yuklanayotgan faylga tegishi mumkinmi — TDLib hujjatida yo'q (himoya: `immunity_delay ≥ 2 × DownloadTimeoutSeconds`).
+    - Delegate 42 test yozgan (jami 461); tekshiruv — §1 "Plan 05 Task 9a tekshiruvi" (7 nuqson, 7 test bo'shlig'i, jami 493).
 
 ---
 

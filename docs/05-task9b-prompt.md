@@ -76,6 +76,9 @@ report instead of silently doing something else.
    `ISyncedScopeSettingsSource` gets a null implementation in
    `AddCaptureHandlers` and the real one through `services.Replace` in
    the sync registration (Task 6b) — the same pattern is used here.
+   `tests/CustomSync.Tests/CaptureStorageVerificationTests.cs` shows how
+   the TeamLead tests maintenance (a real `TdClient` over a fake
+   transport, a fake delay for the loop) — use the same style for test 15.
 
 ## NON-NEGOTIABLE RULES
 
@@ -158,7 +161,14 @@ report instead of silently doing something else.
      carry the exception type only.
 3. `StorageMaintenance`: after step 5 of every run, call the reporter
    with that run's snapshot — as step 6, in its own `try/catch`. The
-   reporter is resolved with `GetRequiredService`.
+   reporter is resolved with `GetRequiredService` in the
+   `StorageMaintenance` registration. Since the 9a verification,
+   `RunOnceAsync` rethrows cancellation (`catch (OperationCanceledException)
+   when (ct.IsCancellationRequested) { throw; }` before the generic
+   `catch`) so that a shutdown ends the loop quietly; step 6 must do the
+   same — no warning and no report once cancellation is requested. The
+   loop's last-resort `catch` is not a substitute for step 6's own
+   `try/catch`.
 
 ## TESTS
 
@@ -198,7 +208,8 @@ Capture:
     one.
 15. A `StorageMaintenance` run sends exactly one report carrying that
     run's snapshot; a reporter that throws does not stop the loop (the
-    next run happens).
+    next run happens); a shutdown while the report is in flight ends the
+    loop with no warning or error logged.
 
 ## HOW TO VERIFY
 
@@ -217,12 +228,14 @@ Capture:
    h) the capture retries `401` without refreshing, or without a limit;
    i) `AddCaptureSyncClient` does not replace the null reporter;
    j) an exception from the reporter escapes the maintenance loop;
-   k) the body gains an extra field (for example the store directory).
+   k) the body gains an extra field (for example the store directory);
+   l) step 6 swallows cancellation (a shutdown logs a warning or still
+      reports).
    If a break does NOT fail a test, fix the test.
 
 ## DEFINITION OF DONE
 
-- Sections 1–2 implemented; tests 1–15 pass; all 11 breaks caught.
+- Sections 1–2 implemented; tests 1–15 pass; all 12 breaks caught.
 - One commit, pushed to `origin Oybek`, tree clean.
 - `PROGRESS.md`: a plan 05 Task 9b row whose commit column says
   `(this commit)` — **never invent a hash**; the header test count; the
@@ -234,7 +247,7 @@ Capture:
 1. Commit hash (copied from `git log -1` after committing) and files
    changed.
 2. Test count before/after; the three `dotnet test` summary lines.
-3. Which deliberate break failed which test (a–k), by test name.
+3. Which deliberate break failed which test (a–l), by test name.
 4. Anything done differently from this prompt, and why.
 5. The migration: its name, the SQL it creates, and how you checked it
    applies on the test database.
