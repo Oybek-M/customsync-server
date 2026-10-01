@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using CustomSync.Capture.Capture;
+using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.Configuration;
 
 namespace CustomSync.Capture.Preflight;
@@ -15,40 +16,27 @@ public static class CapturePreflight
     {
         var errors = new List<string>();
 
-        // 1. Native library check
+        // 1. Native library check. Yuklash mantig'i bitta joyda —
+        // SystemNativeLibraryProbe: avval bu yerda uning nusxasi turardi va
+        // tekshiruvchi berilganda sozlangan-u mavjud bo'lmagan yo'l uchun
+        // xato umuman qo'shilmasdi (Task 7 dan beri Worker shu yo'ldan
+        // yuradi va keyin native DllNotFoundException bilan yiqilardi).
         var customPath = config["Telegram:TdJsonPath"];
-        bool libOk;
-        if (nativeLibChecker != null)
+        var canLoad = nativeLibChecker ?? new SystemNativeLibraryProbe().CanLoad;
+        if (!canLoad(customPath))
         {
-            libOk = nativeLibChecker(customPath);
-        }
-        else
-        {
-            if (!string.IsNullOrWhiteSpace(customPath))
+            if (string.IsNullOrWhiteSpace(customPath))
             {
-                if (!File.Exists(customPath))
-                {
-                    errors.Add($"Configured TDLib library path '{customPath}' does not exist.");
-                    libOk = false;
-                }
-                else
-                {
-                    libOk = NativeLibrary.TryLoad(customPath, out var handle);
-                    if (libOk) NativeLibrary.Free(handle);
-                }
+                errors.Add("Native TDLib library 'tdjson' could not be loaded. Please ensure it is installed or configure Telegram:TdJsonPath.");
+            }
+            else if (!File.Exists(customPath))
+            {
+                errors.Add($"Configured TDLib library path '{customPath}' does not exist.");
             }
             else
             {
-                libOk = NativeLibrary.TryLoad("tdjson", typeof(CapturePreflight).Assembly, null, out var handle);
-                if (libOk) NativeLibrary.Free(handle);
+                errors.Add($"Failed to load native TDLib library from '{customPath}'.");
             }
-        }
-
-        if (!libOk && (string.IsNullOrWhiteSpace(customPath) || (File.Exists(customPath) && !errors.Any(e => e.Contains("does not exist")))))
-        {
-            errors.Add(string.IsNullOrWhiteSpace(customPath)
-                ? "Native TDLib library 'tdjson' could not be loaded. Please ensure it is installed or configure Telegram:TdJsonPath."
-                : $"Failed to load native TDLib library from '{customPath}'.");
         }
 
         // 2. ApiId / ApiHash check - Note: secret values are never printed

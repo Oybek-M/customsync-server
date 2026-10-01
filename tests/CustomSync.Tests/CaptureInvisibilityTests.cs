@@ -118,10 +118,7 @@ public class FixedProbe(bool canLoad = true) : INativeLibraryProbe
     public bool CanLoad(string? customPath) => canLoad;
 }
 
-[CollectionDefinition("InvisibilityNonParallelCollection", DisableParallelization = true)]
-public class InvisibilityNonParallelCollectionDefinition { }
-
-[Collection("InvisibilityNonParallelCollection")]
+[Collection(ProcessExitCodeCollection.Name)]
 public class CaptureInvisibilityTests : IDisposable
 {
     private readonly List<string> _tempDirs = new();
@@ -677,10 +674,14 @@ public class CaptureInvisibilityTests : IDisposable
         }
     }
 
-    [Fact]
-    public async Task Test13_Worker_failure_sets_ExitCode_stops_host_and_never_logs_running()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Test13_Worker_failure_sets_ExitCode_stops_host_and_never_logs_running(bool tdlibError)
     {
         int originalExitCode = Environment.ExitCode;
+        // Avvalgi test qoldirgan `1` bu tekshiruvni bo'sh qilib qo'ymasin.
+        Environment.ExitCode = 0;
         try
         {
             var tempDir = CreateTempDir();
@@ -699,7 +700,9 @@ public class CaptureInvisibilityTests : IDisposable
                 if (type == "setOption")
                     return new JsonObject { ["@type"] = "ok", ["@extra"] = extra }.ToJsonString();
                 if (type == "getOption")
-                    return new JsonObject { ["@type"] = "optionValueBoolean", ["value"] = true, ["@extra"] = extra }.ToJsonString(); // fails invisibility!
+                    return tdlibError
+                        ? new JsonObject { ["@type"] = "error", ["code"] = 400, ["message"] = "OPTION_FAILED", ["@extra"] = extra }.ToJsonString()
+                        : new JsonObject { ["@type"] = "optionValueBoolean", ["value"] = true, ["@extra"] = extra }.ToJsonString(); // fails invisibility!
                 return null;
             };
 

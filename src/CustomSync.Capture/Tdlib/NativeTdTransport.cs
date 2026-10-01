@@ -11,18 +11,7 @@ public class NativeTdTransport : ITdTransport
         return TdJsonInterop.td_create_client_id();
     }
 
-    public void Send(int clientId, string requestJson)
-    {
-        var ptr = TdJsonInterop.StringToUtf8Ptr(requestJson);
-        try
-        {
-            TdJsonInterop.td_send(clientId, ptr);
-        }
-        finally
-        {
-            TdJsonInterop.FreeUtf8Ptr(ptr);
-        }
-    }
+    public void Send(int clientId, string requestJson) => TdJsonInterop.Send(clientId, requestJson);
 
     public string? Receive(double timeoutSeconds)
     {
@@ -32,19 +21,7 @@ public class NativeTdTransport : ITdTransport
         return TdJsonInterop.PtrToUtf8String(ptr);
     }
 
-    public string? Execute(string requestJson)
-    {
-        var ptr = TdJsonInterop.StringToUtf8Ptr(requestJson);
-        try
-        {
-            var resPtr = TdJsonInterop.td_execute(ptr);
-            return TdJsonInterop.PtrToUtf8String(resPtr);
-        }
-        finally
-        {
-            TdJsonInterop.FreeUtf8Ptr(ptr);
-        }
-    }
+    public string? Execute(string requestJson) => TdJsonInterop.Execute(requestJson);
 
     public void Dispose()
     {

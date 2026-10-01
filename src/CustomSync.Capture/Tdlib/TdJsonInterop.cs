@@ -47,14 +47,49 @@ internal static class TdJsonInterop
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern int td_create_client_id();
 
+    // td_send va td_execute PRIVATE: native kodga so'rov faqat pastdagi
+    // Send/Execute orqali, ya'ni TdRequestPolicy darvozasidan o'tib yetadi.
+    // Darvoza faqat TdClient da tursa, Capture ichidagi istalgan kod
+    // `new NativeTdTransport().Send(...)` deb uni chetlab o'tardi.
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern void td_send(int clientId, IntPtr request);
+    private static extern void td_send(int clientId, IntPtr request);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr td_receive(double timeout);
 
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
-    public static extern IntPtr td_execute(IntPtr request);
+    private static extern IntPtr td_execute(IntPtr request);
+
+    /// <summary>So'rovni darvozadan o'tkazib, keyin native td_send ga beradi.</summary>
+    public static void Send(int clientId, string requestJson)
+    {
+        // Rad etish P/Invoke'dan OLDIN: ruxsatsiz so'rov native kodga yetmaydi.
+        TdRequestPolicy.ValidateAndNormalize(requestJson);
+        var ptr = StringToUtf8Ptr(requestJson);
+        try
+        {
+            td_send(clientId, ptr);
+        }
+        finally
+        {
+            FreeUtf8Ptr(ptr);
+        }
+    }
+
+    /// <summary>So'rovni darvozadan o'tkazib, keyin native td_execute ga beradi.</summary>
+    public static string? Execute(string requestJson)
+    {
+        TdRequestPolicy.ValidateAndNormalize(requestJson);
+        var ptr = StringToUtf8Ptr(requestJson);
+        try
+        {
+            return PtrToUtf8String(td_execute(ptr));
+        }
+        finally
+        {
+            FreeUtf8Ptr(ptr);
+        }
+    }
 
     // Marshalling TdMarshal'da: u P/Invoke'siz, ya'ni native kutubxonasiz
     // sinaladi. Bu yerda faqat qayta yo'naltirish qoladi.

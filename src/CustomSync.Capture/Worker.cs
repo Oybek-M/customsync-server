@@ -44,8 +44,8 @@ public class Worker : BackgroundService
             return;
         }
 
-        var probe = _services.GetService<INativeLibraryProbe>();
-        var preflight = CapturePreflight.Check(_configuration, probe != null ? probe.CanLoad : null);
+        var probe = _services.GetRequiredService<INativeLibraryProbe>();
+        var preflight = CapturePreflight.Check(_configuration, probe.CanLoad);
         if (!preflight.Success)
         {
             foreach (var err in preflight.Errors)

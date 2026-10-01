@@ -14,6 +14,7 @@ namespace CustomSync.Tests;
 /// Tekshiruv bosqichida qo'shilgan testlar (2026-09-26). Har biri delegate
 /// to'plami ushlamagan buzilishni yopadi.
 /// </summary>
+[Collection(ProcessExitCodeCollection.Name)]
 public class CaptureCacheVerificationTests : IDisposable
 {
     private readonly List<string> _paths = new();
@@ -231,27 +232,36 @@ public class CaptureCacheVerificationTests : IDisposable
     [Fact]
     public async Task Test22_Worker_starts_the_cache()
     {
-        var dbPath = CreateTempDbPath();
-        // Telegram sozlamalari ataylab yo'q: preflight yiqiladi, ya'ni
-        // kesh preflight'dan oldin ulanishi shart.
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        var originalExitCode = Environment.ExitCode;
+        Environment.ExitCode = 0;
+        try
         {
-            ["Capture:CacheDatabasePath"] = dbPath,
-        }).Build();
+            var dbPath = CreateTempDbPath();
+            // Telegram sozlamalari ataylab yo'q: preflight yiqiladi, ya'ni
+            // kesh preflight'dan oldin ulanishi shart.
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Capture:CacheDatabasePath"] = dbPath,
+            }).Build();
 
-        using var provider = new ServiceCollection().AddMessageCache(config).BuildServiceProvider();
-        var lifetime = new FakeLifetime();
-        var worker = new Worker(config, provider, lifetime, NullLogger<Worker>.Instance);
+            using var provider = new ServiceCollection().AddMessageCache(config).BuildServiceProvider();
+            var lifetime = new FakeLifetime();
+            var worker = new Worker(config, provider, lifetime, NullLogger<Worker>.Instance);
 
-        await worker.StartAsync(CancellationToken.None);
-        if (worker.ExecuteTask is not null)
-        {
-            await Task.WhenAny(worker.ExecuteTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            await worker.StartAsync(CancellationToken.None);
+            if (worker.ExecuteTask is not null)
+            {
+                await Task.WhenAny(worker.ExecuteTask, Task.Delay(TimeSpan.FromSeconds(10)));
+            }
+
+            Assert.True(File.Exists(dbPath), "Worker keshni ulamadi: ma'lumotlar bazasi yaratilmagan");
+            Assert.True(lifetime.StopRequested, "preflight yiqilgan, lekin xizmat to'xtatilmadi");
+            await worker.StopAsync(CancellationToken.None);
         }
-
-        Assert.True(File.Exists(dbPath), "Worker keshni ulamadi: ma'lumotlar bazasi yaratilmagan");
-        Assert.True(lifetime.StopRequested, "preflight yiqilgan, lekin xizmat to'xtatilmadi");
-        await worker.StopAsync(CancellationToken.None);
+        finally
+        {
+            Environment.ExitCode = originalExitCode;
+        }
     }
 
     private sealed class FakeLifetime : IHostApplicationLifetime
