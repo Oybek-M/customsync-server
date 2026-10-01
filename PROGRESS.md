@@ -13,7 +13,7 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 8** — o'chirilgan xabarlar media'si, opt-in (`7181cc2` + tekshiruv tuzatishi `bb1bcb4`) |
-| **Keyingi bajariladigan** | **Plan 05 Task 9** (xotira va disk boshqaruvi: davriy tozalash, TDLib `optimizeStorage`, systemd cheklovlari, xotira metrikasi) — prompt HALI YOZILMAGAN; Task 8 dan meros shartlar §2 da |
+| **Keyingi bajariladigan** | **Plan 05 Task 9a** (capture disk boshqaruvi: media ombori, retention, TDLib `optimizeStorage`, systemd unit) — prompt TAYYOR: `docs/05-task9a-prompt.md` (2026-10-01, laptop). **9b** (o'lchovlarni backend'ga yuborish) prompti ham tayyor — `docs/05-task9b-prompt.md`, faqat 9a tekshirilgandan KEYIN beriladi |
 | Undan keyin | Task 10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
@@ -870,32 +870,61 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🔴 KEYINGI QADAM — plan 05 Task 9 (xotira va disk boshqaruvi)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 9a, keyin 9b (xotira va disk boshqaruvi)
 
-Prompt HALI YOZILMAGAN. Plan Task 9: `StorageMaintenance` (davriy
-`MessageCache.Prune`, TDLib `optimizeStorage`, xotira o'lchovi),
-`deploy/customsync-capture.service` (systemd `MemoryMax`/`MemoryHigh`/
-`CPUQuota`, `ProtectSystem=strict`), xotira metrikasini alohida health
-endpoint orqali backend'ga yuborish. 🔴 Deploy to'xtatilgan — unit fayli
-faqat repoda yoziladi, VPS'ga hech narsa qo'yilmaydi.
+Promptlar: `docs/05-task9a-prompt.md` (avval), `docs/05-task9b-prompt.md`
+(9a tekshirilgandan keyin). Task 9 ikkiga bo'lindi: plan'ning uch qismi
+(tozalash, systemd, metrika) ustiga Task 8 dan meros ishlar qo'shildi —
+bitta delegate vazifasi uchun juda katta, avvalgi task'larning har birida
+3–6 nuqson chiqqan.
 
-Task 8 dan meros, promptga majburiy kiradi:
-- **Media fayllar TDLib keshida turadi** (`captured_media.local_path`
-  TDLib `files` papkasiga ishora qiladi). `optimizeStorage` ularni
-  o'chirsa, o'chirilgan xabar mediasiz ketadi (runner buni `failed` qilib
-  matnni yuboradi — xavfsiz, lekin media yo'qoladi). Yechim tanlanishi
-  kerak: yuklangan faylni o'z papkamizga (`/var/lib/customsync-capture/
-  media/`, 0700) ko'chirish yoki media chatlarini `optimizeStorage` dan
-  chiqarish — birinchisi aniqroq.
-- `captured_media` qatorlari va fayllari hech qachon tozalanmaydi:
-  `uploaded`/`failed`/`skipped` fayllar va hech qachon o'chirilmagan
-  xabarlarning `downloaded` fayllari (`cache_days` dan keyin) o'chirilishi
-  kerak. Jadvalda vaqt ustuni yo'q (`created_at`/`downloaded_at`) — v5
-  migratsiyasi kerak.
-- `optimizeStorage` allow-list'ga ongli ravishda, parametrlari tekshirilib
-  qo'shiladi; ko'rinmaslikka ta'siri yo'qligi izohlanadi.
-- Disk to'lishi: yuklovchi bo'sh joyni tekshirmaydi (delegate hisobotidagi
-  xavf).
+**9a — capture'ning lokal diski (server o'zgarmaydi):**
+- **Media ombori** `Capture:Media:StorageDirectory` (standart
+  `/var/lib/customsync-capture/media`, 0700): yuklangan fayl TDLib
+  keshidan `<peer_id>-<msg_id>.bin` nomi bilan ko'chiriladi, xesh
+  nusxadan. Sabab: `optimizeStorage` TDLib keshini tozalaydi, kutilayotgan
+  o'chirishning media'si u yerda yashay olmaydi.
+- 🔴 **Plan'dagi `optimizeStorage` namunasi xavfli**: `count = 0`,
+  `immunity_delay = 0` — TDLib hujjatiga ko'ra bu "o'chirishdan keyin 0
+  ta fayl" va "yangi fayl ham himoyasiz", ya'ni hamma fayl, endigina
+  yuklangani ham o'chadi. Promptda xavfsiz qiymatlar va darvoza qoidasi
+  (`count` faqat -1, `immunity_delay` ≥ 600, `size` ≥ 16 MiB).
+- **Retention xabar keshiga bog'langan** (`Capture:CacheRetentionDays`):
+  xabar keshdan chiqsa va o'chirilmagan bo'lsa — media keraksiz. Outbox'da
+  kutayotgan `deleted` yozuvning media'siga hech qachon tegilmaydi;
+  ombordan tashqaridagi fayl hech qachon o'chirilmaydi; yetim fayl
+  tozalash faqat qat'iy nom naqshi va 1 soatdan eski fayllar uchun.
+  `Capture:Media:Enabled = false` bo'lsa ham tozalash ishlaydi.
+- **Disk himoyasi**: `Capture:Storage:MinFreeBytes` (2 GiB) va
+  `Capture:Media:MaxTotalBytes` (1 GiB) — yetmasa yuklash urinish
+  sarflamay 5 daqiqaga kechiktiriladi.
+- **Sxema v5** (`captured_media.created_at`). 🔴 Tuzoq: `Initialize`
+  bazaviy `CREATE TABLE` ni versiya qadamlaridan OLDIN yuritadi — v1–v3
+  bazada ustun allaqachon bo'ladi, shartsiz `ALTER TABLE` "duplicate
+  column" bilan xizmatni butunlay to'xtatadi.
+- TDLib log darajasi hech qachon o'rnatilmagan (standarti hujjatda yo'q)
+  — `Capture:Tdlib:LogVerbosity` (0..2, standart 1), avtorizatsiyadan
+  oldin.
+- `StorageMaintenance` (ko'rinmaslik tasdiqlangach) + `StorageSnapshot`
+  (RSS, cgroup v2 `memory.max`, kesh, ombor, TDLib fayl/baza hajmi, bo'sh
+  disk) — har 10 daqiqada yo'lsiz/IDsiz xulosa log'i.
+- `deploy/customsync-capture.service`: alohida `customsync-capture`
+  foydalanuvchisi (API internetga ochiq, capture'da Telegram sessiyasi va
+  master kalit), `DOTNET_ENVIRONMENT` (generic host `ASPNETCORE_` ni
+  o'qimaydi — plan'dagi qator hech narsa qilmasdi), `StateDirectory`,
+  qattiqlashtirish; `MemoryDenyWriteExecute` taqiqlangan (.NET JIT).
+
+**9b — health hisobot:** `POST /api/v1/devices/health` (qurilma ID
+faqat tokendan, vaqt server soatidan, 4 KB chegara), `GET` (faqat admin,
+`stale` = `health.stale_after_seconds`, standart 1800), `device_health`
+jadvali (har qurilmaga oxirgi hisobot). Capture: `ICaptureHealthReporter`
+(null + `services.Replace`, Task 6b naqshi), har maintenance siklida.
+
+Ochiq (9a dan tashqarida qoldi): TDLib'ning o'z xabar bazasi
+(`use_message_database = true`) faqat o'lchanadi, chegaralanmaydi; byudjet
+to'lganda eski media siqib chiqarilmaydi (yuklash to'xtaydi). 9b dan
+keyin tdesktop sessiyasiga: yangi API endpoint'lari (sync protokoli
+emas) haqida bir qator.
 
 ### Oldingi qadam tarixi — plan 05 Task 8 (media)
 
