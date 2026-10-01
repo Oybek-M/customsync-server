@@ -19,7 +19,10 @@ public class MediaStore
         if (string.IsNullOrWhiteSpace(storageDirectory))
             throw new ArgumentException("Storage directory cannot be empty.", nameof(storageDirectory));
 
-        _storageDirectory = Path.GetFullPath(storageDirectory);
+        // Oxiridagi "/" olib tashlanadi: aks holda IsManaged ota papkani
+        // (GetDirectoryName — "/" siz) bu qiymatga hech qachon teng ko'rmasdi
+        // va ombordagi fayllar hech qachon o'chirilmasdi.
+        _storageDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(storageDirectory));
     }
 
     public string PathFor(string peerId, long msgId)
@@ -175,7 +178,8 @@ public class MediaStore
                 hasher.AppendData(buffer, 0, bytesRead);
             }
 
-            await destination.FlushAsync(ct);
+            // Diskka: elektr uzilsa qator `downloaded`, fayl esa bo'sh qolmasin.
+            destination.Flush(flushToDisk: true);
             destination.Dispose();
             destination = null;
 

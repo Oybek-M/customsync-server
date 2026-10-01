@@ -115,9 +115,13 @@ ochiq emas — faqat nginx orqali.
 ### 7. Birinchi qurilma kodi
 
 ```bash
+cd /var/www/customsync
 sudo -u customsync ASPNETCORE_ENVIRONMENT=Production \
-    dotnet /var/www/customsync/CustomSync.Api.dll --create-enrollment-code --admin
+    dotnet CustomSync.Api.dll --create-enrollment-code --admin
 ```
+
+`cd` majburiy: `appsettings*.json` joriy papkadan o'qiladi (content root),
+boshqa papkadan `Jwt:SigningKey` va ulanish satri topilmaydi.
 
 Kod chop etiladi va jarayon darhol chiqadi — server ishga tushmaydi.
 `--admin` bo'lmasa oddiy `device` roli beriladi. Birinchi qurilma admin
@@ -190,21 +194,33 @@ sudo useradd -r -s /bin/false customsync-capture
 
 ### 2. CLI buyruqlari (--login, --enroll, --set-key)
 
-Barcha sozlash buyruqlarini FAQAT `customsync-capture` foydalanuvchisi nomidan bajaring:
+Barcha sozlash buyruqlarini FAQAT `customsync-capture` foydalanuvchisi nomidan
+va `/var/www/customsync-capture` papkasidan turib bajaring:
 
 ```bash
-# Telegram sessiyasiga kirish:
-sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
-    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --login
+cd /var/www/customsync-capture
 
-# Sinxronizatsiya qurilmasi sifatida ro'yxatdan o'tish:
+# Telegram sessiyasiga kirish (telefon, kod va parol so'raladi):
 sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
-    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --enroll <kod>
+    dotnet CustomSync.Capture.dll --login
 
-# Master kalitni o'rnatish:
+# Sinxronizatsiya qurilmasi sifatida ro'yxatdan o'tish (kod so'raladi):
 sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
-    dotnet /var/www/customsync-capture/CustomSync.Capture.dll --set-key <kalit>
+    dotnet CustomSync.Capture.dll --enroll
+
+# Master kalitni o'rnatish (parol so'raladi):
+sudo -u customsync-capture DOTNET_ENVIRONMENT=Production \
+    dotnet CustomSync.Capture.dll --set-key
 ```
 
-Root sifatida bajarilsa fayllar root egaligida yaratilib qoladi va keyinchalik xizmat ularni o'qiy olmaydi.
+- **Kod va parol buyruq qatoriga YOZILMAYDI.** Dastur ularni o'zi so'raydi
+  (kiritilgani ekranda ko'rinmaydi). Buyruq qatoridagi qiymat
+  `~/.bash_history` ga yoziladi va `ps` orqali boshqa jarayonlarga
+  ko'rinadi — dastur esa uni baribir o'qimaydi.
+- **`cd` majburiy.** `appsettings.json` va `appsettings.Production.json`
+  joriy papkadan o'qiladi (generic host'ning content root'i — joriy
+  papka). Boshqa papkadan ishga tushirilsa sozlamalar topilmaydi.
+  systemd unit'da buni `WorkingDirectory` hal qiladi.
+- Root sifatida bajarilsa fayllar root egaligida yaratilib qoladi va
+  keyinchalik xizmat ularni o'qiy olmaydi.
 

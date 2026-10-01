@@ -405,7 +405,7 @@ public class CaptureMediaVerificationTests : IDisposable
         };
         using var client = new TdClient(transport);
         var config = new MediaCaptureConfig { Enabled = true, PeerIds = new HashSet<string> { "111" }, MaxBytes = 10485760, MaxAttempts = 5 };
-        var downloader = new MediaDownloader(client, cache, config);
+        var downloader = new MediaDownloader(client, cache, config, new MediaStore(TempPath("-store")), FixedDiskSpaceProbe.Ample());
 
         await downloader.ProcessPendingOnceAsync();
 
@@ -440,7 +440,7 @@ public class CaptureMediaVerificationTests : IDisposable
         using var client = new TdClient(transport);
         var logger = new RenderingLogger<MediaDownloader>();
         var config = new MediaCaptureConfig { Enabled = true, PeerIds = new HashSet<string> { "111" }, MaxBytes = 10485760, MaxAttempts = 5 };
-        var downloader = new MediaDownloader(client, cache, config, logger: logger);
+        var downloader = new MediaDownloader(client, cache, config, new MediaStore(TempPath("-store")), FixedDiskSpaceProbe.Ample(), logger: logger);
 
         using (new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
         {
@@ -472,6 +472,7 @@ public class CaptureMediaVerificationTests : IDisposable
             ["Capture:CacheDatabasePath"] = Path.Combine(dir, "cache.db"),
             ["Capture:Scope:DefaultEnabled"] = "true",
             ["Capture:Media:Enabled"] = "true",
+            ["Capture:Media:StorageDirectory"] = Path.Combine(dir, "media"),
             ["Capture:Media:PeerIds:0"] = variant == "not_in_peer_ids" ? "999" : "111",
         };
         if (variant == "blocked_by_scope") settings["Capture:Scope:Block:0"] = "111";
@@ -539,7 +540,7 @@ public class CaptureMediaVerificationTests : IDisposable
         using var client = new TdClient(transport);
         var logger = new RenderingLogger<MediaDownloader>();
         var config = new MediaCaptureConfig { Enabled = true, PeerIds = new HashSet<string> { "111" }, MaxBytes = 10485760, MaxAttempts = 5 };
-        var downloader = new MediaDownloader(client, cache, config, logger: logger);
+        var downloader = new MediaDownloader(client, cache, config, new MediaStore(TempPath("-store")), FixedDiskSpaceProbe.Ample(), logger: logger);
 
         using var cts = new CancellationTokenSource();
         var run = downloader.ProcessPendingOnceAsync(cts.Token);
@@ -630,7 +631,7 @@ public class CaptureMediaVerificationTests : IDisposable
         };
         using var client = new TdClient(transport);
         var config = new MediaCaptureConfig { Enabled = true, PeerIds = new HashSet<string> { "111" }, MaxBytes = 100, MaxAttempts = 5 };
-        var downloader = new MediaDownloader(client, cache, config);
+        var downloader = new MediaDownloader(client, cache, config, new MediaStore(TempPath("-store")), FixedDiskSpaceProbe.Ample());
 
         await downloader.ProcessPendingOnceAsync();
 

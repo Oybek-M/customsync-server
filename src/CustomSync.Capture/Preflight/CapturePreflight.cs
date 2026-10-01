@@ -248,7 +248,7 @@ public static class CapturePreflight
         }
 
         var maxBytesStr = config["Capture:Media:MaxBytes"];
-        long effectiveMaxBytes = 10485760;
+        long effectiveMaxBytes = CustomSync.Capture.Media.MediaCaptureConfig.DefaultMaxBytes;
         if (!string.IsNullOrEmpty(maxBytesStr))
         {
             if (!long.TryParse(maxBytesStr, out var mb) || mb < 1 || mb > 26214400)
@@ -270,7 +270,7 @@ public static class CapturePreflight
             }
         }
 
-        int effectiveDownloadTimeout = 60;
+        int effectiveDownloadTimeout = CustomSync.Capture.Media.MediaCaptureConfig.DefaultDownloadTimeoutSeconds;
         var mediaTimeoutStr = config["Capture:Media:DownloadTimeoutSeconds"];
         if (!string.IsNullOrEmpty(mediaTimeoutStr))
         {
@@ -331,16 +331,26 @@ public static class CapturePreflight
         }
 
         var tdImmunityStr = config["Capture:Storage:TdlibImmunitySeconds"];
+        long effectiveImmunity = CustomSync.Capture.Media.MediaCaptureConfig.DefaultTdlibImmunitySeconds;
+        bool immunityValid = true;
         if (!string.IsNullOrEmpty(tdImmunityStr))
         {
             if (!int.TryParse(tdImmunityStr, out var imm) || imm < 600 || imm > 604800)
             {
                 errors.Add("Capture:Storage:TdlibImmunitySeconds must be an integer between 600 and 604800.");
+                immunityValid = false;
             }
-            else if (imm < 2 * effectiveDownloadTimeout)
+            else
             {
-                errors.Add($"Capture:Storage:TdlibImmunitySeconds ({imm}) must be at least twice Capture:Media:DownloadTimeoutSeconds ({2 * effectiveDownloadTimeout}).");
+                effectiveImmunity = imm;
             }
+        }
+
+        // Standart qiymat ham tekshiriladi: DownloadTimeoutSeconds'ning yuqori
+        // chegarasi yo'q, ya'ni 3600 ham uning ikki baravaridan kam bo'lishi mumkin.
+        if (immunityValid && effectiveImmunity < 2L * effectiveDownloadTimeout)
+        {
+            errors.Add($"Capture:Storage:TdlibImmunitySeconds ({effectiveImmunity}) must be at least twice Capture:Media:DownloadTimeoutSeconds ({2L * effectiveDownloadTimeout}).");
         }
 
         var logVerbosityStr = config["Capture:Tdlib:LogVerbosity"];

@@ -17,7 +17,8 @@ public class CapturePreflightTests
                 ["Telegram:ApiId"] = "12345",
                 ["Telegram:ApiHash"] = "some_fake_hash",
                 ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
-                ["Telegram:FilesDirectory"] = Path.GetTempPath()
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db")
             })
             .Build();
 
@@ -37,7 +38,8 @@ public class CapturePreflightTests
                 ["Telegram:ApiId"] = "0", // invalid / missing
                 ["Telegram:ApiHash"] = fakeHash,
                 ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
-                ["Telegram:FilesDirectory"] = Path.GetTempPath()
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db")
             })
             .Build();
 
@@ -53,7 +55,8 @@ public class CapturePreflightTests
                 ["Telegram:ApiId"] = "12345",
                 ["Telegram:ApiHash"] = "", // missing
                 ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
-                ["Telegram:FilesDirectory"] = Path.GetTempPath()
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db")
             })
             .Build();
 
@@ -150,6 +153,7 @@ public class CapturePreflightTests
             var cfgValid = new ConfigurationBuilder().AddInMemoryCollection(BaseConfig()).AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Capture:Media:Enabled"] = "true",
+                ["Capture:Media:StorageDirectory"] = tempDir + "-media",
                 ["Capture:Media:PeerIds"] = "12345,67890",
                 ["Capture:Media:MaxBytes"] = "26214400",
                 ["Capture:Media:DownloadTimeoutSeconds"] = "60",
@@ -165,6 +169,7 @@ public class CapturePreflightTests
             {
                 try { Directory.Delete(tempDir, recursive: true); } catch { }
             }
+            try { Directory.Delete(tempDir + "-media", recursive: true); } catch { }
         }
     }
 }

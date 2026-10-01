@@ -45,6 +45,7 @@ public class CaptureInvisibilityVerificationTests : IDisposable
         ["Telegram:DatabaseDirectory"] = dir,
         ["Telegram:FilesDirectory"] = dir,
         ["Capture:CacheDatabasePath"] = Path.Combine(dir, "cache.db"),
+        ["Capture:Media:StorageDirectory"] = Path.Combine(dir, "media"),
         ["Capture:Scope:DefaultEnabled"] = "true",
     };
 

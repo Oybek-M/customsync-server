@@ -77,7 +77,21 @@ public class StorageMaintenance
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            await RunOnceAsync(stoppingToken);
+            try
+            {
+                await RunOnceAsync(stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                // To'xtash (restart, deploy) xato emas.
+                break;
+            }
+            catch (Exception ex)
+            {
+                // Har qadam o'z try/catch'ida; bu kutilmagan holat uchun oxirgi
+                // to'siq — aks holda fon vazifasi jimgina o'lib, tozalash to'xtardi.
+                _logger?.LogError("Storage maintenance run failed: {ExceptionType}", ex.GetType().Name);
+            }
 
             try
             {
@@ -99,6 +113,7 @@ public class StorageMaintenance
     {
         int mediaRowsPruned = 0;
         int mediaFilesDeleted = 0;
+        int sweptOrphans = 0;
 
         long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
@@ -117,7 +132,7 @@ public class StorageMaintenance
         // Step 2: Orphan sweep (runs whether Media:Enabled is true or false)
         try
         {
-            _mediaStore.SweepOrphans(_messageCache, now, _logger);
+            sweptOrphans = _mediaStore.SweepOrphans(_messageCache, now, _logger);
         }
         catch (Exception ex)
         {
@@ -167,6 +182,15 @@ public class StorageMaintenance
                 }
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TdException ex)
+        {
+            // Haqiqiy TdClient `error` javobini TdException'ga aylantiradi.
+            _logger?.LogWarning("TDLib optimizeStorage returned error code: {ErrorCode}", ex.Code);
+        }
         catch (Exception ex)
         {
             _logger?.LogWarning("TDLib optimizeStorage failed: {ExceptionType}", ex.GetType().Name);
@@ -194,6 +218,10 @@ public class StorageMaintenance
                 }
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _logger?.LogWarning("TDLib getStorageStatisticsFast failed: {ExceptionType}", ex.GetType().Name);
@@ -212,7 +240,16 @@ public class StorageMaintenance
         }
 
         _mediaStore.MeasureStore(out var storeBytes, out var storeFiles);
-        long? freeDiskBytes = _diskSpaceProbe.GetAvailableFreeBytes(_mediaStore.StorageDirectory);
+        long? freeDiskBytes = null;
+        try
+        {
+            freeDiskBytes = _diskSpaceProbe.GetAvailableFreeBytes(_mediaStore.StorageDirectory);
+        }
+        catch (Exception ex)
+        {
+            // Istisno matnida yo'l bo'lishi mumkin — faqat turi.
+            _logger?.LogWarning("Free disk space measurement failed: {ExceptionType}", ex.GetType().Name);
+        }
 
         var snapshot = new StorageSnapshot(
             TakenAt: _timeProvider.GetUtcNow(),
@@ -237,7 +274,7 @@ public class StorageMaintenance
 
         _logger?.LogInformation(
             "Storage maintenance snapshot: RSS={RssMB:F1}MB, CacheDB={CacheMB:F1}MB, Store={StoreMB:F1}MB ({StoreFiles} files), " +
-            "TDLibFiles={TdFilesMB}MB, TDLibDB={TdDbMB}MB, FreeDisk={FreeMB}MB, PrunedRows={PrunedRows}, DeletedFiles={DeletedFiles}, " +
+            "TDLibFiles={TdFilesMB}MB, TDLibDB={TdDbMB}MB, FreeDisk={FreeMB}MB, PrunedRows={PrunedRows}, DeletedFiles={DeletedFiles}, SweptOrphans={SweptOrphans}, " +
             "OptimizeFreed={OptFreedMB:F1}MB ({OptFiles} files)",
             ToMb(snapshot.ProcessRssBytes),
             ToMb(snapshot.CacheDatabaseBytes),
@@ -248,6 +285,7 @@ public class StorageMaintenance
             ToMbNullable(snapshot.FreeDiskBytes)?.ToString("F1") ?? "n/a",
             snapshot.MediaRowsPruned,
             snapshot.MediaFilesDeleted,
+            sweptOrphans,
             ToMb(snapshot.OptimizeFreedBytes),
             snapshot.OptimizeDeletedFiles
         );

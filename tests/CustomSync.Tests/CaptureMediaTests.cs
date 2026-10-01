@@ -553,7 +553,8 @@ public class CaptureMediaTests : IDisposable
             MessageCache cache,
             MediaCaptureConfig config,
             List<string> timeline)
-            : base(client, cache, config)
+            : base(client, cache, config,
+                new MediaStore(Path.Combine(Path.GetTempPath(), $"cm_spy_store_{Guid.NewGuid():N}")), FixedDiskSpaceProbe.Ample())
         {
             _timeline = timeline;
         }
@@ -587,7 +588,8 @@ public class CaptureMediaTests : IDisposable
                 ["Capture:Scope:DefaultEnabled"] = "true",
                 ["Capture:Sync:Enabled"] = "false",
                 ["Capture:Media:Enabled"] = "true",
-                ["Capture:Media:PeerIds"] = "456"
+                ["Capture:Media:PeerIds"] = "456",
+                ["Capture:Media:StorageDirectory"] = tempDir + "-media"
             }).Build();
 
             var transport = new FakeRecordingTdTransport { AutoRepeatReadyState = true };
@@ -689,6 +691,7 @@ public class CaptureMediaTests : IDisposable
         finally
         {
             try { Directory.Delete(tempDir, true); } catch { }
+            try { Directory.Delete(tempDir + "-media", true); } catch { }
         }
     }
 
@@ -1097,7 +1100,9 @@ public class CaptureMediaTests : IDisposable
             })
         };
         var dlConfig = new MediaCaptureConfig { Enabled = true, PeerIds = new HashSet<string> { "user777888" } };
-        var downloader = new MediaDownloader(tdClient, cache, dlConfig, logger: loggerFactory.CreateLogger<MediaDownloader>());
+        var downloader = new MediaDownloader(tdClient, cache, dlConfig,
+            new MediaStore(Path.Combine(Path.GetTempPath(), $"cm_store_{Guid.NewGuid():N}")), FixedDiskSpaceProbe.Ample(),
+            logger: loggerFactory.CreateLogger<MediaDownloader>());
         await downloader.ProcessPendingOnceAsync();
 
         // Break m check: verify no secret markers appeared in ANY log message

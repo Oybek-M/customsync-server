@@ -531,6 +531,7 @@ public class CaptureActivityTests : IDisposable
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
         };
 
         // 1. Malformed entry

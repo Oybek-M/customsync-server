@@ -1812,12 +1812,12 @@ public class MessageCache
             using var conn = OpenConnection();
             using var tx = conn.BeginTransaction();
 
-            var candidates = new List<(string PeerId, long MsgId, long ChatId, long MessageId, string Status, string? LocalPath, long CreatedAt)>();
+            var candidates = new List<(string PeerId, long MsgId, long ChatId, string Status, string? LocalPath, long CreatedAt)>();
             using (var readCmd = conn.CreateCommand())
             {
                 readCmd.Transaction = tx;
                 readCmd.CommandText = @"
-                    SELECT peer_id, msg_id, chat_id, message_id, status, local_path, created_at
+                    SELECT peer_id, msg_id, chat_id, status, local_path, created_at
                     FROM captured_media;";
                 using var reader = readCmd.ExecuteReader();
                 while (reader.Read())
@@ -1826,10 +1826,9 @@ public class MessageCache
                         reader.GetString(0),
                         reader.GetInt64(1),
                         reader.GetInt64(2),
-                        reader.GetInt64(3),
-                        reader.GetString(4),
-                        reader.IsDBNull(5) ? null : reader.GetString(5),
-                        reader.GetInt64(6)));
+                        reader.GetString(3),
+                        reader.IsDBNull(4) ? null : reader.GetString(4),
+                        reader.GetInt64(5)));
                 }
             }
 
@@ -1856,7 +1855,10 @@ public class MessageCache
                     continue; // Rule 4: untouched
                 }
 
-                // Check if message is in message_cache
+                // message_cache server ID'sini saqlaydi, captured_media.message_id esa
+                // TDLib ID'sini (server ID << 20, faqat getMessage uchun). Xabar
+                // msg_id bo'yicha qidiriladi: message_id bilan har qator "yetim"
+                // bo'lib, yuklangan media keyingi yurishdayoq o'chib ketardi.
                 bool isMessageCached = false;
                 using (var cacheCmd = conn.CreateCommand())
                 {
@@ -1866,7 +1868,7 @@ public class MessageCache
                         WHERE chat_id = @chat_id AND message_id = @message_id
                         LIMIT 1;";
                     cacheCmd.Parameters.AddWithValue("@chat_id", row.ChatId);
-                    cacheCmd.Parameters.AddWithValue("@message_id", row.MessageId);
+                    cacheCmd.Parameters.AddWithValue("@message_id", row.MsgId);
                     isMessageCached = cacheCmd.ExecuteScalar() != null;
                 }
 

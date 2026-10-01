@@ -40,21 +40,6 @@ public class MediaDownloader
         _logger = logger;
     }
 
-    public MediaDownloader(
-        ITdClient client,
-        MessageCache cache,
-        MediaCaptureConfig config,
-        TimeProvider? timeProvider = null,
-        ILogger<MediaDownloader>? logger = null)
-        : this(client, cache, config, new MediaStore(config.StorageDirectory), new AmpleDiskSpaceProbe(), timeProvider, logger)
-    {
-    }
-
-    private class AmpleDiskSpaceProbe : IDiskSpaceProbe
-    {
-        public long? GetAvailableFreeBytes(string path) => 100L * 1024 * 1024 * 1024; // 100 GB
-    }
-
     public virtual void Start(CancellationToken ct = default)
     {
         if (!_config.Enabled)

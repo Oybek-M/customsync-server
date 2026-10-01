@@ -273,6 +273,7 @@ public class CaptureScopeTests
                 ["Telegram:ApiHash"] = "hash",
                 ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
                 ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
                 ["Capture:Scope:Block:0"] = bad
             }).Build();
 
@@ -289,6 +290,7 @@ public class CaptureScopeTests
                 ["Telegram:ApiHash"] = "hash",
                 ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
                 ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
                 ["Capture:Scope:DefaultEnabled"] = bad
             }).Build();
 
@@ -308,6 +310,7 @@ public class CaptureScopeTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Scope:Block:0"] = "not_a_valid_number"
         }).Build();
 
@@ -324,6 +327,7 @@ public class CaptureScopeTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Scope:Allow:0"] = "invalid_allow_id"
         }).Build();
 
@@ -339,6 +343,7 @@ public class CaptureScopeTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Scope:Block:0"] = UserPeerId,
             ["Capture:Scope:Allow:0"] = UserPeerId
         }).Build();
@@ -355,6 +360,7 @@ public class CaptureScopeTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Scope:Block:0"] = "111111",
             ["Capture:Scope:Allow:0"] = "222222",
             ["Capture:Scope:DefaultEnabled"] = "false"

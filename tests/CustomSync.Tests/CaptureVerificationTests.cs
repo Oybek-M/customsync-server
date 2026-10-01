@@ -201,7 +201,8 @@ public class CaptureVerificationTests
                 ["Telegram:ApiHash"] = "fake_hash",
                 // Fayl papka sifatida berilgan -> yaratib bo'lmaydi.
                 ["Telegram:DatabaseDirectory"] = blocker,
-                ["Telegram:FilesDirectory"] = Path.GetTempPath()
+                ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+                ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db")
             }).Build();
 
             var report = CapturePreflight.Check(config, nativeLibChecker: _ => true);

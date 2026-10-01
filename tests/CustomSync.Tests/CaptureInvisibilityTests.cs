@@ -149,6 +149,7 @@ public class CaptureInvisibilityTests : IDisposable
                 ["Telegram:DatabaseDirectory"] = tempDir,
                 ["Telegram:FilesDirectory"] = tempDir,
                 ["Capture:CacheDatabasePath"] = Path.Combine(tempDir, "cache.db"),
+                ["Capture:Media:StorageDirectory"] = Path.Combine(tempDir, "media"),
                 ["Capture:SessionInvisibilityTimeoutSeconds"] = "5",
                 ["Capture:Scope:DefaultEnabled"] = "true"
             })

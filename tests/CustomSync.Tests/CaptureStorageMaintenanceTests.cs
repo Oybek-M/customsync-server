@@ -297,7 +297,9 @@ public class CaptureStorageMaintenanceTests
         if (OperatingSystem.IsWindows())
             return;
 
-        var storeDir = CreateTempDir();
+        // Papka hali yo'q: EnsureDirectoryCreated uni 0700 bilan yaratishi kerak
+        // (oldindan yaratilgan papka umask bo'yicha 0755 bo'lib, test Linux'da yiqilardi).
+        var storeDir = Path.Combine(CreateTempDir(), "store");
         var store = new MediaStore(storeDir);
         store.EnsureDirectoryCreated();
 

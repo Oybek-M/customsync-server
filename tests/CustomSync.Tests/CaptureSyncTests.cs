@@ -1115,6 +1115,7 @@ public class CaptureSyncTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Sync:Enabled"] = "notabool"
         }).Build();
 
@@ -1129,6 +1130,7 @@ public class CaptureSyncTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Sync:Enabled"] = "true",
             ["Capture:Sync:ServerUrl"] = "http://remote-server.com"
         }).Build();
@@ -1144,6 +1146,7 @@ public class CaptureSyncTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = Path.GetTempPath(),
             ["Telegram:FilesDirectory"] = Path.GetTempPath(),
+            ["Capture:CacheDatabasePath"] = Path.Combine(Path.GetTempPath(), $"cs-pf-{Guid.NewGuid():N}.db"),
             ["Capture:Sync:Enabled"] = "true",
             ["Capture:Sync:ServerUrl"] = "http://localhost:5000"
         }).Build();
