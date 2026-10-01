@@ -5,22 +5,22 @@ Oxirgi yangilanish: **2026-10-01** (kech, laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **356 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **370 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-10-01, PC `DESKTOP-5CAUS66`)
+### ▶️ Qayerda to'xtadik (2026-10-01, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 6b** — egasining `setting` yozuvlarini pull qilib capture scope'ga qo'yish (`b4c2645` + tekshiruv tuzatishi) |
-| **Keyingi bajariladigan** | **Plan 05 Task 7** — prompt TAYYOR: `docs/05-task7-prompt.md` (2026-10-01, laptop). Gemini bajaradi, TeamLead tekshiradi |
-| Undan keyin | Task 8–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 7** — capture sessiyasini ko'rinmas saqlash (`TdRequestPolicy`, invisibility gate & verification) |
+| **Keyingi bajariladigan** | **Plan 05 Task 8** |
+| Undan keyin | Task 9–10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7–10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
-| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 356/356. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
+| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 370/370. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
 
 2026-10-01: Task 6b (Gemini, `b4c2645`) tekshirilib qabul qilindi —
 1 nuqson (buzilgan yozuv pull'ni butunlay to'xtatardi) va 4 test
@@ -268,7 +268,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–5 + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 7)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–7 + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 8)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -282,6 +282,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 6a — Capture sync client: shifrlash va outbox push | `aea2772` + tekshiruv tuzatishlari | HKDF kalit derivatsiyasi (content, peer, account), AES-256-GCM shifrlash (12-byte random nonce, 16-byte tag, payload = ciphertext ‖ tag), outbox row -> SyncRecord konvertatsiyasi (account_hash faqat activity uchun "", peer_hash barcha turlar uchun account-less), §0.14 pre-validation (poisoned rows karantini), CLI buyruqlari (--set-key, --enroll, 0600 ruxsat tekshiruvi), in-memory access token va faylga avval yoziluvchi refresh token rotatsiyasi, TimeProvider davriy push sikli (30s interval, 500 qator/5MB batch, 400 backoff, 5xx/tarmoq xatosida 1s..300s eksponentsial backoff), SQLite schema user_version = 2 (retry_count, next_retry_at, last_error); 18 test (jami 306) | 11 buzish (a–k) + 14 mustaqil mutatsiya; token javobi (`expires_at` ISO sana) o'qilmasdi, zaharlangan qatorlar navbatni to'sardi, v1 baza migratsiyasi jadvallarni jimgina tashlab ketardi — tuzatildi (jami 317) |
 | 6a-2 — `--set-key` parol o'ramidan master kalitni ochish | `8c27f60` + tekshiruv tuzatishlari | `SyncCrypto.UnwrapMasterKey` (PBKDF2-SHA256 KEK + AES-256-GCM, salt 16B, nonce 12B, wrapped 48B, `MaxWrapIterations`), `SyncCrypto.Fingerprint` (SHA256["customsync-fingerprint-v1" ‖ master][0..8] hex), umumiy token refresh + faylga avval saqlash (`RefreshAndPersistTokenAsync`), runner 401 re-read state retry, `--set-key` interaktiv oqimi (wrap tanlash, 429 bir martalik tekshiruv, max 3 urinish, FP ko'rsatib tasdiqlash, mavjud kalitni almashtirish himoyasi, 0600 atomar yozish), maxfiy ma'lumotlar log/ekranga chiqmasligi; 14 test (jami 331) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'qib bo'lmaydigan kalit fayli tasdiqsiz almashtirilardi, serverdan kelgan `wrap_id` so'rov yo'lini o'zgartira olardi — tuzatildi (jami 337) |
 | 6b — Setting yozuvlarini pull qilish va capture scope snapshot'lari | `b4c2645` + tekshiruv tuzatishi | Server `/api/v1/sync/pull` da `kind` filtri (ixtiyoriy, 400 unknown kind); `CaptureSyncRunner.PullCycleAsync` (`kind=setting`, `PullBatchSize`, `MaxPullPagesPerCycle`, token rotatsiyasi); 6 bosqichli qat'iy yozuv validatsiyasi; `account_hash` bo'yicha filtrlanmaydi (§3.2.1a); LWW merge (eng katta `(occurred_at, record_id)` g'olib); bitta tranzaksiyada cursor va merge commit; SQLite v2 -> v3 migratsiyasi (`synced_settings`, `sync_state`); `SyncedScopeSettingsSource` (8 xabar kaliti -> `ScopeSettingsSnapshot`, 3 faollik kaliti -> `ActivityScopeSettingsSnapshot`, to'liq bo'lmaganda fail-closed `null`, atomar swap, startda bazadan yuklash); DI da `services.Replace`; 15 test (jami 352) | 11 buzish (a–k) + 20 mustaqil mutatsiya; javobdagi `null` yozuv/maydon pull'ni `NullReferenceException` bilan har siklda yiqitardi — tuzatildi; 4 test bo'shlig'i yopildi (jami 356) |
+| 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `HEAD` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -1100,6 +1101,15 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - `SyncedScopeSettingsSource` `ISyncedScopeSettingsSource` va `ISyncedActivityScopeSettingsSource` ni amalga oshiradi, snapshot'lar `Interlocked.Exchange` orqali atomar almashtiriladi (o'quvchilar yarim qurilgan holatni ko'rmaydi). Xizmat ishga tushganda tarmoqqa chiqmasdan oldin SQLite'dagi qatorlardan snapshot tiklanadi.
       - DI da `services.Replace` orqali `AddCaptureHandlers` qo'ygan `Null...` manbalar to'liq almashtiriladi.
       - Maxfiylik: sozlama qiymatlari, payload'lar, tokenlar, kalitlar, `account_id` yoki `peer_id` hech qachon loglanmaydi.
+38. **Capture sessiyasini ko'rinmas saqlash (Plan 05 Task 7)** —
+    - **`TdRequestPolicy` darvozaboni**: Chiquvchi barcha TDLib so'rovlari (`SendAsync` va `Execute`) oldidan transportga yetib bormasdan tekshiriladi. Faqat 8 ta ruxsat etilgan metod o'tadi (`setTdlibParameters`, `setAuthenticationPhoneNumber`, `checkAuthenticationCode`, `checkAuthenticationPassword`, `getMe`, `getMessage`, `setOption`, `getOption`).
+    - **Katta-kichik harfga sezgir va xavfsiz validatsiya**: `StringComparer.Ordinal` orqali solishtiriladi; takroriy JSON kalitlar (`Utf8JsonReader` bilan chuqurlik steki asosida) va noto'g'ri `@type` turlari qat'iy rad etiladi.
+    - **Taqiqlangan so'rovlar**: `viewMessages`, `openChat`, `closeChat`, `openMessageContent`, `sendChatAction`, `sendMessage`, `logOut` va barcha boshqa metodlar `TdRequestNotAllowedException` tashlaydi, transportga bormaydi, `PendingRequestCount` ga ta'sir qilmaydi (0 qoladi) va loglarda faqat `@type` nomi qayd etilib, foydalanuvchi ma'lumotlari yoki maxfiy payloadlar hech qachon loglanmaydi.
+    - **`setOption` va `getOption` cheklovlari**: `setOption` faqat `{"name":"online","value":{"@type":"optionValueBoolean","value":false}}` bo'lganda ruxsat etiladi; `getOption` faqat `{"name":"online"}` bo'lganda ruxsat etiladi. Har qanday boshqa parametrlar (masalan `online: true`, `optionValueEmpty` yoki boshqa parametr nomlari) rad etiladi.
+    - **`SessionInvisibility.EnsureAsync`**: `setOption` yuborib `"ok"` javobini, keyin `getOption` yuborib `optionValueBoolean: false` javobini talab qiladi. `Capture:SessionInvisibilityTimeoutSeconds` sozlamasidan (standart 30s) vaqt chegarasini o'qiydi.
+    - **`Worker` va DI ulanishi**: `Worker` da `AuthorizationGate.RunAsync` muvaffaqiyatli o'tgach, darhol `SessionInvisibility.EnsureAsync` chaqiriladi. Tekshiruv muvaffaqiyatsiz bo'lsa xatolik loglanadi, `Environment.ExitCode = 1` o'rnatiladi va xizmat to'xtatiladi; "Capture service authorized and running" hech qachon loglanmaydi.
+    - **`INativeLibraryProbe` va `SystemNativeLibraryProbe`**: Native kutubxona mavjudligini testlash uchun seam ajratildi va `AddTdlibClient` orqali DI ga ulandi.
+    - **Testlar va buzishlar**: 14 ta yangi test yozildi (`CaptureInvisibilityTests`), jami testlar soni 370 taga yetdi. Barcha 11 ta ataylab buzish (a–k) mustaqil tasdiqlandi.
 
 ---
 

@@ -81,8 +81,8 @@ public class CaptureClientTests
 
         using var client = new TdClient(transport);
 
-        var taskA = client.SendAsync("{\"@type\":\"methodA\"}");
-        var taskB = client.SendAsync("{\"@type\":\"methodB\"}");
+        var taskA = client.SendAsync("{\"@type\":\"getMe\"}");
+        var taskB = client.SendAsync("{\"@type\":\"getOption\",\"name\":\"online\"}");
 
         var resA = await taskA;
         var resB = await taskB;
@@ -90,8 +90,8 @@ public class CaptureClientTests
         var nodeA = JsonNode.Parse(resA)!;
         var nodeB = JsonNode.Parse(resB)!;
 
-        Assert.Equal("methodA", nodeA["method"]?.ToString());
-        Assert.Equal("methodB", nodeB["method"]?.ToString());
+        Assert.Equal("getMe", nodeA["method"]?.ToString());
+        Assert.Equal("getOption", nodeB["method"]?.ToString());
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class CaptureClientTests
 
         var ex = await Assert.ThrowsAsync<TdException>(async () =>
         {
-            await client.SendAsync("{\"@type\":\"getNonExistent\"}");
+            await client.SendAsync("{\"@type\":\"getMe\"}");
         });
 
         Assert.Equal(404, ex.Code);
@@ -149,7 +149,7 @@ public class CaptureClientTests
 
         await Assert.ThrowsAsync<TimeoutException>(async () =>
         {
-            await client.SendAsync("{\"@type\":\"hangingRequest\"}");
+            await client.SendAsync("{\"@type\":\"getMe\"}");
         });
 
         Assert.Equal(0, client.PendingRequestCount);
@@ -161,7 +161,7 @@ public class CaptureClientTests
         var transport = new FakeTdTransport();
         var client = new TdClient(transport, defaultTimeout: TimeSpan.FromSeconds(60));
 
-        var reqTask = client.SendAsync("{\"@type\":\"pendingBeforeDispose\"}");
+        var reqTask = client.SendAsync("{\"@type\":\"getMe\"}");
         Assert.Equal(1, client.PendingRequestCount);
 
         client.Dispose();

@@ -52,8 +52,7 @@ public class TdClient : ITdClient
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        var node = JsonNode.Parse(requestJson)?.AsObject()
-            ?? throw new ArgumentException("Request must be a valid JSON object.", nameof(requestJson));
+        var node = TdRequestPolicy.ValidateAndNormalize(requestJson, _logger);
 
         string extra;
         if (node["@extra"] != null)
@@ -107,7 +106,9 @@ public class TdClient : ITdClient
     public string? Execute(string requestJson)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _transport.Execute(requestJson);
+        var node = TdRequestPolicy.ValidateAndNormalize(requestJson, _logger);
+        var payload = node.ToJsonString();
+        return _transport.Execute(payload);
     }
 
     private void ReceiveLoop()

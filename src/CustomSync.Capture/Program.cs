@@ -27,15 +27,7 @@ if (args.Contains("--enroll"))
     return await CustomSync.Capture.Sync.SyncCliCommands.EnrollAsync(builder.Configuration, prompt, http);
 }
 
-builder.Services.AddSingleton<ITdTransport, NativeTdTransport>();
-builder.Services.AddSingleton<ITdClient, TdClient>();
-builder.Services.AddSingleton<IConsolePrompt, ConsolePrompt>();
-builder.Services.AddSingleton(sp => new TdAuthenticator(
-    sp.GetRequiredService<ITdClient>(),
-    builder.Configuration,
-    sp.GetRequiredService<IConsolePrompt>(),
-    isInteractiveLogin,
-    sp.GetService<ILogger<TdAuthenticator>>()));
+builder.Services.AddTdlibClient(builder.Configuration, isInteractiveLogin);
 
 builder.Services.AddMessageCache(builder.Configuration);
 builder.Services.AddCaptureHandlers();

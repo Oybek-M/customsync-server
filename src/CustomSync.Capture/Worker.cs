@@ -44,7 +44,8 @@ public class Worker : BackgroundService
             return;
         }
 
-        var preflight = CapturePreflight.Check(_configuration);
+        var probe = _services.GetService<INativeLibraryProbe>();
+        var preflight = CapturePreflight.Check(_configuration, probe != null ? probe.CanLoad : null);
         if (!preflight.Success)
         {
             foreach (var err in preflight.Errors)
@@ -71,6 +72,15 @@ public class Worker : BackgroundService
                 "Capture service is not authorized: {Message} Run it once with --login on the VPS.",
                 outcome.Message);
 
+            Fail();
+            return;
+        }
+
+        var invisibilityTimeout = SessionInvisibility.ReadTimeout(_configuration, _logger);
+        var invisibility = await SessionInvisibility.EnsureAsync(client, invisibilityTimeout, stoppingToken);
+        if (!invisibility.Success)
+        {
+            _logger.LogError("Capture session invisibility verification failed: {Error}", invisibility.Error);
             Fail();
             return;
         }
