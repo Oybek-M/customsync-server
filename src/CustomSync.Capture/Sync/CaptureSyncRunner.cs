@@ -216,84 +216,28 @@ public class CaptureSyncRunner
 
             var record = SyncCrypto.BuildRecord(row, _masterKey!, _deviceState!.DeviceId);
 
-            // Plan 05 Task 8: Opt-in media capture for deleted messages
+            // Plan 05 Task 8: o'chirilgan xabar media'si. Blob yozuvdan OLDIN
+            // serverda bo'lishi shart (spec §5.3). Yozuv o'zgarmas (record_id
+            // deterministik): bir marta mediasiz ketsa, media unga hech qachon
+            // ulanmaydi — shuning uchun vaqtinchalik xatoda qator ushlab
+            // turiladi. Fayl o'zi yaroqsiz bo'lsa esa matn kutib qolmaydi.
             if (row.Kind == "deleted")
             {
                 var mediaRow = _cache.GetCapturedMedia(row.PeerId, row.MsgId);
-                if (mediaRow != null && mediaRow.Status == "downloaded")
+                if (mediaRow is { Status: "downloaded" })
                 {
-                    if (string.IsNullOrEmpty(mediaRow.LocalPath) || !File.Exists(mediaRow.LocalPath))
+                    serverUrl ??= _config["Capture:Sync:ServerUrl"];
+                    token ??= await EnsureAccessTokenAsync(forceRefresh: false, ct);
+
+                    var media = await PrepareMediaAsync(mediaRow, serverUrl, token, ct);
+                    if (media.HoldReason is not null)
                     {
-                        // File missing on disk: do NOT keep record forever; push without media (break j)
-                        _logger?.LogWarning("Captured media file is missing on disk. Pushing record without media.");
+                        _cache.MarkOutboxRowError(row.Id, media.HoldReason, now + CalculateRowBackoff(row.RetryCount + 1));
+                        continue;
                     }
-                    else
+                    if (media.Ref is not null)
                     {
-                        serverUrl ??= _config["Capture:Sync:ServerUrl"];
-                        token ??= await EnsureAccessTokenAsync(forceRefresh: false, ct);
-
-                        if (!string.IsNullOrWhiteSpace(serverUrl) && token != null)
-                        {
-                            byte[] plaintextBytes;
-                            string calculatedSha256;
-                            using (var stream = File.OpenRead(mediaRow.LocalPath))
-                            {
-                                var hashBytes = await SHA256.HashDataAsync(stream, ct);
-                                calculatedSha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
-                            }
-
-                            plaintextBytes = await File.ReadAllBytesAsync(mediaRow.LocalPath, ct);
-
-                            var headResult = await _client.HeadMediaAsync(serverUrl, token, calculatedSha256, ct);
-                            byte[]? mediaNonce = null;
-
-                            if (headResult.Exists && !string.IsNullOrEmpty(headResult.NonceBase64))
-                            {
-                                // Stored nonce from server (break k: must use stored nonce, not a fresh one)
-                                mediaNonce = Convert.FromBase64String(headResult.NonceBase64);
-                            }
-                            else
-                            {
-                                // 404: encrypt with HKDF(master, "customsync-media-v1") + fresh nonce
-                                var mediaKey = SyncCrypto.DeriveMediaKey(_masterKey!);
-                                var (wireBlob, freshNonce) = SyncCrypto.EncryptMedia(mediaKey, plaintextBytes);
-                                var nonceB64 = Convert.ToBase64String(freshNonce);
-
-                                var putResult = await _client.PutMediaAsync(serverUrl, token, calculatedSha256, wireBlob, nonceB64, ct);
-                                if (putResult.Status == MediaUploadStatus.InsufficientStorage) // 507
-                                {
-                                    // Keep outbox row for retry, skip pushing this record now
-                                    var delay = CalculateRowBackoff(row.RetryCount + 1);
-                                    _cache.MarkOutboxRowError(row.Id, "507 Insufficient Storage", now + delay);
-                                    continue;
-                                }
-                                else if (putResult.Status == MediaUploadStatus.PayloadTooLarge) // 413
-                                {
-                                    // Push record without media, mark media row skipped (break i)
-                                    _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
-                                }
-                                else if (putResult.Status == MediaUploadStatus.Success)
-                                {
-                                    mediaNonce = freshNonce;
-                                }
-                            }
-
-                            if (mediaNonce != null)
-                            {
-                                record = record with
-                                {
-                                    Media = new[]
-                                    {
-                                        new MediaRef
-                                        {
-                                            Hash = calculatedSha256,
-                                            Size = plaintextBytes.Length,
-                                            Nonce = mediaNonce
-                                        }
-                                    }
-                                };
-                            }
-                        }
+                        record = record with { Media = new[] { media.Ref } };
                     }
                 }
             }
@@ -644,4 +588,114 @@ public class CaptureSyncRunner
         var pullOk = await PullCycleAsync(ct);
         return pushOk && pullOk;
     }
+
+    private sealed record PreparedMedia(MediaRef? Ref, string? HoldReason);
+
+    /// <summary>
+    /// Media'ni yozuvga ulashga tayyorlaydi. Ref — ulanadigan havola;
+    /// HoldReason — qatorni keyinroq qayta urinish uchun ushlab turish sababi;
+    /// ikkalasi ham null — yozuv mediasiz ketadi (fayl yaroqsiz yoki juda katta).
+    /// </summary>
+    private async Task<PreparedMedia> PrepareMediaAsync(
+        CapturedMediaRow mediaRow, string? serverUrl, string? token, CancellationToken ct)
+    {
+        // Fayl BIR marta o'qiladi va xesh shu baytlardan: ikki marta o'qilsa,
+        // oradagi o'zgarish e'lon qilingan xeshga mos kelmaydigan blob yuklardi.
+        byte[] plaintext;
+        try
+        {
+            if (string.IsNullOrEmpty(mediaRow.LocalPath))
+                throw new FileNotFoundException();
+            plaintext = await File.ReadAllBytesAsync(mediaRow.LocalPath, ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Istisno matnida fayl yo'li (va nomi) bor — faqat turi yoziladi.
+            _logger?.LogWarning("Captured media file is unreadable ({ErrorType}); pushing the record without media.",
+                ex.GetType().Name);
+            _cache.UpdateMediaFailed(mediaRow.PeerId, mediaRow.MsgId, mediaRow.Attempts, null);
+            return new PreparedMedia(null, null);
+        }
+
+        var sha256 = Convert.ToHexString(SHA256.HashData(plaintext)).ToLowerInvariant();
+        if (!string.Equals(sha256, mediaRow.Sha256, StringComparison.Ordinal))
+        {
+            // Yuklab olingandan keyin o'zgargan fayl — boshqa fayl; uni
+            // o'chirilgan xabarga ulash yolg'on bo'lardi.
+            _logger?.LogWarning("Captured media file changed after download ({Stored} -> {Actual}); pushing the record without media.",
+                HashPrefix(mediaRow.Sha256), HashPrefix(sha256));
+            _cache.UpdateMediaFailed(mediaRow.PeerId, mediaRow.MsgId, mediaRow.Attempts, null);
+            return new PreparedMedia(null, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(serverUrl) || token is null)
+            return new PreparedMedia(null, "media upload: no server URL or token");
+
+        HeadMediaResult head;
+        try
+        {
+            head = await _client.HeadMediaAsync(serverUrl, token, sha256, ct);
+        }
+        catch (HttpRequestException)
+        {
+            return new PreparedMedia(null, "media HEAD: network error");
+        }
+
+        if (head.Unauthorized)
+            return new PreparedMedia(null, "media HEAD: 401");
+        if (head.Failed)
+            return new PreparedMedia(null, "media HEAD: server error");
+
+        if (head.Exists)
+        {
+            // Server dedup qiladi: blob boshqa qurilma nonce'i bilan saqlangan
+            // bo'lishi mumkin, shuning uchun yozuvga FAQAT serverdagi nonce.
+            var stored = TryDecodeNonce(head.NonceBase64);
+            return stored is null
+                ? new PreparedMedia(null, "media HEAD 200 without a valid X-Nonce")
+                : new PreparedMedia(new MediaRef { Hash = sha256, Size = plaintext.Length, Nonce = stored }, null);
+        }
+
+        var (wire, nonce) = SyncCrypto.EncryptMedia(SyncCrypto.DeriveMediaKey(_masterKey!), plaintext);
+        PutMediaResult put;
+        try
+        {
+            put = await _client.PutMediaAsync(serverUrl, token, sha256, wire, Convert.ToBase64String(nonce), ct);
+        }
+        catch (HttpRequestException)
+        {
+            return new PreparedMedia(null, "media PUT: network error");
+        }
+
+        switch (put.Status)
+        {
+            case MediaUploadStatus.Success:
+                return new PreparedMedia(new MediaRef { Hash = sha256, Size = plaintext.Length, Nonce = nonce }, null);
+            case MediaUploadStatus.PayloadTooLarge:
+                // Doimiy: server bu hajmni hech qachon qabul qilmaydi.
+                _cache.UpdateMediaSkipped(mediaRow.PeerId, mediaRow.MsgId);
+                return new PreparedMedia(null, null);
+            case MediaUploadStatus.InsufficientStorage:
+                return new PreparedMedia(null, "media PUT: 507 quota full"); // spec §0.9
+            default:
+                return new PreparedMedia(null, $"media PUT: {put.Status}");
+        }
+    }
+
+    private static byte[]? TryDecodeNonce(string? base64)
+    {
+        if (string.IsNullOrEmpty(base64)) return null;
+        try
+        {
+            var nonce = Convert.FromBase64String(base64);
+            return nonce.Length == 12 ? nonce : null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static string HashPrefix(string? hash)
+        => string.IsNullOrEmpty(hash) ? "-" : hash[..Math.Min(8, hash.Length)];
 }

@@ -72,7 +72,9 @@ public enum MediaUploadStatus
     Error
 }
 
-public record HeadMediaResult(bool Exists, string? NonceBase64 = null, bool Unauthorized = false);
+/// <param name="Failed">404 ham, 200 ham emas (5xx, 400 ...): blob bor-yo'qligi NOMA'LUM —
+/// bu holatni 404 deb talqin qilish keraksiz PUT'ga va noto'g'ri nonce'ga olib kelardi.</param>
+public record HeadMediaResult(bool Exists, string? NonceBase64 = null, bool Unauthorized = false, bool Failed = false);
 public record PutMediaResult(MediaUploadStatus Status, string? NonceBase64 = null, string? ErrorMessage = null);
 
 public class CaptureSyncHttpClient
@@ -446,7 +448,7 @@ public class CaptureSyncHttpClient
             return new HeadMediaResult(true, nonce);
         }
 
-        return new HeadMediaResult(false, null);
+        return new HeadMediaResult(false, null, Failed: true);
     }
 
     public virtual async Task<PutMediaResult> PutMediaAsync(

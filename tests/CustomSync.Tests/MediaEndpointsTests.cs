@@ -426,6 +426,68 @@ public class MediaEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory
             db.Records, r => r.RecordId == recordWithUnknownMedia.record_id));
     }
 
+    // TeamLead tekshiruvi (2026-10-01): `media_ref_invalid` hech bir testda
+    // yo'q edi — format tekshiruvi olib tashlansa ham suite yashil qolardi.
+    // Format xatosi `media_hash_missing` dan farqlanishi shart: serverda BOR
+    // blob'ga noto'g'ri nonce bilan havola qilgan yozuv saqlanmasligi kerak.
+    [Theory]
+    [InlineData("uppercase_hash")]
+    [InlineData("short_nonce")]
+    [InlineData("long_nonce")]
+    public async Task Push_record_with_malformed_media_ref_returns_media_ref_invalid(string variant)
+    {
+        var (client, deviceId, _) = await EnrolDeviceAsync();
+        var peer = $"peer_{Guid.NewGuid():N}";
+        var hash = NewValidHash();
+
+        // Blob serverda bor — xato faqat havolaning shaklida.
+        using (var put = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/media/{hash}") { Content = new ByteArrayContent(new byte[16]) })
+        {
+            put.Headers.Add("X-Nonce", Convert.ToBase64String(new byte[12]));
+            Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(put)).StatusCode);
+        }
+
+        object mediaRef = variant switch
+        {
+            "uppercase_hash" => new { hash = hash.ToUpperInvariant(), size = 16L, nonce = Convert.ToBase64String(new byte[12]) },
+            "short_nonce" => new { hash, size = 16L, nonce = Convert.ToBase64String(new byte[11]) },
+            _ => new { hash, size = 16L, nonce = Convert.ToBase64String(new byte[13]) },
+        };
+
+        var recordId = RecordId.Compute("deleted", "acc01", peer, 1, 1753900030L);
+        var pushResp = await client.PostAsJsonAsync("/api/v1/sync/push", new
+        {
+            records = new object[]
+            {
+                new
+                {
+                    record_id = recordId,
+                    kind = "deleted",
+                    account_hash = "acc01",
+                    peer_hash = peer,
+                    msg_id = 1L,
+                    occurred_at = 1753900030L,
+                    observed_at = 1753900031L,
+                    device_id = deviceId,
+                    nonce = Convert.ToBase64String(new byte[12]),
+                    payload = Convert.ToBase64String(new byte[] { 1, 2 }),
+                    media = new[] { mediaRef }
+                }
+            }
+        });
+        Assert.Equal(HttpStatusCode.OK, pushResp.StatusCode);
+
+        var result = (await pushResp.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("results").EnumerateArray().Single();
+        Assert.Equal("error", result.GetProperty("status").GetString());
+        Assert.Equal("media_ref_invalid", result.GetProperty("message").GetString());
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SyncDbContext>();
+        Assert.False(await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.AnyAsync(
+            db.Records, r => r.RecordId == recordId));
+    }
+
     [Fact]
     public async Task Pushed_record_with_media_hashes_survives_round_trip()
     {

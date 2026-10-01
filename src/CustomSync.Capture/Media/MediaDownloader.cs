@@ -59,7 +59,8 @@ public class MediaDownloader
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Unexpected error in media downloader loop.");
+                // Istisno matnida fayl yo'li bo'lishi mumkin — faqat turi.
+                _logger?.LogError("Unexpected error in media downloader loop ({ErrorType}).", ex.GetType().Name);
                 await Task.Delay(1000, ct);
             }
         }
@@ -96,6 +97,11 @@ public class MediaDownloader
 
             if (root.TryGetProperty("@type", out var typeProp) && typeProp.GetString() == "error")
             {
+                if (root.TryGetProperty("code", out var codeProp) && codeProp.TryGetInt32(out var code) && code == 404)
+                {
+                    _cache.UpdateMediaFailed(row.PeerId, row.MsgId, row.Attempts + 1, null);
+                    return;
+                }
                 int attempts = row.Attempts + 1;
                 if (attempts >= _config.MaxAttempts)
                 {
@@ -188,9 +194,23 @@ public class MediaDownloader
                 }
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // To'xtash (restart, deploy) urinish emas: qator `pending` qoladi
+            // va keyingi ishga tushishda qaytadan olinadi.
+            throw;
+        }
+        catch (TdException ex) when (ex.Code == 404)
+        {
+            // Haqiqiy TdClient TDLib xatosini istisnoga aylantiradi: xabar
+            // endi yo'q — qayta urinishning ma'nosi yo'q.
+            _logger?.LogInformation("Message is gone; media download given up.");
+            _cache.UpdateMediaFailed(row.PeerId, row.MsgId, row.Attempts + 1, null);
+        }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Error processing media download.");
+            // Istisno matnida fayl yo'li (va nomi) bo'lishi mumkin — faqat turi.
+            _logger?.LogError("Error processing media download ({ErrorType}).", ex.GetType().Name);
             int attempts = row.Attempts + 1;
             if (attempts >= _config.MaxAttempts)
             {
