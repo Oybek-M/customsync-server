@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CustomSync.Data;
 using CustomSync.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -9,12 +10,24 @@ namespace CustomSync.Services;
 /// bazada — katta ikkilik ma'lumotni PostgreSQL ichida saqlash zaxira
 /// olishni ham, so'rovlarni ham sekinlashtiradi.
 /// </summary>
-public class MediaService(SyncDbContext db, string storageRoot)
+public partial class MediaService(SyncDbContext db, string storageRoot)
 {
-    public async Task<bool> ExistsAsync(string hash, CancellationToken ct = default)
+    [GeneratedRegex("^[0-9a-f]{64}$")]
+    private static partial Regex HashRegex();
+
+    public static bool IsValidHash(string? hash) => hash is not null && HashRegex().IsMatch(hash);
+
+    public static void ValidateHash(string hash)
     {
+        if (!IsValidHash(hash))
+            throw new ArgumentException("Hash must be a 64-character lowercase hex SHA-256 string.", nameof(hash));
+    }
+
+    public async Task<MediaBlobEntity?> GetBlobAsync(string hash, CancellationToken ct = default)
+    {
+        ValidateHash(hash);
         var blob = await db.MediaBlobs.FirstOrDefaultAsync(m => m.Hash == hash, ct);
-        if (blob is null) return false;
+        if (blob is null) return null;
 
         if (blob.OrphanedAt != null)
         {
@@ -22,7 +35,12 @@ public class MediaService(SyncDbContext db, string storageRoot)
             await db.SaveChangesAsync(ct);
         }
 
-        return true;
+        return blob;
+    }
+
+    public async Task<bool> ExistsAsync(string hash, CancellationToken ct = default)
+    {
+        return await GetBlobAsync(hash, ct) is not null;
     }
 
     public async Task<long> GetTotalStoredBytesAsync(CancellationToken ct = default)
@@ -38,6 +56,10 @@ public class MediaService(SyncDbContext db, string storageRoot)
         string? deviceId = null,
         CancellationToken ct = default)
     {
+        ValidateHash(hash);
+        if (nonce is null || nonce.Length != 12)
+            throw new ArgumentException("Nonce must be exactly 12 bytes.", nameof(nonce));
+
         if (await ExistsAsync(hash, ct)) return;
 
         var path = PathFor(hash);
@@ -61,6 +83,7 @@ public class MediaService(SyncDbContext db, string storageRoot)
 
     public async Task<byte[]?> ReadAsync(string hash, CancellationToken ct = default)
     {
+        ValidateHash(hash);
         var blob = await db.MediaBlobs.AsNoTracking()
             .FirstOrDefaultAsync(m => m.Hash == hash, ct);
         if (blob is null || !File.Exists(blob.StoragePath)) return null;

@@ -65,7 +65,7 @@ public class CaptureCacheTests : IDisposable
         using var cmd = conn.CreateCommand();
         cmd.CommandText = "PRAGMA user_version;";
         var version = Convert.ToInt32(cmd.ExecuteScalar());
-        Assert.Equal(3, version);
+        Assert.Equal(4, version);
     }
 
     [Fact]
@@ -476,6 +476,129 @@ public class CaptureCacheTests : IDisposable
         // Verify Prune is called when pruner runs
         int deleted = pruner.PruneOnce();
         Assert.Equal(0, deleted);
+    }
+
+    [Fact]
+    public void Test14_Migration_v3_to_v4_preserves_all_tables_and_rows()
+    {
+        var dbPath = CreateTempDbPath();
+        using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                CREATE TABLE message_cache (
+                    chat_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    text TEXT,
+                    sender_id TEXT,
+                    is_out INTEGER NOT NULL,
+                    is_media INTEGER NOT NULL,
+                    media_id TEXT,
+                    date INTEGER NOT NULL,
+                    cached_at INTEGER NOT NULL,
+                    PRIMARY KEY (chat_id, message_id)
+                );
+                CREATE TABLE capture_outbox (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    kind TEXT NOT NULL,
+                    account_id TEXT NOT NULL,
+                    peer_id TEXT NOT NULL,
+                    msg_id INTEGER NOT NULL,
+                    occurred_at INTEGER NOT NULL,
+                    observed_at INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    next_retry_at INTEGER,
+                    last_error TEXT,
+                    UNIQUE (kind, account_id, peer_id, msg_id, occurred_at)
+                );
+                CREATE TABLE activity_latest (
+                    peer_id TEXT NOT NULL,
+                    field TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    observed_at INTEGER NOT NULL,
+                    PRIMARY KEY (peer_id, field)
+                );
+                CREATE TABLE pending_edits (
+                    chat_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    peer_id TEXT,
+                    account_id TEXT,
+                    old_text TEXT,
+                    new_text TEXT,
+                    is_out INTEGER,
+                    msg_date INTEGER,
+                    edit_date INTEGER,
+                    observed_at INTEGER NOT NULL,
+                    PRIMARY KEY (chat_id, message_id)
+                );
+                CREATE TABLE synced_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    occurred_at INTEGER NOT NULL,
+                    record_id TEXT NOT NULL
+                );
+                CREATE TABLE sync_state (
+                    name TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                PRAGMA user_version = 3;
+
+                INSERT INTO message_cache (chat_id, message_id, text, sender_id, is_out, is_media, date, cached_at)
+                VALUES (10, 20, 'v3 text', 'user1', 1, 0, 100, 100);
+
+                INSERT INTO capture_outbox (id, kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at, retry_count)
+                VALUES (1, 'deleted', 'acc1', 'p1', 5, 200, 200, '{""account_id"":""acc1"",""peer_id"":""p1""}', 200, 0);
+
+                INSERT INTO activity_latest (peer_id, field, value, observed_at)
+                VALUES ('p1', 'status', 'online:200', 200);
+
+                INSERT INTO pending_edits (chat_id, message_id, observed_at)
+                VALUES (10, 20, 200);
+
+                INSERT INTO synced_settings (key, value, occurred_at, record_id)
+                VALUES ('k1', 'v1', 200, 'rec1');
+
+                INSERT INTO sync_state (name, value)
+                VALUES ('state1', 'val1');
+            ";
+            cmd.ExecuteNonQuery();
+        }
+
+        var cache = new MessageCache(dbPath);
+        cache.Initialize();
+
+        // 1. user_version is 4
+        using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "PRAGMA user_version;";
+            Assert.Equal(4, Convert.ToInt32(cmd.ExecuteScalar()));
+        }
+
+        // 2. All existing rows intact
+        var msg = cache.Get(10, 20);
+        Assert.NotNull(msg);
+        Assert.Equal("v3 text", msg.Text);
+
+        var outbox = cache.GetOutboxRows();
+        Assert.Single(outbox);
+        Assert.Equal("deleted", outbox[0].Kind);
+
+        Assert.Equal("online:200", cache.GetLatestActivity("p1", "status").Value);
+        Assert.NotNull(cache.GetSyncedSetting("k1"));
+        Assert.Equal("v1", cache.GetSyncedSetting("k1")?.Value);
+
+        // 3. captured_media works
+        var queued = cache.QueueCapturedMedia("p1", 5, 10, 20, "messagePhoto", 1000);
+        Assert.True(queued);
+        var mediaRow = cache.GetCapturedMedia("p1", 5);
+        Assert.NotNull(mediaRow);
+        Assert.Equal("pending", mediaRow.Status);
+        Assert.Equal(1000, mediaRow.Size);
     }
 
     private class TestLogger(List<string> logs) : ILogger

@@ -17,15 +17,18 @@ public class MediaServiceTests : IClassFixture<DatabaseFixture>, IDisposable
         if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
     }
 
+    private static string ValidHash(char fill) => new string(fill, 64);
+
     [Fact]
     public async Task Stored_blob_can_be_read_back_byte_for_byte()
     {
         await using var db = _fixture.CreateContext();
         var service = new MediaService(db, _root);
         var content = new byte[] { 9, 8, 7, 6, 5 };
+        var hash = ValidHash('a');
 
-        await service.StoreAsync("hash-aaa", content, new byte[12]);
-        var read = await service.ReadAsync("hash-aaa");
+        await service.StoreAsync(hash, content, new byte[12]);
+        var read = await service.ReadAsync(hash);
 
         Assert.Equal(content, read);
     }
@@ -35,12 +38,13 @@ public class MediaServiceTests : IClassFixture<DatabaseFixture>, IDisposable
     {
         await using var db = _fixture.CreateContext();
         var service = new MediaService(db, _root);
+        var hash = ValidHash('b');
 
-        await service.StoreAsync("hash-bbb", [1, 2, 3], new byte[12]);
-        await service.StoreAsync("hash-bbb", [1, 2, 3], new byte[12]);
+        await service.StoreAsync(hash, [1, 2, 3], new byte[12]);
+        await service.StoreAsync(hash, [1, 2, 3], new byte[12]);
 
-        Assert.True(await service.ExistsAsync("hash-bbb"));
-        Assert.Equal(new byte[] { 1, 2, 3 }, await service.ReadAsync("hash-bbb"));
+        Assert.True(await service.ExistsAsync(hash));
+        Assert.Equal(new byte[] { 1, 2, 3 }, await service.ReadAsync(hash));
     }
 
     [Fact]
@@ -48,8 +52,9 @@ public class MediaServiceTests : IClassFixture<DatabaseFixture>, IDisposable
     {
         await using var db = _fixture.CreateContext();
         var service = new MediaService(db, _root);
+        var missingHash = ValidHash('0');
 
-        Assert.Null(await service.ReadAsync("nope"));
-        Assert.False(await service.ExistsAsync("nope"));
+        Assert.Null(await service.ReadAsync(missingHash));
+        Assert.False(await service.ExistsAsync(missingHash));
     }
 }

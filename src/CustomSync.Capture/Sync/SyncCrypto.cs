@@ -13,6 +13,7 @@ public static class SyncCrypto
     public const string ContentKeyInfo = "customsync-content-v1";
     public const string PeerKeyInfo = "customsync-peer-v1";
     public const string AccountKeyInfo = "customsync-account-v1";
+    public const string MediaKeyInfo = "customsync-media-v1";
 
     public static byte[] DeriveContentKey(byte[] masterKey)
         => CryptoPrimitives.DeriveKey(masterKey, ContentKeyInfo);
@@ -22,6 +23,31 @@ public static class SyncCrypto
 
     public static byte[] DeriveAccountKey(byte[] masterKey)
         => CryptoPrimitives.DeriveKey(masterKey, AccountKeyInfo);
+
+    public static byte[] DeriveMediaKey(byte[] masterKey)
+        => CryptoPrimitives.DeriveKey(masterKey, MediaKeyInfo);
+
+    public static (byte[] WireBlob, byte[] Nonce) EncryptMedia(
+        byte[] mediaKey,
+        byte[] plaintext,
+        byte[]? fixedNonce = null)
+    {
+        var nonce = fixedNonce ?? RandomNumberGenerator.GetBytes(12);
+        if (nonce.Length != 12)
+            throw new ArgumentException("Nonce must be exactly 12 bytes.", nameof(fixedNonce));
+
+        var ciphertext = new byte[plaintext.Length];
+        var tag = new byte[16];
+
+        using var aes = new AesGcm(mediaKey, tagSizeInBytes: 16);
+        aes.Encrypt(nonce, plaintext, ciphertext, tag, associatedData: ReadOnlySpan<byte>.Empty);
+
+        var wireBlob = new byte[ciphertext.Length + tag.Length];
+        Buffer.BlockCopy(ciphertext, 0, wireBlob, 0, ciphertext.Length);
+        Buffer.BlockCopy(tag, 0, wireBlob, ciphertext.Length, tag.Length);
+
+        return (wireBlob, nonce);
+    }
 
     public static (byte[] Payload, byte[] Nonce) EncryptPayload(
         byte[] contentKey,

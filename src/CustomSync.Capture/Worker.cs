@@ -85,6 +85,8 @@ public class Worker : BackgroundService
             return;
         }
 
+        _services.GetRequiredService<CustomSync.Capture.Media.MediaDownloader>().Start(stoppingToken);
+
         _logger.LogInformation("Capture service authorized and running.");
 
         while (!stoppingToken.IsCancellationRequested)

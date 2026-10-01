@@ -204,7 +204,7 @@ public class PaginationTests : IClassFixture<DatabaseFixture>
         var before = await stats.StorageAsync();
 
         var peerHash = $"peer_st_{Guid.NewGuid():N}";
-        var mediaHash = $"media_st_{Guid.NewGuid():N}";
+        var mediaHash = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
 
         // 2 ta yozuv qo'shamiz (har biri 50 bayt)
         await sync.PushAsync("test-device", [

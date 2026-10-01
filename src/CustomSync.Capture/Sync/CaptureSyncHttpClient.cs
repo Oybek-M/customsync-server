@@ -63,6 +63,18 @@ public record PullRecordsResult(
     PullResponse? Response = null,
     string? ErrorMessage = null);
 
+public enum MediaUploadStatus
+{
+    Success,
+    PayloadTooLarge, // 413
+    InsufficientStorage, // 507
+    Unauthorized,
+    Error
+}
+
+public record HeadMediaResult(bool Exists, string? NonceBase64 = null, bool Unauthorized = false);
+public record PutMediaResult(MediaUploadStatus Status, string? NonceBase64 = null, string? ErrorMessage = null);
+
 public class CaptureSyncHttpClient
 {
     private readonly HttpClient _httpClient;
@@ -391,5 +403,99 @@ public class CaptureSyncHttpClient
             _logger?.LogWarning(ex, "Failed to parse pull response JSON.");
             return new PullRecordsResult(PullStatus.BadJson, ErrorMessage: ex.Message);
         }
+    }
+
+    public virtual async Task<HeadMediaResult> HeadMediaAsync(
+        string serverUrl,
+        string accessToken,
+        string sha256Hex,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/media/{sha256Hex.ToLowerInvariant()}";
+        using var request = new HttpRequestMessage(HttpMethod.Head, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger?.LogError(ex, "Network error during HEAD media.");
+            throw;
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return new HeadMediaResult(false, null, Unauthorized: true);
+        }
+
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return new HeadMediaResult(false, null);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            string? nonce = null;
+            if (response.Headers.TryGetValues("X-Nonce", out var values))
+            {
+                nonce = values.FirstOrDefault();
+            }
+            return new HeadMediaResult(true, nonce);
+        }
+
+        return new HeadMediaResult(false, null);
+    }
+
+    public virtual async Task<PutMediaResult> PutMediaAsync(
+        string serverUrl,
+        string accessToken,
+        string sha256Hex,
+        byte[] wireBlob,
+        string nonceBase64,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/media/{sha256Hex.ToLowerInvariant()}";
+        using var request = new HttpRequestMessage(HttpMethod.Put, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Headers.Add("X-Nonce", nonceBase64);
+        request.Content = new ByteArrayContent(wireBlob);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger?.LogError(ex, "Network error during PUT media.");
+            throw;
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return new PutMediaResult(MediaUploadStatus.Unauthorized);
+        }
+
+        if (response.StatusCode == (HttpStatusCode)413) // PayloadTooLarge
+        {
+            return new PutMediaResult(MediaUploadStatus.PayloadTooLarge, ErrorMessage: "413 Payload Too Large");
+        }
+
+        if (response.StatusCode == (HttpStatusCode)507) // InsufficientStorage
+        {
+            return new PutMediaResult(MediaUploadStatus.InsufficientStorage, ErrorMessage: "507 Insufficient Storage");
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            return new PutMediaResult(MediaUploadStatus.Success, nonceBase64);
+        }
+
+        var err = await response.Content.ReadAsStringAsync(ct);
+        return new PutMediaResult(MediaUploadStatus.Error, ErrorMessage: $"HTTP {(int)response.StatusCode}: {err}");
     }
 }

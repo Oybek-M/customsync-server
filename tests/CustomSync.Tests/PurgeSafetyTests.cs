@@ -76,7 +76,7 @@ public class PurgeSafetyTests : IClassFixture<DatabaseFixture>, IDisposable
         DateTime uploadedAt,
         DateTime? orphanedAt = null)
     {
-        var hash = Guid.NewGuid().ToString("N");
+        var hash = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         var prefix = hash[..2];
         var dir = Path.Combine(mediaRoot, prefix);
         Directory.CreateDirectory(dir);
@@ -1046,7 +1046,7 @@ public class PurgeSafetyTests : IClassFixture<DatabaseFixture>, IDisposable
         db.RecordMedia.Add(new RecordMediaEntity { RecordId = record.RecordId, Hash = blob1.Hash });
 
         // 2. Diskda MAVJUD BO'LMAGAN blob (missing media)
-        var missingHash = Guid.NewGuid().ToString("N");
+        var missingHash = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         var missingBlob = new MediaBlobEntity
         {
             Hash = missingHash,

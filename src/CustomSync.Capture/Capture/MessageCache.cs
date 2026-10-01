@@ -113,6 +113,21 @@ public class MessageCache
                     name TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS captured_media (
+                    peer_id TEXT NOT NULL,
+                    msg_id INTEGER NOT NULL,
+                    chat_id INTEGER NOT NULL,
+                    message_id INTEGER NOT NULL,
+                    content_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    next_attempt_at INTEGER,
+                    local_path TEXT,
+                    sha256 TEXT,
+                    size INTEGER,
+                    PRIMARY KEY (peer_id, msg_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_captured_media_status_next ON captured_media (status, next_attempt_at);
             ";
             cmd.ExecuteNonQuery();
 
@@ -122,7 +137,7 @@ public class MessageCache
             if (version == 0)
             {
                 using var setVersionCmd = conn.CreateCommand();
-                setVersionCmd.CommandText = "PRAGMA user_version = 3;";
+                setVersionCmd.CommandText = "PRAGMA user_version = 4;";
                 setVersionCmd.ExecuteNonQuery();
             }
             else
@@ -165,6 +180,35 @@ public class MessageCache
                     ";
                     upgradeCmd2.ExecuteNonQuery();
                     upgradeTx2.Commit();
+                    version = 3;
+                }
+
+                if (version == 3)
+                {
+                    using var upgradeTx3 = conn.BeginTransaction();
+                    using var upgradeCmd3 = conn.CreateCommand();
+                    upgradeCmd3.Transaction = upgradeTx3;
+                    upgradeCmd3.CommandText = @"
+                        CREATE TABLE IF NOT EXISTS captured_media (
+                            peer_id TEXT NOT NULL,
+                            msg_id INTEGER NOT NULL,
+                            chat_id INTEGER NOT NULL,
+                            message_id INTEGER NOT NULL,
+                            content_type TEXT NOT NULL,
+                            status TEXT NOT NULL,
+                            attempts INTEGER NOT NULL DEFAULT 0,
+                            next_attempt_at INTEGER,
+                            local_path TEXT,
+                            sha256 TEXT,
+                            size INTEGER,
+                            PRIMARY KEY (peer_id, msg_id)
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_captured_media_status_next ON captured_media (status, next_attempt_at);
+                        PRAGMA user_version = 4;
+                    ";
+                    upgradeCmd3.ExecuteNonQuery();
+                    upgradeTx3.Commit();
+                    version = 4;
                 }
             }
 
@@ -1557,6 +1601,213 @@ public class MessageCache
             throw new MessageCacheException("Failed to read synced setting from database.", ex);
         }
     }
+
+    public virtual bool QueueCapturedMedia(
+        string peerId,
+        long msgId,
+        long chatId,
+        long messageId,
+        string contentType,
+        long? size = null,
+        long? nextAttemptAt = null)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                INSERT OR IGNORE INTO captured_media
+                (peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, size)
+                VALUES (@peer_id, @msg_id, @chat_id, @message_id, @content_type, 'pending', 0, @next_attempt_at, @size);";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.Parameters.AddWithValue("@chat_id", chatId);
+            cmd.Parameters.AddWithValue("@message_id", messageId);
+            cmd.Parameters.AddWithValue("@content_type", contentType);
+            cmd.Parameters.AddWithValue("@next_attempt_at", (object?)nextAttemptAt ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@size", (object?)size ?? DBNull.Value);
+            return cmd.ExecuteNonQuery() > 0;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to queue captured media.", ex);
+        }
+    }
+
+    public virtual CapturedMediaRow? GetCapturedMedia(string peerId, long msgId)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size
+                FROM captured_media
+                WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                return ReadCapturedMediaRow(reader);
+            }
+            return null;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to get captured media.", ex);
+        }
+    }
+
+    public virtual CapturedMediaRow? GetNextDuePendingMedia(long now)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT peer_id, msg_id, chat_id, message_id, content_type, status, attempts, next_attempt_at, local_path, sha256, size
+                FROM captured_media
+                WHERE status = 'pending' AND (next_attempt_at IS NULL OR next_attempt_at <= @now)
+                ORDER BY (next_attempt_at IS NULL) DESC, next_attempt_at ASC, attempts ASC
+                LIMIT 1;";
+            cmd.Parameters.AddWithValue("@now", now);
+            using var reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                return ReadCapturedMediaRow(reader);
+            }
+            return null;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to get due pending media.", ex);
+        }
+    }
+
+    public virtual void UpdateMediaDownloaded(string peerId, long msgId, string localPath, string sha256, long size)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE captured_media
+                SET status = 'downloaded', local_path = @local_path, sha256 = @sha256, size = @size
+                WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.Parameters.AddWithValue("@local_path", localPath);
+            cmd.Parameters.AddWithValue("@sha256", sha256);
+            cmd.Parameters.AddWithValue("@size", size);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to update media downloaded.", ex);
+        }
+    }
+
+    public virtual void UpdateMediaSkipped(string peerId, long msgId)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE captured_media
+                SET status = 'skipped'
+                WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to update media skipped.", ex);
+        }
+    }
+
+    public virtual void UpdateMediaFailed(string peerId, long msgId, int attempts, long? nextAttemptAt)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            if (nextAttemptAt.HasValue)
+            {
+                cmd.CommandText = @"
+                    UPDATE captured_media
+                    SET status = 'pending', attempts = @attempts, next_attempt_at = @next_attempt_at
+                    WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+                cmd.Parameters.AddWithValue("@next_attempt_at", nextAttemptAt.Value);
+            }
+            else
+            {
+                cmd.CommandText = @"
+                    UPDATE captured_media
+                    SET status = 'failed', attempts = @attempts, next_attempt_at = NULL
+                    WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            }
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.Parameters.AddWithValue("@attempts", attempts);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to update media failed.", ex);
+        }
+    }
+
+    public virtual void UpdateMediaUploaded(string peerId, long msgId)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE captured_media
+                SET status = 'uploaded'
+                WHERE peer_id = @peer_id AND msg_id = @msg_id;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@msg_id", msgId);
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to update media uploaded.", ex);
+        }
+    }
+
+    private static CapturedMediaRow ReadCapturedMediaRow(SqliteDataReader reader)
+    {
+        return new CapturedMediaRow(
+            PeerId: reader.GetString(0),
+            MsgId: reader.GetInt64(1),
+            ChatId: reader.GetInt64(2),
+            MessageId: reader.GetInt64(3),
+            ContentType: reader.GetString(4),
+            Status: reader.GetString(5),
+            Attempts: reader.GetInt32(6),
+            NextAttemptAt: reader.IsDBNull(7) ? null : reader.GetInt64(7),
+            LocalPath: reader.IsDBNull(8) ? null : reader.GetString(8),
+            Sha256: reader.IsDBNull(9) ? null : reader.GetString(9),
+            Size: reader.IsDBNull(10) ? null : reader.GetInt64(10));
+    }
 }
 
 public record SyncedSettingRow(string Key, string Value, long OccurredAt, string RecordId);
+
+public record CapturedMediaRow(
+    string PeerId,
+    long MsgId,
+    long ChatId,
+    long MessageId,
+    string ContentType,
+    string Status,
+    int Attempts,
+    long? NextAttemptAt,
+    string? LocalPath,
+    string? Sha256,
+    long? Size);

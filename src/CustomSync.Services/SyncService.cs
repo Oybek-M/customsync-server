@@ -134,6 +134,46 @@ public class SyncService(SyncDbContext db)
                 continue;
             }
 
+            if (record.Media.Count > 0)
+            {
+                bool formatError = false;
+                foreach (var mediaRef in record.Media)
+                {
+                    if (mediaRef.Hash is null || !MediaService.IsValidHash(mediaRef.Hash) || mediaRef.Nonce is null || mediaRef.Nonce.Length != 12)
+                    {
+                        formatError = true;
+                        break;
+                    }
+                }
+
+                if (formatError)
+                {
+                    results.Add(new PushResult(
+                        record.RecordId, PushOutcome.Error, Message: "media_ref_invalid"));
+                    continue;
+                }
+
+                bool hashMissing = false;
+                foreach (var mediaRef in record.Media)
+                {
+                    await using var checkCmd = new NpgsqlCommand("SELECT 1 FROM media_blobs WHERE hash = @hash LIMIT 1;", connection);
+                    checkCmd.Parameters.AddWithValue("hash", mediaRef.Hash);
+                    var exists = await checkCmd.ExecuteScalarAsync(ct);
+                    if (exists is null)
+                    {
+                        hashMissing = true;
+                        break;
+                    }
+                }
+
+                if (hashMissing)
+                {
+                    results.Add(new PushResult(
+                        record.RecordId, PushOutcome.Error, Message: "media_hash_missing"));
+                    continue;
+                }
+            }
+
             // Tombstone: target yozuvni o'chirish. Idempotent — yo'q bo'lsa ham
             // davom etadi. Spec §0.3 + §0.13.
             if (record.Kind == RecordKind.Tombstone)

@@ -5,22 +5,22 @@ Oxirgi yangilanish: **2026-10-01** (kech, laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **376 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **393 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-01, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 7** — capture sessiyasini ko'rinmas saqlash (`64b10f3` + tekshiruv tuzatishi `e3c2ac0`) |
-| **Keyingi bajariladigan** | **Plan 05 Task 8** (media) — prompt TAYYOR: `docs/05-task8-prompt.md` (2026-10-01, laptop). Gemini bajaradi, TeamLead tekshiradi |
-| Undan keyin | Task 9–10, `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi bajarilgan** | **Plan 05 Task 8** — o'chirilgan xabarlar uchun opt-in media capture |
+| **Keyingi bajariladigan** | **Plan 05 Task 9** — mahalliy media fayllarni tozalash va retention |
+| Undan keyin | Task 10, `photo` maydoni, sessiya himoyasi vazifasi |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8–10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9–10 ⏸ |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
-| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 370/370. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
+| ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda 393/393. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin |
 
 2026-10-01 (kech, laptop): Task 7 (Gemini, `64b10f3`) tekshirilib qabul
 qilindi — 3 nuqson (ulardan biri Task 7 ning o'zi keltirgan regressiya:
@@ -275,7 +275,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–7 + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 8)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–8 + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 9)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -290,6 +290,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 6a-2 — `--set-key` parol o'ramidan master kalitni ochish | `8c27f60` + tekshiruv tuzatishlari | `SyncCrypto.UnwrapMasterKey` (PBKDF2-SHA256 KEK + AES-256-GCM, salt 16B, nonce 12B, wrapped 48B, `MaxWrapIterations`), `SyncCrypto.Fingerprint` (SHA256["customsync-fingerprint-v1" ‖ master][0..8] hex), umumiy token refresh + faylga avval saqlash (`RefreshAndPersistTokenAsync`), runner 401 re-read state retry, `--set-key` interaktiv oqimi (wrap tanlash, 429 bir martalik tekshiruv, max 3 urinish, FP ko'rsatib tasdiqlash, mavjud kalitni almashtirish himoyasi, 0600 atomar yozish), maxfiy ma'lumotlar log/ekranga chiqmasligi; 14 test (jami 331) | 10 buzish (a–j) + 18 mustaqil mutatsiya; o'qib bo'lmaydigan kalit fayli tasdiqsiz almashtirilardi, serverdan kelgan `wrap_id` so'rov yo'lini o'zgartira olardi — tuzatildi (jami 337) |
 | 6b — Setting yozuvlarini pull qilish va capture scope snapshot'lari | `b4c2645` + tekshiruv tuzatishi | Server `/api/v1/sync/pull` da `kind` filtri (ixtiyoriy, 400 unknown kind); `CaptureSyncRunner.PullCycleAsync` (`kind=setting`, `PullBatchSize`, `MaxPullPagesPerCycle`, token rotatsiyasi); 6 bosqichli qat'iy yozuv validatsiyasi; `account_hash` bo'yicha filtrlanmaydi (§3.2.1a); LWW merge (eng katta `(occurred_at, record_id)` g'olib); bitta tranzaksiyada cursor va merge commit; SQLite v2 -> v3 migratsiyasi (`synced_settings`, `sync_state`); `SyncedScopeSettingsSource` (8 xabar kaliti -> `ScopeSettingsSnapshot`, 3 faollik kaliti -> `ActivityScopeSettingsSnapshot`, to'liq bo'lmaganda fail-closed `null`, atomar swap, startda bazadan yuklash); DI da `services.Replace`; 15 test (jami 352) | 11 buzish (a–k) + 20 mustaqil mutatsiya; javobdagi `null` yozuv/maydon pull'ni `NullReferenceException` bilan har siklda yiqitardi — tuzatildi; 4 test bo'shlig'i yopildi (jami 356) |
 | 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `64b10f3` + `e3c2ac0` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
+| 8 — O'chirilgan xabarlar uchun opt-in media capture | `b0a6e60` | MediaEndpoints 4 kontrakt tekshiruvi (hash regex, X-Nonce talabi, X-Nonce qaytishi, SyncService media tekshiruvi: media_hash_missing, media_ref_invalid); Capture:Media:* sozlamalari va preflight; TdRequestPolicy downloadFile (file_id > 0); SQLite v4 captured_media jadvali; MediaExtractor (7 ta kontent turi, hajm chegarasi); MediaDownloader (invisibility tasdiqlangach start); CaptureSyncRunner (faqat deleted uchun, HEAD 200/404, HKDF customsync-media-v1 shifrlash, PUT 507/413 va yo'qolgan fayl himoyasi); 17 yangi test (jami 393) | 13 ta ataylab buzish (a–m) to'liq ushlandi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -1222,6 +1223,43 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **`Worker` va DI ulanishi**: `Worker` da `AuthorizationGate.RunAsync` muvaffaqiyatli o'tgach, darhol `SessionInvisibility.EnsureAsync` chaqiriladi. Tekshiruv muvaffaqiyatsiz bo'lsa xatolik loglanadi, `Environment.ExitCode = 1` o'rnatiladi va xizmat to'xtatiladi; "Capture service authorized and running" hech qachon loglanmaydi.
     - **`INativeLibraryProbe` va `SystemNativeLibraryProbe`**: Native kutubxona mavjudligini testlash uchun seam ajratildi va `AddTdlibClient` orqali DI ga ulandi.
     - **Testlar va buzishlar**: 14 ta yangi test yozildi (`CaptureInvisibilityTests`), jami testlar soni 370 taga yetdi. Barcha 11 ta ataylab buzish (a–k) mustaqil tasdiqlandi.
+39. **O'chirilgan xabarlar uchun opt-in media capture (Plan 05 Task 8)** —
+    - **Server media shartnomasi va sinxronizatsiya validatsiyasi**:
+      - `MediaEndpoints`: `/api/v1/media/{hash}` barcha HEAD, PUT, GET so'rovlarida `{hash}` qat'iy `^[0-9a-f]{64}$` formati bilan tekshiriladi (yaroqsiz bo'lsa 400).
+      - PUT so'rovlarida `X-Nonce` sarlavhasi (12 bayt base64) talab qilinadi (yetishmasa yoki noto'g'ri bo'lsa 400 Bad Request; server hech qachon 500 bermaydi, nol nonce saqlamaydi).
+      - HEAD va GET so'rovlarida mavjud bloblar uchun saqlangan `nonce` qiymati `X-Nonce` javob sarlavhasida (base64) qaytariladi.
+      - `SyncService` ning `/api/v1/sync/push` jarayonida `record.Media` ro'yxati tekshiriladi: agar hash `media_blobs` da mavjud bo'lmasa yozuv saqlanmaydi va `status: "error"`, `message: "media_hash_missing"` qaytadi; agar hash yoki nonce formati noto'g'ri bo'lsa `message: "media_ref_invalid"` qaytadi. Batch boshqa yozuvlar uchun davom etadi.
+    - **Capture:Media konfiguratsiyasi va Preflight tekshiruvi**:
+      - `Capture:Media:Enabled` (bool, default `false`).
+      - `Capture:Media:PeerIds` (kanonik tdesktop peer ID ro'yxati, decimal musbat sonlar; TDLib chat ID qabul qilinmaydi).
+      - `Capture:Media:MaxBytes` (long, default `10485760` = 10 MiB, ruxsat etilgan oraliq `1..26214400` = 25 MiB).
+      - `Capture:Media:DownloadTimeoutSeconds` (int, default `120`, musbat).
+      - `Capture:Media:MaxAttempts` (int, default `5`, musbat).
+      - Preflight Check 8: konfiguratsiya qiymatlari validatsiya qilinadi, xatoliklar maxfiy qiymatlarni sizdirmasdan loglanadi.
+    - **TDLib so'rovlar siyosati (Invisibility)**:
+      - `TdRequestPolicy` oq ro'yxatiga `downloadFile` metodi qo'shildi. Metod faqat `file_id > 0` butun son bilan chaqirilgandagina ruxsat etiladi; boshqa variantlar qat'iy rad etiladi.
+    - **SQLite sxemasi (`user_version = 4`)**:
+      - `captured_media` jadvali (`peer_id`, `msg_id`, `tdlib_file_id`, `tdlib_msg_id`, `content_type`, `size`, `status`, `local_path`, `sha256`, `attempts`, `next_attempt_at`, `created_at`, `updated_at`) va indeks yaratildi.
+    - **CaptureUpdateHandler va MediaExtractor**:
+      - Faqat 7 ta ruxsat etilgan media turi ushlanadi: `messagePhoto`, `messageVideo`, `messageDocument`, `messageAudio`, `messageVoiceNote`, `messageVideoNote`, `messageAnimation`.
+      - Xabar kelganda (`updateNewMessage`): `Enabled == true`, peer `PeerIds` ichida, `ShouldAntiDelete` ruxsat bergan va media hajmi `MaxBytes` dan oshmagan bo'lsagina `captured_media` ga `pending` holatda navbatga qo'shiladi.
+    - **MediaDownloader fon xizmati**:
+      - `Worker` da faqat avtorizatsiya va `SessionInvisibility.EnsureAsync` muvaffaqiyatli yakunlangach ishga tushadi (break l himoyasi).
+      - `getMessage` orqali yangi fayl ma'lumotini olib, `downloadFile(synchronous: true)` ni chaqiradi.
+      - Yuklangach diskdagi ochiq fayldan SHA-256 xesh hisoblaydi, hajmni tekshiradi va qatorni `downloaded` qiladi; agar haqiqiy hajm `MaxBytes` dan oshsa `skipped` qiladi; xatolikda eksponentsial kechikish bilan qayta urinadi yoki `failed` qiladi.
+    - **CaptureSyncRunner va media shifrlash**:
+      - Faqat `deleted` yozuvlar uchun: agar xabarga tegishli yuklangan media bo'lsa, diskdagi fayl mavjudligi va SHA-256 xeshi qayta tekshiriladi.
+      - Serverga `HEAD /api/v1/media/{hash}` so'rovi yuboriladi:
+        - Agar `200 OK` bo'lsa, server qaytargan `X-Nonce` olinadi (break k: qayta shifrlanmaydi va yangi nonce generatsiya qilinmaydi).
+        - Agar `404 Not Found` bo'lsa, master kalitdan `HKDF(master, "customsync-media-v1")` orqali media kaliti hosil qilinadi, yangi 12 baytli nonce bilan AES-256-GCM shifrlanadi va `PUT /api/v1/media/{hash}` orqali yuklanadi.
+        - Server `507 Insufficient Storage` bersa outbox qatori keyinroq qayta urinish uchun qoldiriladi.
+        - Server `413 Payload Too Large` bersa media `skipped` qilinadi va yozuv mediasiz push qilinadi (break i: cheksiz qolib ketmaydi).
+        - Diskda fayl yo'qolib qolsa yozuv mediasiz push qilinadi (break j).
+      - `PushCycleAsync` muvaffaqiyatli yakunlangach, agar yozuvda media mavjud bo'lsa, media qatori `uploaded` deb belgilanadi.
+    - **Buzishlar va testlar**:
+      - 17 ta yangi test yozildi (`MediaEndpointsTests` 3 ta, `CapturePreflightTests` 1 ta, `CaptureInvisibilityTests` 1 ta, `CaptureCacheTests` 1 ta, `CaptureMediaTests` 11 ta). Jami testlar soni 376 dan 393 taga yetdi.
+      - Barcha 13 ta ataylab buzish (a–m) to'liq tasdiqlandi.
+    - **Task 9 uchun eslatma**: Mahalliy media fayllar va `captured_media` qatorlari Task 8 da diskda saqlanadi va tozalanmaydi; ularning tozalanishi va retention siyosati Task 9 ga qoldirildi.
 
 ---
 

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using CustomSync.Capture.Capture;
@@ -193,8 +194,12 @@ public class CaptureSyncRunner
             totalPayloadBytes += byteCount;
         }
 
+        string? serverUrl = null;
+        string? token = null;
+
         var validRecords = new List<SyncRecord>();
         var rowMap = new Dictionary<string, OutboxRow>();
+        var recordMap = new Dictionary<string, SyncRecord>();
 
         foreach (var row in batchRows)
         {
@@ -210,8 +215,92 @@ public class CaptureSyncRunner
             }
 
             var record = SyncCrypto.BuildRecord(row, _masterKey!, _deviceState!.DeviceId);
+
+            // Plan 05 Task 8: Opt-in media capture for deleted messages
+            if (row.Kind == "deleted")
+            {
+                var mediaRow = _cache.GetCapturedMedia(row.PeerId, row.MsgId);
+                if (mediaRow != null && mediaRow.Status == "downloaded")
+                {
+                    if (string.IsNullOrEmpty(mediaRow.LocalPath) || !File.Exists(mediaRow.LocalPath))
+                    {
+                        // File missing on disk: do NOT keep record forever; push without media (break j)
+                        _logger?.LogWarning("Captured media file is missing on disk. Pushing record without media.");
+                    }
+                    else
+                    {
+                        serverUrl ??= _config["Capture:Sync:ServerUrl"];
+                        token ??= await EnsureAccessTokenAsync(forceRefresh: false, ct);
+
+                        if (!string.IsNullOrWhiteSpace(serverUrl) && token != null)
+                        {
+                            byte[] plaintextBytes;
+                            string calculatedSha256;
+                            using (var stream = File.OpenRead(mediaRow.LocalPath))
+                            {
+                                var hashBytes = await SHA256.HashDataAsync(stream, ct);
+                                calculatedSha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                            }
+
+                            plaintextBytes = await File.ReadAllBytesAsync(mediaRow.LocalPath, ct);
+
+                            var headResult = await _client.HeadMediaAsync(serverUrl, token, calculatedSha256, ct);
+                            byte[]? mediaNonce = null;
+
+                            if (headResult.Exists && !string.IsNullOrEmpty(headResult.NonceBase64))
+                            {
+                                // Stored nonce from server (break k: must use stored nonce, not a fresh one)
+                                mediaNonce = Convert.FromBase64String(headResult.NonceBase64);
+                            }
+                            else
+                            {
+                                // 404: encrypt with HKDF(master, "customsync-media-v1") + fresh nonce
+                                var mediaKey = SyncCrypto.DeriveMediaKey(_masterKey!);
+                                var (wireBlob, freshNonce) = SyncCrypto.EncryptMedia(mediaKey, plaintextBytes);
+                                var nonceB64 = Convert.ToBase64String(freshNonce);
+
+                                var putResult = await _client.PutMediaAsync(serverUrl, token, calculatedSha256, wireBlob, nonceB64, ct);
+                                if (putResult.Status == MediaUploadStatus.InsufficientStorage) // 507
+                                {
+                                    // Keep outbox row for retry, skip pushing this record now
+                                    var delay = CalculateRowBackoff(row.RetryCount + 1);
+                                    _cache.MarkOutboxRowError(row.Id, "507 Insufficient Storage", now + delay);
+                                    continue;
+                                }
+                                else if (putResult.Status == MediaUploadStatus.PayloadTooLarge) // 413
+                                {
+                                    // Push record without media, mark media row skipped (break i)
+                                    _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
+                                }
+                                else if (putResult.Status == MediaUploadStatus.Success)
+                                {
+                                    mediaNonce = freshNonce;
+                                }
+                            }
+
+                            if (mediaNonce != null)
+                            {
+                                record = record with
+                                {
+                                    Media = new[]
+                                    {
+                                        new MediaRef
+                                        {
+                                            Hash = calculatedSha256,
+                                            Size = plaintextBytes.Length,
+                                            Nonce = mediaNonce
+                                        }
+                                    }
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+
             validRecords.Add(record);
             rowMap[record.RecordId] = row;
+            recordMap[record.RecordId] = record;
         }
 
         if (validRecords.Count == 0)
@@ -219,16 +308,21 @@ public class CaptureSyncRunner
             return true;
         }
 
-        var serverUrl = _config["Capture:Sync:ServerUrl"];
+        serverUrl ??= _config["Capture:Sync:ServerUrl"];
         if (string.IsNullOrWhiteSpace(serverUrl))
         {
             return false;
         }
 
-        var token = await EnsureAccessTokenAsync(forceRefresh: false, ct);
+        token ??= await EnsureAccessTokenAsync(forceRefresh: false, ct);
         if (token == null)
         {
             return false;
+        }
+
+        if (validRecords.Count == 0)
+        {
+            return true;
         }
 
         var response = await _client.PushRecordsAsync(serverUrl, token, validRecords, ct);
@@ -278,15 +372,24 @@ public class CaptureSyncRunner
                     continue;
                 }
 
+                bool hasMedia = recordMap.TryGetValue(result.RecordId, out var pushedRec) && pushedRec.Media.Count > 0;
                 if (result.Status == PushOutcome.Created)
                 {
                     PushedCount++;
                     _cache.DeleteOutboxRowById(row.Id);
+                    if (row.Kind == "deleted" && hasMedia)
+                    {
+                        _cache.UpdateMediaUploaded(row.PeerId, row.MsgId);
+                    }
                 }
                 else if (result.Status == PushOutcome.Duplicate || result.Status == PushOutcome.Superseded)
                 {
                     DuplicateCount++;
                     _cache.DeleteOutboxRowById(row.Id);
+                    if (row.Kind == "deleted" && hasMedia)
+                    {
+                        _cache.UpdateMediaUploaded(row.PeerId, row.MsgId);
+                    }
                 }
                 else
                 {

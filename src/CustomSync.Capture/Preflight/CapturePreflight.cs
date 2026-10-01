@@ -230,6 +230,50 @@ public static class CapturePreflight
             }
         }
 
+        // 8. Media configuration check (Capture:Media:Enabled, PeerIds, MaxBytes, DownloadTimeoutSeconds, MaxAttempts)
+        var mediaEnabledStr = config["Capture:Media:Enabled"];
+        if (!string.IsNullOrEmpty(mediaEnabledStr) && !bool.TryParse(mediaEnabledStr, out _))
+        {
+            errors.Add("Capture:Media:Enabled must be 'true' or 'false'.");
+        }
+
+        var mediaPeerList = ScopeConfigReader.ReadPeerList(config, "Capture:Media:PeerIds");
+        foreach (var entry in mediaPeerList)
+        {
+            if (!ScopeConfigReader.IsCanonicalPeerId(entry))
+            {
+                errors.Add("Capture:Media:PeerIds contains an entry that is not a canonical tdesktop peer id (positive decimal, no spaces or leading zeros; TDLib chat ids such as -100... are not accepted).");
+                break;
+            }
+        }
+
+        var maxBytesStr = config["Capture:Media:MaxBytes"];
+        if (!string.IsNullOrEmpty(maxBytesStr))
+        {
+            if (!long.TryParse(maxBytesStr, out var mb) || mb < 1 || mb > 26214400)
+            {
+                errors.Add("Capture:Media:MaxBytes must be an integer between 1 and 26214400.");
+            }
+        }
+
+        var mediaTimeoutStr = config["Capture:Media:DownloadTimeoutSeconds"];
+        if (!string.IsNullOrEmpty(mediaTimeoutStr))
+        {
+            if (!int.TryParse(mediaTimeoutStr, out var to) || to <= 0)
+            {
+                errors.Add("Capture:Media:DownloadTimeoutSeconds must be a positive integer.");
+            }
+        }
+
+        var mediaAttemptsStr = config["Capture:Media:MaxAttempts"];
+        if (!string.IsNullOrEmpty(mediaAttemptsStr))
+        {
+            if (!int.TryParse(mediaAttemptsStr, out var ma) || ma <= 0)
+            {
+                errors.Add("Capture:Media:MaxAttempts must be a positive integer.");
+            }
+        }
+
         return new PreflightReport(errors.Count == 0, errors);
     }
 

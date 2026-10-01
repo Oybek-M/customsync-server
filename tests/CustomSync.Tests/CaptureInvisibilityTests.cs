@@ -320,6 +320,35 @@ public class CaptureInvisibilityTests : IDisposable
     }
 
     [Fact]
+    public void Test15_DownloadFile_allow_list_and_parameter_validation()
+    {
+        // 1. Valid integer file_id > 0 passes
+        var validReq = "{\"@type\":\"downloadFile\",\"file_id\":12345,\"priority\":1,\"synchronous\":true}";
+        var normalized = TdRequestPolicy.ValidateAndNormalize(validReq);
+        Assert.NotNull(normalized);
+
+        // 2. file_id = 0 rejected
+        Assert.Throws<TdRequestNotAllowedException>(() =>
+            TdRequestPolicy.ValidateAndNormalize("{\"@type\":\"downloadFile\",\"file_id\":0,\"priority\":1}"));
+
+        // 3. file_id negative rejected
+        Assert.Throws<TdRequestNotAllowedException>(() =>
+            TdRequestPolicy.ValidateAndNormalize("{\"@type\":\"downloadFile\",\"file_id\":-123,\"priority\":1}"));
+
+        // 4. file_id string rejected
+        Assert.Throws<TdRequestNotAllowedException>(() =>
+            TdRequestPolicy.ValidateAndNormalize("{\"@type\":\"downloadFile\",\"file_id\":\"12345\",\"priority\":1}"));
+
+        // 5. file_id missing rejected
+        Assert.Throws<TdRequestNotAllowedException>(() =>
+            TdRequestPolicy.ValidateAndNormalize("{\"@type\":\"downloadFile\",\"priority\":1}"));
+
+        // 6. file_id float rejected
+        Assert.Throws<TdRequestNotAllowedException>(() =>
+            TdRequestPolicy.ValidateAndNormalize("{\"@type\":\"downloadFile\",\"file_id\":12.34,\"priority\":1}"));
+    }
+
+    [Fact]
     public async Task Test04_SetOption_online_false_passes_and_others_rejected()
     {
         var transport = new FakeRecordingTdTransport();

@@ -1,0 +1,211 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+using CustomSync.Capture.Capture;
+using CustomSync.Capture.Tdlib;
+using Microsoft.Extensions.Logging;
+
+namespace CustomSync.Capture.Media;
+
+public class MediaDownloader
+{
+    private readonly ITdClient _client;
+    private readonly MessageCache _cache;
+    private readonly MediaCaptureConfig _config;
+    private readonly TimeProvider _timeProvider;
+    private readonly ILogger<MediaDownloader>? _logger;
+    private CancellationTokenSource? _cts;
+    private Task? _loopTask;
+
+    public MediaDownloader(
+        ITdClient client,
+        MessageCache cache,
+        MediaCaptureConfig config,
+        TimeProvider? timeProvider = null,
+        ILogger<MediaDownloader>? logger = null)
+    {
+        _client = client;
+        _cache = cache;
+        _config = config;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _logger = logger;
+    }
+
+    public virtual void Start(CancellationToken ct = default)
+    {
+        if (!_config.Enabled)
+        {
+            return;
+        }
+
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _loopTask = Task.Run(() => RunLoopAsync(_cts.Token), _cts.Token);
+    }
+
+    private async Task RunLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                bool processed = await ProcessPendingOnceAsync(ct);
+                if (!processed)
+                {
+                    await Task.Delay(500, ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Unexpected error in media downloader loop.");
+                await Task.Delay(1000, ct);
+            }
+        }
+    }
+
+    public virtual async Task<bool> ProcessPendingOnceAsync(CancellationToken ct = default)
+    {
+        if (!_config.Enabled)
+            return false;
+
+        long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+        var row = _cache.GetNextDuePendingMedia(now);
+        if (row == null)
+            return false;
+
+        await ProcessRowAsync(row, now, ct);
+        return true;
+    }
+
+    private async Task ProcessRowAsync(CapturedMediaRow row, long now, CancellationToken ct)
+    {
+        try
+        {
+            var req = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["@type"] = "getMessage",
+                ["chat_id"] = row.ChatId,
+                ["message_id"] = row.MessageId
+            });
+
+            var resp = await _client.SendAsync(req, TimeSpan.FromSeconds(15), ct);
+            using var doc = JsonDocument.Parse(resp);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("@type", out var typeProp) && typeProp.GetString() == "error")
+            {
+                int attempts = row.Attempts + 1;
+                if (attempts >= _config.MaxAttempts)
+                {
+                    _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, null);
+                }
+                else
+                {
+                    long nextAttempt = now + CalculateBackoff(attempts);
+                    _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, nextAttempt);
+                }
+                return;
+            }
+
+            if (!root.TryGetProperty("content", out var contentElem) ||
+                !MediaExtractor.TryGetSelectedFileElement(row.ContentType, contentElem, _config.MaxBytes, out var fileElem))
+            {
+                _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
+                return;
+            }
+
+            string? localPath = null;
+            bool isCompleted = false;
+
+            if (MediaExtractor.TryGetLocalFile(fileElem, out var path, out var comp))
+            {
+                localPath = path;
+                isCompleted = comp;
+            }
+
+            if (!isCompleted || string.IsNullOrEmpty(localPath) || !File.Exists(localPath))
+            {
+                if (!fileElem.TryGetProperty("id", out var idProp) || !idProp.TryGetInt32(out var fileId) || fileId <= 0)
+                {
+                    _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
+                    return;
+                }
+
+                var dlReq = JsonSerializer.Serialize(new Dictionary<string, object?>
+                {
+                    ["@type"] = "downloadFile",
+                    ["file_id"] = fileId,
+                    ["priority"] = 1,
+                    ["offset"] = 0,
+                    ["limit"] = 0,
+                    ["synchronous"] = true
+                });
+
+                var dlResp = await _client.SendAsync(dlReq, TimeSpan.FromSeconds(_config.DownloadTimeoutSeconds), ct);
+                using var dlDoc = JsonDocument.Parse(dlResp);
+                var dlRoot = dlDoc.RootElement;
+
+                if (dlRoot.TryGetProperty("@type", out var dlType) && dlType.GetString() == "file")
+                {
+                    if (MediaExtractor.TryGetLocalFile(dlRoot, out var newPath, out var newComp))
+                    {
+                        localPath = newPath;
+                        isCompleted = newComp;
+                    }
+                }
+            }
+
+            if (isCompleted && !string.IsNullOrEmpty(localPath) && File.Exists(localPath))
+            {
+                var fi = new FileInfo(localPath);
+                if (fi.Length > _config.MaxBytes)
+                {
+                    _cache.UpdateMediaSkipped(row.PeerId, row.MsgId);
+                    return;
+                }
+
+                byte[] hashBytes;
+                using (var stream = File.OpenRead(localPath))
+                {
+                    hashBytes = await SHA256.HashDataAsync(stream, ct);
+                }
+                var sha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                _cache.UpdateMediaDownloaded(row.PeerId, row.MsgId, localPath, sha256, fi.Length);
+            }
+            else
+            {
+                int attempts = row.Attempts + 1;
+                if (attempts >= _config.MaxAttempts)
+                {
+                    _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, null);
+                }
+                else
+                {
+                    long nextAttempt = now + CalculateBackoff(attempts);
+                    _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, nextAttempt);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Error processing media download.");
+            int attempts = row.Attempts + 1;
+            if (attempts >= _config.MaxAttempts)
+            {
+                _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, null);
+            }
+            else
+            {
+                long nextAttempt = now + CalculateBackoff(attempts);
+                _cache.UpdateMediaFailed(row.PeerId, row.MsgId, attempts, nextAttempt);
+            }
+        }
+    }
+
+    private static long CalculateBackoff(int attempt)
+    {
+        return Math.Min(300, 1L << Math.Clamp(attempt - 1, 0, 8));
+    }
+}

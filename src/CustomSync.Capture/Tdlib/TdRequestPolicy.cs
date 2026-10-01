@@ -28,7 +28,9 @@ public static class TdRequestPolicy
         "getMe",
         "getMessage",
         "setOption",
-        "getOption"
+        "getOption",
+        // downloading a file does not mark it viewed or listened; openMessageContent / openStory stay forbidden
+        "downloadFile"
     };
 
     public static JsonObject ValidateAndNormalize(string requestJson, ILogger? logger = null)
@@ -135,7 +137,7 @@ public static class TdRequestPolicy
             throw new TdRequestNotAllowedException($"TDLib request '@type' is not allowed: '{requestType}'.");
         }
 
-        // 4. Special validation for setOption and getOption
+        // 4. Special validation for setOption, getOption, and downloadFile
         if (requestType == "setOption")
         {
             ValidateSetOption(obj, logger);
@@ -144,8 +146,25 @@ public static class TdRequestPolicy
         {
             ValidateGetOption(obj, logger);
         }
+        else if (requestType == "downloadFile")
+        {
+            ValidateDownloadFile(obj, logger);
+        }
 
         return obj;
+    }
+
+    private static void ValidateDownloadFile(JsonObject obj, ILogger? logger)
+    {
+        if (!obj.TryGetPropertyValue("file_id", out var fileIdNode) ||
+            fileIdNode is not JsonValue fileIdVal ||
+            fileIdVal.TryGetValue<string>(out _) ||
+            !long.TryParse(fileIdVal.ToString(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var fileId) ||
+            fileId <= 0)
+        {
+            logger?.LogWarning("TDLib request '@type' is not allowed: downloadFile without valid file_id");
+            throw new TdRequestNotAllowedException("downloadFile requires an integer file_id > 0.");
+        }
     }
 
     private static void ValidateSetOption(JsonObject obj, ILogger? logger)

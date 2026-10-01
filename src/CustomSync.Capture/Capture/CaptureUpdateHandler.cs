@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using CustomSync.Capture.Media;
 using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.Logging;
 
@@ -16,6 +17,7 @@ public class CaptureUpdateHandler
     private readonly MessageCache _cache;
     private readonly ICaptureScope _scope;
     private readonly IActivityScope _activityScope;
+    private readonly MediaCaptureConfig _mediaConfig;
     private readonly ConcurrentDictionary<string, bool> _contactMap = new();
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<CaptureUpdateHandler>? _logger;
@@ -43,8 +45,9 @@ public class CaptureUpdateHandler
         TimeProvider? timeProvider = null,
         ILogger<CaptureUpdateHandler>? logger = null,
         string? accountId = null,
-        int editPairingTimeoutSeconds = 60)
-        : this(cache, scope, activityScope: null, timeProvider, logger, accountId, editPairingTimeoutSeconds)
+        int editPairingTimeoutSeconds = 60,
+        MediaCaptureConfig? mediaConfig = null)
+        : this(cache, scope, activityScope: null, timeProvider, logger, accountId, editPairingTimeoutSeconds, mediaConfig)
     {
     }
 
@@ -55,7 +58,8 @@ public class CaptureUpdateHandler
         TimeProvider? timeProvider = null,
         ILogger<CaptureUpdateHandler>? logger = null,
         string? accountId = null,
-        int editPairingTimeoutSeconds = 60)
+        int editPairingTimeoutSeconds = 60,
+        MediaCaptureConfig? mediaConfig = null)
     {
         _cache = cache;
         // Scope berilmasa — hech narsa ushlanmaydi (fail-closed). null'ni
@@ -66,6 +70,7 @@ public class CaptureUpdateHandler
         _logger = logger;
         _accountId = accountId;
         _editPairingTimeoutSeconds = editPairingTimeoutSeconds > 0 ? editPairingTimeoutSeconds : 60;
+        _mediaConfig = mediaConfig ?? new MediaCaptureConfig();
     }
 
     /// <summary>
@@ -272,6 +277,45 @@ public class CaptureUpdateHandler
             return;
 
         CacheMessage(msg, addOnly: false);
+        ConsiderQueueMedia(msg);
+    }
+
+    private void ConsiderQueueMedia(JsonElement msg)
+    {
+        // 1. Enabled is true
+        if (!_mediaConfig.Enabled)
+            return;
+
+        if (!msg.TryGetProperty("chat_id", out var chatProp) || !msg.TryGetProperty("id", out var idProp))
+            return;
+
+        long chatId = chatProp.GetInt64();
+        long tdlibId = idProp.GetInt64();
+
+        var peerId = TdIdMapper.ToPeerId(chatId);
+        if (peerId is null)
+            return;
+
+        var serverMsgId = TdIdMapper.ToServerMessageId(tdlibId);
+        if (serverMsgId is null)
+            return;
+
+        // 2. Its tdesktop peer id is in PeerIds
+        if (!_mediaConfig.PeerIds.Contains(peerId))
+            return;
+
+        // 3. The capture scope says AntiDelete applies to that chat (ShouldAntiDelete)
+        if (!_scope.ShouldAntiDelete(peerId))
+            return;
+
+        // 4. Content type is one of 7 allowed, and 5. Known size > 0 and <= MaxBytes
+        if (!msg.TryGetProperty("content", out var contentProp))
+            return;
+
+        if (!MediaExtractor.TryGetMediaInfo(contentProp, _mediaConfig.MaxBytes, out var contentType, out var knownSize, out _))
+            return;
+
+        _cache.QueueCapturedMedia(peerId, serverMsgId.Value, chatId, tdlibId, contentType!, knownSize);
     }
 
     // addOnly: getMessage javobi uchun — bor qator ustiga yozilmaydi.

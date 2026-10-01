@@ -1,4 +1,6 @@
+using CustomSync.Capture.Media;
 using CustomSync.Capture.Tdlib;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -40,6 +42,22 @@ public static class CaptureHandlerRegistration
                 : new ActivityScopeEvaluator(null, null, false, settingsSource);
         });
 
+        services.TryAddSingleton<MediaCaptureConfig>(sp =>
+        {
+            var config = sp.GetService<IConfiguration>();
+            return MediaCaptureConfig.From(config);
+        });
+
+        services.TryAddSingleton<MediaDownloader>(sp =>
+        {
+            return new MediaDownloader(
+                sp.GetRequiredService<ITdClient>(),
+                sp.GetRequiredService<MessageCache>(),
+                sp.GetRequiredService<MediaCaptureConfig>(),
+                sp.GetService<TimeProvider>(),
+                sp.GetService<ILogger<MediaDownloader>>());
+        });
+
         services.AddSingleton(sp =>
         {
             var config = sp.GetService<IConfiguration>();
@@ -53,7 +71,8 @@ public static class CaptureHandlerRegistration
                 sp.GetRequiredService<IActivityScope>(),
                 sp.GetService<TimeProvider>(),
                 sp.GetService<ILogger<CaptureUpdateHandler>>(),
-                editPairingTimeoutSeconds: pairingTimeout);
+                editPairingTimeoutSeconds: pairingTimeout,
+                mediaConfig: sp.GetService<MediaCaptureConfig>());
         });
 
         services.Remove(clientDescriptor);
