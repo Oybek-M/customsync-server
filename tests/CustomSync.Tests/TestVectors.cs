@@ -16,11 +16,29 @@ internal static class TestVectors
 {
     private const string EnvVar = "CUSTOMSYNC_TEST_VECTORS";
 
-    private static readonly Lazy<JsonElement> Root = new(Load);
+    private static readonly Lazy<(string Path, JsonElement Root)> Loaded = new(Load);
 
-    public static JsonElement Get(string section) => Root.Value.GetProperty(section);
+    /// <summary>
+    /// Bo'lim yo'q bo'lsa aniq xabar beradi. Oddiy `GetProperty` faqat
+    /// `KeyNotFoundException` tashlardi — 2026-10-01 da laptop'dagi eski
+    /// tdesktop nusxasi tufayli 17 test shu xabar bilan yiqildi va sabab
+    /// (fayl eskirgan, kod emas) ko'rinmadi.
+    /// </summary>
+    public static JsonElement Get(string section)
+    {
+        var (path, root) = Loaded.Value;
+        if (root.TryGetProperty(section, out var value))
+            return value;
 
-    private static JsonElement Load()
+        throw new InvalidOperationException(
+            $"test-vectors.json da '{section}' bo'limi yo'q: {path}\n" +
+            "Ehtimol shu kompyuterdagi tdesktop nusxasi eskirgan. U repo'ga bu " +
+            "sessiyadan tegilmaydi; uning o'z sessiyasida yangilang yoki " +
+            $"{EnvVar} ga yangi nusxani bering:\n" +
+            "  git -C <tdesktop> show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisidagi fayl>");
+    }
+
+    private static (string Path, JsonElement Root) Load()
     {
         var path = Resolve()
             ?? throw new InvalidOperationException(
@@ -30,7 +48,7 @@ internal static class TestVectors
                 @"(C:\TBuild\tdesktop yoki D:\TBuild\tdesktop)");
 
         using var stream = File.OpenRead(path);
-        return JsonDocument.Parse(stream).RootElement.Clone();
+        return (path, JsonDocument.Parse(stream).RootElement.Clone());
     }
 
     private static string? Resolve()
