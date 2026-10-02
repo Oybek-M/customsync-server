@@ -1,27 +1,35 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-02** (tun, laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-02** (ertalab, laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **514 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **532 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-02, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9a** — capture diski: media ombori, retention, TDLib `optimizeStorage`, systemd unit (`c07ae35` + tekshiruv tuzatishi `a4d74a4`) |
-| **Oxirgi bajarilgan** | **Plan 05 Task 9b** — health hisobot backend'ga (bu commit) — tekshiruv kutilmoqda |
-| **Keyingi bajariladigan** | Task 9b tekshiruvi (TeamLead) / Task 10 |
-| Undan keyin | `photo` maydoni, sessiya himoyasi vazifasi |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9b** — capture health hisoboti backend'ga: `POST`/`GET /api/v1/devices/health`, `device_health` jadvali, `health.stale_after_seconds` (`cb9dc2d` + tekshiruv tuzatishlari `ceaec17`, `62d6ec8`) |
+| **Keyingi bajariladigan** | Plan 05 **Task 10** — haqiqiy TDLib va Telegram sessiyasi bilan uchidan-uchiga sinov: haqiqiy sessiya va VPS kerak, deploy to'xtatilgani uchun hozir **BLOKLANGAN**. Bloklanmaganlar (prompt hali yozilmagan): `photo` maydoni, sessiya himoyasi vazifasi, server testlarining `Storage:MediaRoot` i (§5) — §2 |
+| Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b (bu commit), 10 ⏸ |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
+
+2026-10-02 (ertalab, laptop): Task 9b (Gemini, `cb9dc2d`) tekshirilib qabul
+qilindi — 🔴 health hisobot sync runner'ning token oqimini maintenance
+oqimidan parallel chaqirardi: refresh token har ishlatilganda almashgani
+uchun ikki parallel refresh sync'ni "qurilma bekor qilingan" deb
+to'xtatishi yoki qurilmani qayta enroll qilishga majbur qilishi mumkin
+edi — endi qulf (`ceaec17`); yana 3 mayda nuqson va 4 test bo'shlig'i
+tuzatildi (`ceaec17`, `62d6ec8`, `9a12266`). Gemini hisoboti chatga kelmadi —
+commit va uning PROGRESS yozuvlari bo'yicha tekshirildi.
 
 2026-10-02 (tun, laptop): Task 9a (Gemini, `c07ae35`) tekshirilib qabul
 qilindi — 7 nuqson (eng og'iri: retention production'da yuklangan
@@ -293,7 +301,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 
 ---
 
-### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–8, 9a + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 9b)
+### Plan 05 — Always-on capture service 🟡 JARAYONDA (1–8, 9a, 9b + 4a/4b/4c + 6a/6a-2/6b tekshirildi; keyingi: 10 — bloklangan)
 
 | Task | Commit | Natija | Tekshiruvda topilgan va tuzatilgan |
 |---|---|---|---|
@@ -310,6 +318,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 7 — Capture sessiyasini ko'rinmas saqlash (Session Invisibility) | `64b10f3` + `e3c2ac0` | `TdRequestPolicy` (qat'iy 8 ruxsat etilgan TDLib metodlari oq ro'yxati, parametrlar tekshiruvi: setOption faqat online=false, getOption faqat online; taqiqlangan so'rovlar `TdRequestNotAllowedException` bilan rad etiladi va hech qachon transportga yetmaydi, `PendingRequestCount` = 0 qoladi, maxfiy payloadlar loglanmaydi); `SessionInvisibility.EnsureAsync` (setOption online=false va getOption online=false ni tasdiqlaydi); `Worker` integratsiyasi (avtorizatsiyadan keyin va xizmat "running" deb hisoblanishidan oldin invisibility tekshiruvi o'tishi shart, aks holda ExitCode = 1 bilan to'xtaydi); `INativeLibraryProbe` choki; 14 yangi test (jami 370 test) | 11 ta ataylab buzish (a–k) tekshirildi; TdClient unit testlari ruxsat etilgan metodlarga yangilandi; qo'lda `telegram-cli check` tekshiruvi Task 10 ga qoldirildi |
 | 8 — O'chirilgan xabarlar media'si (opt-in) | `7181cc2` + `bb1bcb4` | Server media kontrakti: `{hash}` faqat `^[0-9a-f]{64}$` (HEAD/PUT/GET va `MediaService` da), PUT'da 12 baytli `X-Nonce` majburiy (aks holda 400), HEAD/GET saqlangan `X-Nonce` ni qaytaradi, push'da `media_hash_missing`/`media_ref_invalid`; `Capture:Media:*` + preflight; `downloadFile` allow-list'da (`file_id > 0`); SQLite v4 `captured_media`; 7 media turi va `MaxBytes`; `MediaDownloader` (ko'rinmaslik tasdiqlangach); kech yuklash — faqat `deleted` yozuv havola qilganda (HEAD → 404 → shifrlab PUT); 17 test (jami 393) | Promptdagi f buzishi (ShouldAntiDelete) delegate testlarida ushlanmasdi; buzishlar f/g/h/i + 20 mustaqil mutatsiya; 6 nuqson (vaqtinchalik xatoda media abadiy yo'qolardi, HEAD xatosi 404 deb talqin qilinib blob ochib bo'lmaydigan nonce bilan bog'lanardi, yuklangandan keyin o'zgargan fayl ulanardi, o'qib bo'lmaydigan fayl butun push'ni to'xtatardi, o'chgan xabar `MaxAttempts` marta qayta yuklanardi, restart urinishni yerdi) va 6 test bo'shlig'i tuzatildi (jami 419) |
 | 9a — Capture diski: media ombori, retention, TDLib tozalash, systemd unit | `c07ae35` + `a4d74a4` | `MediaStore` (`<peer_id>-<msg_id>.bin`, 0700/0600, o'z oqimi bilan nusxa, xesh nusxadan); disk himoyasi (`MinFreeBytes`, `MaxTotalBytes`, urinish sarflanmaydi); sxema v5 (`captured_media.created_at`, tuzoq hal qilingan); retention 5 qoidasi va yetim tozalash (media o'chiq bo'lsa ham); darvozada `optimizeStorage`/`getStorageStatisticsFast`/`setLogVerbosityLevel`; `StorageMaintenance` + `StorageSnapshot`; preflight; `deploy/customsync-capture.service`; 42 test (jami 461) | Promptdagi buzishlardan 8 tasi almashtirilgan, d ning 3-qoida varianti ushlanmasdi; 7 nuqson (🔴 retention xabarni TDLib ID bilan qidirib, yuklangan media'ni 10 daqiqada o'chirardi; soxta "100 GB" o'lchagichli ikkinchi konstruktor; testlar `C:\var\lib\...` ga yozardi va maintenance standart omborni tozalardi; oxiri `/` li ombor fayllari hech qachon o'chmasdi; standart immunity tekshirilmasdi; to'xtash shovqinli, kutilmagan istisno tozalashni o'ldirardi; README kod va parolni buyruq qatoriga yozishni o'rgatardi) va 7 test bo'shlig'i tuzatildi (jami 493) |
+| 9b — Capture health hisoboti backend'ga | `cb9dc2d` + `ceaec17` + `62d6ec8` | Server: `POST /api/v1/devices/health` (qurilma ID faqat tokendan, vaqt server soatidan, 4096 bayt o'qish paytida → 413, qat'iy butun sonlar, upsert, 204), `GET` (faqat admin, nom bo'yicha, `stale` = `health.stale_after_seconds`, standart 1800), `device_health` jadvali (migratsiya `AddDeviceHealth`, CASCADE). Capture: `PostHealthAsync` (aniq 8 maydon), `ICaptureHealthReporter` (null + `services.Replace`), `ReportHealthAsync` (runner'ning token oqimi, 401 da bitta refresh va bitta qayta urinish), `StorageMaintenance` 6-qadam; 21 test (jami 514) | 🔴 parallel refresh (sync sikli + health) sync'ni to'xtatardi yoki refresh token'ni yo'qotardi — qulf; kalit faylini o'qish istisnosi reporter'dan chiqib ketardi; rad etilgan hisobot hech qayerda loglanmasdi; GET sozlamani o'qiy olmasa kodga yozilgan 1800 ga jimgina o'tardi; 4 test bo'shlig'i (ro'yxatdagi ulanish, 6-qadamdan oldingi to'xtash, GET maydonlari va tartibi, aniq 4096 chegara) yopildi (jami 532) |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -435,6 +444,107 @@ tirik qoldi. Topilgan va tuzatilgan (`CaptureSyncVerificationTests`):
    kod chiqarilmasligi (S10), `BuildRecord` ichidagi §0.14 (S11).
 
 Tuzatishdan keyin 14/14 ushlanadi. 317/317 x3.
+
+### Plan 05 Task 9b tekshiruvi (2026-10-02, laptop) — qanday qabul qilindi
+
+Gemini hisoboti chatga kelmadi (xabarda faqat "hisoboti quyida" bor
+edi) — tekshiruv commit (`cb9dc2d`, delegate o'zi push qilgan) va uning
+PROGRESS yozuvlari bo'yicha. Testlar mustaqil yurgizildi: 514/514
+(delegate) uch marta; tuzatishlardan keyin 532/532 uch marta, build 0
+ogohlantirish. Commit'da `Co-Authored-By` yo'q, o'zini "tekshirilgan"
+deb belgilamagan, hash to'qilmagan ("bu commit"). Server tomoni
+promptdagidek: qurilma ID faqat tokendan, `reported_at` server
+soatidan, noma'lum maydonlar e'tiborsiz, 4096 bayt `Content-Length`
+siz ham o'qish paytida ushlanadi, raqamlar `TryGetInt64` (kasr,
+eksponenta, satr, bool rad etiladi), GET faqat admin; migratsiya faqat
+`device_health` ni yaratadi (model drift yo'q) va test bazasida
+`MigrateAsync` bilan qo'llanadi. Lekin:
+
+1. 🔴 **Health hisobot sync'ni to'xtatishi mumkin edi.** Prompt
+   reporter'ni runner'ning mavjud token oqimidan o'tkazishni talab
+   qilgan (ikkinchi nusxa bo'lmasin), lekin `EnsureAccessTokenAsync`
+   bitta chaqiruvchi — sync sikli — uchun yozilgan, qulfsiz edi. Endi
+   uni maintenance oqimi ham chaqiradi. Refresh token har ishlatilganda
+   almashadi (`DeviceService.RefreshAsync`): ikki oqim tokenni bir
+   vaqtda eskirgan deb ko'rsa, ikkalasi bir xil refresh token'ni
+   yuboradi. Server ketma-ket ishlasa ikkinchisi 401 oladi; runner holat
+   faylini qayta o'qiydi, birinchisi xotirani allaqachon yangilagan
+   bo'lsa farq ko'rmaydi va `_isStopped = true` — sync xizmat qayta
+   ishga tushirilguncha to'xtaydi. Server ikkalasini ham qabul qilsa
+   (`RefreshAsync` ham o'qish-yozishni qulfsiz qiladi) bazada bitta
+   token qoladi, faylda va xotirada boshqasi bo'lishi mumkin — keyingi
+   refresh 401, restartdan keyin ham: qurilmani qayta enroll qilish
+   kerak. Oyna — bitta refresh so'rovining davomiyligi (server sekin
+   yoki javob bermasa 100 s gacha), ya'ni oylar davomida albatta yuz
+   beradi. Prompt ham sababchi: parallel chaqiruvni men ham
+   ko'rsatmaganman. Endi `SemaphoreSlim`: bir vaqtda faqat bitta
+   chaqiruv tokenni yangilaydi, qolganlari kutib yangi tokenni oladi.
+   Test02 almashuvchi soxta server bilan (eski refresh token → 401) ikki
+   parallel chaqiruvda refresh bitta bo'lishini va sync to'xtamasligini
+   tekshiradi (qulfsiz: birinchisi `false`, `IsStopped`, ikki refresh).
+2. **Hisobot kalit faylini o'qiy olmasa istisno tashlardi.**
+   `EnsureCredentialsLoaded` (`File.ReadAllText`) try'dan tashqarida
+   edi, shartnoma esa "faqat bekor qilish chiqadi". 6-qadam baribir
+   ushlardi, lekin reporter shartnomasi buzilgan edi (Test03).
+3. **Rad etilgan hisobot ko'rinmas edi.** 400/404/5xx da na
+   `PostHealthAsync`, na runner, na maintenance hech narsa yozmasdi:
+   har yurishda rad etilayotgan hisobot (masalan, server hali
+   yangilanmagan — 404) capture tomonida umuman sezilmasdi. Endi bitta
+   ogohlantirish, faqat status kodi — URL, token va javob tanasi yo'q
+   (Test04).
+4. **GET sozlamani o'qiy olmasa jimgina 1800 ga o'tardi.** Bare
+   `catch` bilan kodga yozilgan zaxira — standartning ikkinchi nusxasi
+   (K1, buzish f ning bir ko'rinishi): admin noto'g'ri qiymat yozsa
+   `stale` boshqa chegara bilan hisoblanardi va buni hech kim
+   bilmasdi. Boshqa endpoint'lar `GetIntAsync` xatosini yutmaydi,
+   `EnsureDefaultsAsync` esa yangi kalitni startda o'zi qo'shadi. Endi
+   xato 500 bo'lib chiqadi (Test11).
+
+Test bo'shliqlari (olib tashlansa ham suite yashil edi): ro'yxatdagi
+`StorageMaintenance` reporter'ni olmasa — delegate maintenance'ni qo'lda,
+reporter berib yaratardi ("ulanmagan himoya" sinfi); Test01 haqiqiy
+ro'yxatlar bilan bitta yurish refresh qilingan token va aynan shu
+yurishning snapshot'i bilan hisobot yuborishini tekshiradi. To'xtatish
+6-qadamdan oldin so'ralsa ham hisobot ketsa (buzish l ning "still
+reports" qismi; Test05). GET'da nom, platforma, `reported_at`, null
+metrikalar va nom bo'yicha tartib — delegate faqat `revoked`, `stale` va
+ikki metrikani tekshirardi (Test10). Body chegarasi aniq 4096 — delegate
+faqat ~4600 bayt yuborardi, chegarani 1024 ga tushirish yoki `>=` ga
+almashtirish hech narsani yiqitmasdi (Test13). Delegate'ning Test11 i
+chegarasiz 401 qayta urinishida yiqilmay osilib qolardi — 10 soniyalik
+chegara qo'shildi. Pinning: buzuq body shakllari (massiv, buzuq JSON,
+bo'sh, kasr, eksponenta, majburiy maydonda null, bool — Test12). Yangi
+testlar: `CaptureHealthVerificationTests` (7) va
+`DeviceHealthEndpointsTests` dagi Test10–13 (11); sozlamani
+o'zgartiruvchi Test07 va Test11 bitta klassda — ketma-ket yuradi.
+
+Buzishlar (tuzatilgan kodga qarshi, alohida worktree'da, `--no-incremental`
+build): promptdagi a–h1 sakkiztasi yurgizildi — 8/8 ushlandi: a (Test01, Test02), b (Test01), c (Test04), d (Test05), e (Test08), f (Test07, Test11) — server `DeviceHealthEndpointsTests`; g (Test13), h1 (Test11) — `CaptureHealthReportingTests`. h2 (401 ni chegarasiz qayta urinish) Test11 ni yiqitmay OSIB qo'ydi: soxta handler'da hamma await sinxron tugaydi, cheksiz sikl test oqimining o'zida aylanib `WaitAsync` gacha yetmasdi — Test11 endi `Task.Run` + 10 s chegara (`9a12266`). Egasi ketishi kerak bo'lgani uchun YURGIZILMADI (keyingi sessiyada): h2 qayta, i–l va o'zimning 15 mutatsiyam (qulfni olib tashlash, ro'yxatdagi reporter'siz maintenance, rad etish logisiz, GET'da nom/platforma almashuvi, teskari tartib, `revoked` doim false, `stale` teskari, fayllar chegarasi 2^53, `cache_db_bytes` ga boshqa qiymat, 401 = muvaffaqiyat, null ixtiyoriy rad etilsa, upsert har doim insert, chegara 1024 va `>=`, majburiy maydonsiz). Tuzatilgan 4 nuqsonning har biri uchun yangi test tuzatishdan OLDIN yiqilishi ko'rilgan (Test02, Test03, Test04 ×3, server Test11).
+
+Mayda, tuzatilmagan: bir qurilmadan ikki parallel BIRINCHI hisobot —
+ikkinchisi PK to'qnashuvidan 500 oladi (upsert `ON CONFLICT` emas;
+capture har yurishda bitta hisobot yuboradi, ma'lumot buzilmaydi);
+`PostHealthAsync` javobni dispose qilmaydi (fayldagi boshqa metodlar
+kabi; javob buferlangan, ulanish bo'shaydi); hisobot maintenance'ni
+bitta HTTP timeout'dan uzoqroq ushlashi mumkin — 401 yo'lida 4 tagacha
+chaqiruv (refresh, POST, majburiy refresh, POST), har biri `HttpClient`
+ning 100 s chegarasi bilan; umumiy muddat ataylab qo'shilmadi, chunki
+refresh o'rtasida bekor qilish server almashtirib bo'lgan token'ni
+yo'qotadi (qurilmani qayta enroll qilish) — §8 band 41.
+
+**Delegate yozuvlaridagi noaniqliklar:** "Barcha 12 ta ataylab buzish
+(a–l) mustaqil tasdiqlandi" — hisobot kelmagani uchun qaysi test qaysi
+buzishni ushlagani noma'lum, ro'yxatni o'zim yurgizdim (yuqorida). Plan
+05 jadvalida 9b qatori yo'q edi (promptda talab qilingan) — qo'shildi.
+
+Promptning 6-bandi (o'zim javob berdim) — buzilgan yoki noto'g'ri
+ishlayotgan qurilma endpoint orqali: faqat O'Z qatorini yozadi (ID
+tokendan; body'dagi `device_id` e'tiborsiz); yolg'on, lekin chegaradagi
+raqamlar yuborishi mumkin ("0 MB RSS", har daqiqa hisobot berib hech
+qachon `stale` bo'lmaslik) — admin buni farqlay olmaydi; yuklama: har
+so'rov ≤ 4 KB va bitta upsert, lekin rate limit yo'q (API'da faqat
+`keywrap` siyosati bor); boshqa qurilmalarning ma'lumotini o'qiy olmaydi
+(GET faqat admin); bekor qilingan qurilma 401.
 
 ### Plan 05 Task 9a tekshiruvi (2026-10-02, laptop) — qanday qabul qilindi
 
@@ -1009,23 +1119,38 @@ tdesktop'da ham xuddi shunday (`INSERT OR REPLACE`).
 
 ---
 
-## 2. 🟡 TEKSHIRUV KUTILMOQDA — plan 05 Task 9b (health hisobot backend'ga)
+## 2. 🔴 KEYINGI QADAM — plan 05 Task 10 bloklangan; bloklanmagan ishlar
 
-Prompt: `docs/05-task9b-prompt.md`.
+Task 10 — haqiqiy TDLib va Telegram sessiyasi bilan uchidan-uchiga sinov
+(`telegram-cli check`, `online=false` o'lchovi — §1 Task 7 va 6a
+bo'limlari). Haqiqiy sessiya va VPS kerak: deploy to'xtatilgan va "server
+ishga tushirilmaydi" qoidasi — xavfsizlik auditigacha bloklangan.
+Bloklanmaganlar (prompt hali yozilmagan):
+- `photo` maydoni (spec §3.2.2, Task 4b dan qolgan);
+- sessiya himoyasi vazifasi ("Plan 05 ga qo'shiladigan alohida vazifa");
+- server testlarining `Storage:MediaRoot` i temp'ga (§5);
+- tdesktop sessiyasiga bir qator: yangi API endpoint'lari
+  (`/api/v1/devices/health`) — sync protokoli emas, CHANGELOG kerak emas.
 
-**9b — health hisobot (bu commit, tekshiruv kutilmoqda):**
-- **Server**:
-  - `POST /api/v1/devices/health`: autentifikatsiyalangan har qanday qurilma o'z metrikalarini yuboradi. Qurilma ID faqat tokendan (`NameIdentifier`), vaqt serverning `DateTime.UtcNow` (body'dagi `reported_at` yoki `device_id` e'tiborga olinmaydi). 4096 bayt oqimli chegara (`Content-Length` bo'lmaganda ham bufer limitida ushlanadi, `413 Payload Too Large`), raqamlar qat'iy tekshiriladi (0..2^53-1, `media_store_files` 0..10^9), majburiy 4 ta maydon (`rss_bytes`, `cache_db_bytes`, `media_store_bytes`, `media_store_files`) va 4 ta ixtiyoriy (`memory_limit_bytes`, `tdlib_files_bytes`, `tdlib_database_bytes`, `free_disk_bytes`). 204 NoContent qaytaradi, audit yozuvlari yozilmaydi.
-  - `GET /api/v1/devices/health`: faqat admin roli (`RequireAuthorization("admin")`). `device_health` jadvalidagi har bir yozuv qurilma nomi bo'yicha alifbo tartibida qaytariladi. `health.stale_after_seconds` (standart 1800 soniya) sozlamasi bo'yicha `stale = (now - reported_at) > stale_seconds` hisoblanadi. Audit yozuvlari yozilmaydi.
-  - Ma'lumotlar bazasi: `device_health` jadvali (`DeviceHealthEntity`), `device_id` PK va `devices.device_id` ga CASCADE FK. EF Core migratsiyasi: `20261002023636_AddDeviceHealth`.
-  - Sozlama: `health.stale_after_seconds = 1800` (`SettingsService.CreateDefaults()`, category "health", type "int").
-- **Capture**:
-  - `ICaptureHealthReporter` va `NullCaptureHealthReporter` (`src/CustomSync.Capture/Maintenance/ICaptureHealthReporter.cs`), `CaptureHandlerRegistration.AddCaptureHandlers` da `TryAddSingleton` bilan ro'yxatga olinadi.
-  - `CaptureHealthReporter` (`src/CustomSync.Capture/Sync/CaptureHealthReporter.cs`), `CaptureSyncRegistration.AddCaptureSyncClient` chaqirilganda `services.Replace` orqali ulanadi.
-  - `CaptureSyncHttpClient.PostHealthAsync`: POST `/api/v1/devices/health` so'rovini faqat ruxsat etilgan 8 ta maydon bilan yuboradi.
-  - `CaptureSyncRunner.ReportHealthAsync`: Sync yoqilgan bo'lsa (`Capture:Sync:Enabled` true) va to'xtatilmagan bo'lsa ishlaydi. 401 Unauthorized olinganda mavjud token oqimidan foydalanib bir marta majburiy yangilaydi (`forceRefresh: true`) va bitta qayta urinish qiladi (siklsiz). Bekor qilish (`OperationCanceledException`) tashqariga qayta uzatiladi, boshqa istisnolar loglanib `false` qaytariladi (maintenance siklini buzmaydi). Loglarga URL, manzil, token yoki maxfiy ma'lumotlar tushmaydi (faqat istisno turi).
-  - `StorageMaintenance`: 6-qadam sifatida `_reporter.ReportAsync(snapshot, ct)` chaqiriladi. Istisnolar siklni buzmaydi, bekor qilish (`ct.IsCancellationRequested`) toza uzatiladi.
-- **Testlar**: 21 ta yangi test yozildi (`DeviceHealthEndpointsTests` 15 ta, `CaptureHealthReportingTests` 6 ta), jami testlar soni 493 dan 514 taga yetdi. Barcha 12 ta ataylab buzish (a–l) mustaqil tasdiqlandi. Uch marta to'liq `dotnet test` muvaffaqiyatli o'tdi (514/514). Tekshiruv kutilmoqda.
+### Oldingi qadam tarixi — plan 05 Task 9b (health hisobot backend'ga)
+
+Prompt: `docs/05-task9b-prompt.md`. Delegate `cb9dc2d`, tekshiruv
+`ceaec17` + `62d6ec8` (§1 "Plan 05 Task 9b tekshiruvi", §8 band 41).
+- Server: `POST /api/v1/devices/health` — har autentifikatsiyalangan
+  qurilma; ID faqat tokendan, vaqt server soatidan; 4096 bayt o'qish
+  paytida → 413; majburiy `rss_bytes`, `cache_db_bytes`,
+  `media_store_bytes`, `media_store_files`, ixtiyoriy/null
+  `memory_limit_bytes`, `tdlib_files_bytes`, `tdlib_database_bytes`,
+  `free_disk_bytes`; baytlar 0..2^53−1, fayllar 0..10^9; upsert, 204,
+  audit yo'q. `GET` — faqat admin, nom bo'yicha, `stale` =
+  `now − reported_at > health.stale_after_seconds` (xato yutilmaydi).
+  `device_health` (migratsiya `20261002023636_AddDeviceHealth`, CASCADE).
+- Capture: `PostHealthAsync` (aniq 8 maydon; rad etilsa status kodi
+  loglanadi), `ICaptureHealthReporter` (null `TryAddSingleton` +
+  `services.Replace`), `ReportHealthAsync` (sync o'chiq — so'rov yo'q;
+  401 da bitta refresh va bitta qayta urinish; faqat bekor qilish
+  chiqadi), token oqimi qulf ostida, `StorageMaintenance` 6-qadam (o'z
+  try/catch'i, to'xtash jim).
 
 ### Oldingi qadam tarixi — plan 05 Task 9a (capture diski)
 
@@ -1345,6 +1470,8 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | `SyncEndpointsTests.Pull_returns_pushed_records_and_advances_cursor` beqaror: 2026-10-01 da ~30 to'liq yurgizishdan birida yiqildi (Task 8 ga aloqasiz), alohida 3/3 o'tadi. Ehtimoliy sabab — barcha server testlari bitta dev bazasida parallel yuradi va boshqa klass (purge/retention) yangi push qilingan eski `occurred_at` li yozuvni o'chirib yuborishi mumkin | Test infratuzilmasi — alohida vazifa (har klassga alohida baza yoki purge testlarini ketma-ket kolleksiyaga) |
 | Server testlari media bloblarini standart `Storage:MediaRoot` ga (`/var/lib/customsync/media`, Windows'da `C:\var\lib\customsync\media`) yozadi — test fabrikasi uni temp'ga bermaydi; 2026-09-10 dan beri yig'iladi (9a tekshiruvida topildi) | Test infratuzilmasi — alohida vazifa (fabrikada `Storage:MediaRoot` = temp) |
 | `TdClient.SendAsync`: `transport.Send` istisno tashlasa kutilayotgan so'rov `_pendingRequests` da abadiy qoladi (kichik oqish; native `td_send` amalda tashlamaydi) | Plan 05 keyingi ishi |
+| Bir qurilmadan ikki parallel BIRINCHI health hisobot — ikkinchisi 500 (PK to'qnashuvi; upsert `INSERT ... ON CONFLICT` emas). Capture ketma-ket yuboradi, ma'lumot buzilmaydi | Kerak bo'lsa — server (9b tekshiruvida topildi) |
+| Server `DeviceService.RefreshAsync` refresh token'ni qulfsiz almashtiradi (o'qish → tekshirish → yozish): bitta token bilan parallel ikki refresh ikkalasi ham o'tishi mumkin, bazada oxirgisi qoladi — ikkinchi mijoz bilmaydigan token bilan qoladi. Capture 9b tekshiruvidan beri parallel refresh qilmaydi; boshqa mijoz qilsa qurilma bloklanadi | Server — alohida vazifa (`UPDATE ... WHERE refresh_hash = eski` yoki concurrency token) |
 | `ArchiveTargetTests.Test1` SHA-256 ni asl kontentdan hisoblaydi — checksum diskdan emas, kirish oqimidan olinsa ham o'tadi | Buzilgan fayl tizimi simulyatsiyasi kerak; hozircha oqlanmaydi |
 
 ---
@@ -1363,6 +1490,8 @@ Hech biri bloklamaydi, lekin unutilmasin:
 ---
 
 ## 7. Muhit — tekshirilgan faktlar
+
+- **Mutatsiya worktree'sida server testlari** (2026-10-02): `src/CustomSync.Api/appsettings.Development.json` gitignore'da — u bo'lmasa worktree'da HAMMA server testi yiqiladi va har buzish soxta "ushlandi" chiqadi. Worktree yaratilgach faylni asosiy daraxtdan nusxalash va avval mutatsiyasiz bazaviy yurish o'tishini ko'rish shart.
 
 | Nima | Holat |
 |---|---|
@@ -1551,12 +1680,12 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **Ochiq qolganlar**: TDLib'ning o'z xabar bazasi (`use_message_database = true`) faqat o'lchanadi, chegaralanmaydi; byudjet to'lganda eski media siqib chiqarilmaydi (yuklash to'xtaydi); ombor yo'li o'zgartirilsa eski papkadagi fayllar "ombordan tashqarida" bo'lib qoladi va hech qachon o'chirilmaydi (qo'lda tozalanadi); disk himoyasi har tekshiruvda bitta faylgacha (≤ `MaxBytes`) oshib ketishga yo'l qo'yadi, TDLib'ning o'z nusxasi esa `optimizeStorage` gacha diskda turadi; `optimizeStorage` yuklanayotgan faylga tegishi mumkinmi — TDLib hujjatida yo'q (himoya: `immunity_delay ≥ 2 × DownloadTimeoutSeconds`).
     - Delegate 42 test yozgan (jami 461); tekshiruv — §1 "Plan 05 Task 9a tekshiruvi" (7 nuqson, 7 test bo'shlig'i, jami 493).
 
-41. **Capture health hisoboti backend'ga (Plan 05 Task 9b, bu commit)** —
-    - **Server endpointlari**: `POST /api/v1/devices/health` (device roli, caller ID tokendan, server `DateTime.UtcNow`, 4096 bayt oqimli chegara, raqamlar 0..2^53-1, 204 NoContent, audit yo'q) va `GET /api/v1/devices/health` (admin roli, `device_health` dagi qatorlar, `health.stale_after_seconds = 1800` asosida `stale` hisoblash, qurilma nomi bo'yicha tartiblangan, audit yo'q).
-    - **Ma'lumotlar bazasi**: `device_health` jadvali (`DeviceHealthEntity`), `device_id` PK/FK (`devices.device_id` CASCADE). EF Core migratsiyasi: `20261002023636_AddDeviceHealth`.
-    - **Capture mijozi va integratsiya**: `ICaptureHealthReporter` va `NullCaptureHealthReporter` (`AddCaptureHandlers`), `CaptureHealthReporter` (`AddCaptureSyncClient` orqali ulanadi). `CaptureSyncHttpClient.PostHealthAsync` (faqat 8 ta ruxsat etilgan maydon). `CaptureSyncRunner.ReportHealthAsync` (sync yoqilganda ishlaydi, 401 da bitta token majburiy yangilash va 1 marta qayta urinish, istisnolardan faqat turi loglanadi, siklni buzmaydi, bekor qilish uzatiladi). `StorageMaintenance` 6-qadam integratsiyasi.
-    - **Testlar va buzishlar**: 21 ta yangi test (`DeviceHealthEndpointsTests` 15 ta, `CaptureHealthReportingTests` 6 ta), jami testlar 514/514. 12 ta ataylab buzish (a–l) mustaqil tasdiqlandi. Tekshiruv kutilmoqda.
-
+41. **Capture health hisoboti backend'ga (Plan 05 Task 9b)** — `cb9dc2d` + `ceaec17` + `62d6ec8`.
+    - **Server**: `POST /api/v1/devices/health` (har qurilma; ID faqat `NameIdentifier` dan, `reported_at` = server `DateTime.UtcNow`; body o'qish paytida 4096 bayt, `Content-Length` bo'lmasa ham → 413; noma'lum maydonlar e'tiborsiz; butun sonlar `TryGetInt64`, baytlar 0..2^53−1, `media_store_files` 0..10^9; majburiy 4 + ixtiyoriy/null 4 maydon; upsert, 204, audit yo'q). `GET /api/v1/devices/health` (faqat admin; `device_id`, `name`, `platform`, `revoked`, `reported_at`, `stale`, 8 metrika; nom bo'yicha; `stale` = `now − reported_at > health.stale_after_seconds`; sozlama xatosi yutilmaydi). `device_health` (PK = FK `devices.device_id`, CASCADE), migratsiya `20261002023636_AddDeviceHealth`. Sozlama `health.stale_after_seconds` = 1800 (int, `health`).
+    - **Capture**: `CaptureSyncHttpClient.PostHealthAsync` (aniq 8 maydon, `Optimize*`/`Media*Pruned`/`TakenAt` yuborilmaydi; 401 → `Unauthorized`; boshqa rad etish status kodi bilan loglanadi). `ICaptureHealthReporter`: `AddCaptureHandlers` da null (`TryAddSingleton`), `AddCaptureSyncClient` da `services.Replace` bilan haqiqiysi; `StorageMaintenance` ro'yxati uni `GetRequiredService` bilan oladi. `CaptureSyncRunner.ReportHealthAsync`: `Capture:Sync:Enabled` true bo'lmasa yoki kalit/holat yuklanmasa so'rovsiz `false`; 401 da bitta majburiy refresh va bitta qayta urinish; faqat bekor qilish chiqadi, log'da faqat istisno turi. `StorageMaintenance` 6-qadam: o'z try/catch'i, to'xtash so'ralgan bo'lsa hisobot yo'q va ogohlantirish yo'q.
+    - **Promptdan chetlashishlar**: (1) runner'ning token oqimi (`EnsureAccessTokenAsync`) endi `SemaphoreSlim` ostida — prompt "mavjud token oqimidan o'tsin" degan, u esa bitta chaqiruvchi uchun yozilgan edi (§1 9b tekshiruvi, 1-band); (2) "maintenance'ni bitta HTTP timeout'dan ko'p ushlamaydi" bajarilmaydi: 401 yo'lida 4 tagacha chaqiruv, har biri 100 s chegarali; umumiy muddat ataylab yo'q — refresh o'rtasida bekor qilish server almashtirib bo'lgan token'ni yo'qotadi; (3) rad etilgan hisobot status kodi bilan loglanadi (promptda "faqat istisno turi" — status kodi maxfiy emas, logsiz esa doim rad etilayotgan hisobot ko'rinmas edi).
+    - **Ochiq qolganlar**: parallel birinchi hisobot 500 (§5); raqamlar ma'no jihatidan tekshirilmaydi (buzilgan qurilma yolg'on, lekin chegaradagi qiymat yuborishi mumkin); API'da rate limit faqat `keywrap` da; hisobotlar tarixi saqlanmaydi (faqat oxirgisi); web sahifa — plan 03.
+    - Delegate 21 test yozgan (jami 514); tekshiruv 18 test (jami 532) — §1 "Plan 05 Task 9b tekshiruvi".
 ---
 
 ## 9. Protokol o'zgarishlari (tdesktop repo'sida)
