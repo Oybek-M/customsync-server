@@ -1,11 +1,11 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-02** (ertalab, laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-03** (laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **532 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **533 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-02, laptop `DESKTOP-L2J53IK`)
@@ -13,11 +13,11 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9b** — capture health hisoboti backend'ga: `POST`/`GET /api/v1/devices/health`, `device_health` jadvali, `health.stale_after_seconds` (`cb9dc2d` + tekshiruv tuzatishlari `ceaec17`, `62d6ec8`) |
-| **Keyingi bajariladigan** | Plan 05 **Task 10** — haqiqiy TDLib va Telegram sessiyasi bilan uchidan-uchiga sinov: haqiqiy sessiya va VPS kerak, deploy to'xtatilgani uchun hozir **BLOKLANGAN**. Bloklanmaganlar (prompt hali yozilmagan): `photo` maydoni, sessiya himoyasi vazifasi, server testlarining `Storage:MediaRoot` i (§5) — §2 |
+| **Keyingi bajariladigan** | Gemini promptlari TAYYOR (2026-10-03), shu tartibda, har biri oldingisi tekshirilgach: `docs/05-task10a-prompt.md` → `05-task10b-prompt.md` → `05-task4d-prompt.md` (photo/story signallari) → `05-task11-prompt.md` (sessiya himoyasi, deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan). TeamLead'ning o'zi: server `RefreshAsync` poygasi, test fabrikasi `Storage:MediaRoot` → temp (§5) — §2 |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10 ⏸ (bloklangan) |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10 ⏸ (bloklangan; 10a/10b prompt tayyor), 4d 📝, 11 📝 (prompt tayyor) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
@@ -1147,12 +1147,13 @@ Task 10 — haqiqiy TDLib va Telegram sessiyasi bilan uchidan-uchiga sinov
 (`telegram-cli check`, `online=false` o'lchovi — §1 Task 7 va 6a
 bo'limlari). Haqiqiy sessiya va VPS kerak: deploy to'xtatilgan va "server
 ishga tushirilmaydi" qoidasi — xavfsizlik auditigacha bloklangan.
-Bloklanmaganlar (prompt hali yozilmagan):
-- `photo` maydoni (spec §3.2.2, Task 4b dan qolgan);
-- sessiya himoyasi vazifasi ("Plan 05 ga qo'shiladigan alohida vazifa");
-- server testlarining `Storage:MediaRoot` i temp'ga (§5);
-- tdesktop sessiyasiga bir qator: yangi API endpoint'lari
-  (`/api/v1/devices/health`) — sync protokoli emas, CHANGELOG kerak emas.
+Bloklanmaganlar — promptlar tayyor (2026-10-03), shu tartibda:
+1. `docs/05-task10a-prompt.md` — capture ↔ haqiqiy API kontrakt testlari (in-process);
+2. `docs/05-task10b-prompt.md` — uchidan-uchiga zanjirlar (scope, bitta hodisa = bitta yozuv, media);
+3. `docs/05-task4d-prompt.md` — `photo`/`story` maydonlari va rasm/story onlayn lahzalari (tdesktop bilan bir xil);
+4. `docs/05-task11-prompt.md` — sessiya himoyasi (bekor qilingan sessiya → exit 78, umask/0700, TDLib baza kaliti, runbook).
+TeamLead'ning o'zi (prompt kerak emas): server `RefreshAsync` poygasi va test fabrikasi `Storage:MediaRoot` → temp (ikkalasi §5).
+tdesktop sessiyasiga bir qator: yangi API endpoint'lari (`/api/v1/devices/health`) — sync protokoli emas, CHANGELOG kerak emas.
 
 ### Oldingi qadam tarixi — plan 05 Task 9b (health hisobot backend'ga)
 
@@ -1708,6 +1709,9 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **Promptdan chetlashishlar**: (1) runner'ning token oqimi (`EnsureAccessTokenAsync`) endi `SemaphoreSlim` ostida — prompt "mavjud token oqimidan o'tsin" degan, u esa bitta chaqiruvchi uchun yozilgan edi (§1 9b tekshiruvi, 1-band); (2) "maintenance'ni bitta HTTP timeout'dan ko'p ushlamaydi" bajarilmaydi: 401 yo'lida 4 tagacha chaqiruv, har biri 100 s chegarali; umumiy muddat ataylab yo'q — refresh o'rtasida bekor qilish server almashtirib bo'lgan token'ni yo'qotadi; (3) rad etilgan hisobot status kodi bilan loglanadi (promptda "faqat istisno turi" — status kodi maxfiy emas, logsiz esa doim rad etilayotgan hisobot ko'rinmas edi).
     - **Ochiq qolganlar**: parallel birinchi hisobot 500 (§5); raqamlar ma'no jihatidan tekshirilmaydi (buzilgan qurilma yolg'on, lekin chegaradagi qiymat yuborishi mumkin); API'da rate limit faqat `keywrap` da; hisobotlar tarixi saqlanmaydi (faqat oxirgisi); web sahifa — plan 03.
     - Delegate 21 test yozgan (jami 514); tekshiruv 18 test (jami 532) — §1 "Plan 05 Task 9b tekshiruvi".
+
+42. **Capture chiqish kodi jarayonga yetmasdi (TeamLead, 2026-10-03, Task 11 tayyorgarligi)** — `Worker.Fail()` `Environment.ExitCode = 1` qo'yardi, lekin `Program.cs` oxiridagi `return 0;` uni yo'qotardi: `Main` `int` qaytarsa runtime `Environment.ExitCode` ni e'tiborsiz qoldiradi (Microsoft hujjati, `Environment.ExitCode` Remarks). Ya'ni preflight, avtorizatsiya yoki ko'rinmaslik xatosida ham systemd 0 ("muvaffaqiyat") ko'rardi; Task 7 testlari jarayon ichida `Environment.ExitCode` ni tekshirgani uchun o'tib ketardi — yana bir "ulanmagan himoya". Tuzatish: kirish nuqtasi `CaptureProgram.RunAsync` ga ko'chirildi (`Program.cs` faqat uni chaqiradi), u host to'xtagach `Environment.ExitCode` ni qaytaradi. `CaptureProgramTests.Test01` (hamma yo'l temp'da, TDLib yo'li mavjud bo'lmagan fayl → preflight xatosi) tuzatishdan oldin "Expected 1, Actual 0" bilan yiqilgan. Task 11 shu testni kengaytiradi (exit 78 + `RestartPreventExitStatus=78`).
+
 ---
 
 ## 9. Protokol o'zgarishlari (tdesktop repo'sida)
