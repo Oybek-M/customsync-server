@@ -464,6 +464,27 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
         Assert.Equal(77L, row.RssBytes);
         Assert.Null(row.TdlibFilesBytes);
     }
+
+    // 13. Chegara aniq: 4096 baytli body qabul qilinadi, 4097 bayt — 413.
+    // Delegate testi faqat ~4600 baytni yuborardi, ya'ni chegarani 1024 ga
+    // tushirish yoki ">=" ga almashtirish hech qaysi testni yiqitmasdi.
+    [Theory]
+    [InlineData(4096, 204)]
+    [InlineData(4097, 413)]
+    public async Task Test13_PostHealth_body_limit_is_exactly_4096_bytes(int size, int expectedStatus)
+    {
+        var (client, deviceId, _) = await CreateEnrolledDeviceAsync();
+        const string prefix = "{\"rss_bytes\":1,\"cache_db_bytes\":1,\"media_store_bytes\":1,\"media_store_files\":1,\"pad\":\"";
+        var json = prefix + new string('x', size - prefix.Length - 2) + "\"}";
+        Assert.Equal(size, Encoding.UTF8.GetByteCount(json));
+
+        var response = await client.PostAsync("/api/v1/devices/health", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(expectedStatus, (int)response.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SyncDbContext>();
+        Assert.Equal(expectedStatus == 204, await db.DeviceHealth.AnyAsync(h => h.DeviceId == deviceId));
+    }
 }
 
 file sealed class NonSeekableStream : Stream
