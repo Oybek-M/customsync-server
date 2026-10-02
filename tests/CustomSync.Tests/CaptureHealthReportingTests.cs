@@ -252,8 +252,10 @@ public class CaptureHealthReportingTests : IDisposable
         var reporter = new CaptureHealthReporter(runner);
 
         var snapshot = CreateSampleSnapshot();
-        // Chegarasiz qayta urinish testni osib qo'ymasin — yiqitsin.
-        var success = await reporter.ReportAsync(snapshot).WaitAsync(TimeSpan.FromSeconds(10));
+        // Chegarasiz qayta urinish testni osib qo'ymasin — yiqitsin. Soxta
+        // handler'da hamma await sinxron tugaydi: Task.Run'siz cheksiz sikl
+        // test oqimining o'zida aylanib, WaitAsync'gacha yetmasdi.
+        var success = await Task.Run(() => reporter.ReportAsync(snapshot)).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.False(success);
         Assert.Equal(2, healthRequests); // 1 initial + 1 retry after 401
