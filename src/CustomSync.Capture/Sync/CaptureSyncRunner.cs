@@ -589,6 +589,59 @@ public class CaptureSyncRunner
         return pushOk && pullOk;
     }
 
+    public virtual async Task<bool> ReportHealthAsync(
+        CustomSync.Capture.Maintenance.StorageSnapshot snapshot,
+        CancellationToken ct = default)
+    {
+        if (!IsEnabled || _isStopped)
+        {
+            return false;
+        }
+
+        if (!EnsureCredentialsLoaded())
+        {
+            return false;
+        }
+
+        var serverUrl = _config["Capture:Sync:ServerUrl"];
+        if (string.IsNullOrWhiteSpace(serverUrl))
+        {
+            return false;
+        }
+
+        try
+        {
+            var token = await EnsureAccessTokenAsync(forceRefresh: false, ct);
+            if (token == null)
+            {
+                return false;
+            }
+
+            var status = await _client.PostHealthAsync(serverUrl, token, snapshot, ct);
+            if (status == PostHealthStatus.Unauthorized)
+            {
+                token = await EnsureAccessTokenAsync(forceRefresh: true, ct);
+                if (token == null)
+                {
+                    return false;
+                }
+
+                status = await _client.PostHealthAsync(serverUrl, token, snapshot, ct);
+            }
+
+            return status == PostHealthStatus.Success;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning("Health report failed: {ExceptionType}", ex.GetType().Name);
+            return false;
+        }
+    }
+
     private sealed record PreparedMedia(MediaRef? Ref, string? HoldReason);
 
     /// <summary>

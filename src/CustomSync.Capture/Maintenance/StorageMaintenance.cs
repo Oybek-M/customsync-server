@@ -33,6 +33,7 @@ public class StorageMaintenance
     private readonly ILogger<StorageMaintenance>? _logger;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly TimeProvider _timeProvider;
+    private readonly ICaptureHealthReporter? _reporter;
     private readonly string _procCgroupPath;
     private readonly string _sysFsCgroupRoot;
 
@@ -52,7 +53,8 @@ public class StorageMaintenance
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeProvider? timeProvider = null,
         string procCgroupPath = "/proc/self/cgroup",
-        string sysFsCgroupRoot = "/sys/fs/cgroup")
+        string sysFsCgroupRoot = "/sys/fs/cgroup",
+        ICaptureHealthReporter? reporter = null)
     {
         _messageCache = messageCache;
         _mediaStore = mediaStore;
@@ -65,6 +67,7 @@ public class StorageMaintenance
         _timeProvider = timeProvider ?? TimeProvider.System;
         _procCgroupPath = procCgroupPath;
         _sysFsCgroupRoot = sysFsCgroupRoot;
+        _reporter = reporter;
     }
 
     public virtual void Start(CancellationToken ct = default)
@@ -305,6 +308,27 @@ public class StorageMaintenance
                 ToMb(rssBytes),
                 (double)rssBytes / memLimit.Value * 100.0,
                 ToMb(memLimit.Value));
+        }
+
+        // Step 6: Health report to backend
+        if (_reporter != null)
+        {
+            try
+            {
+                if (ct.IsCancellationRequested)
+                {
+                    throw new OperationCanceledException(ct);
+                }
+                await _reporter.ReportAsync(snapshot, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning("Storage maintenance health reporting failed: {ExceptionType}", ex.GetType().Name);
+            }
         }
     }
 

@@ -82,6 +82,9 @@ public class SettingsService(SyncDbContext db)
         // Plan 06 -- releases
         New("releases.mirrors",              "[]",    "json", "releases", "Relizlarni tarqatish mirror'lari ro'yxati"),
         New("releases.verify_after_publish", "false", "bool", "releases", "Tarqatilgandan so'ng HTTP GET orqali sha256 ni tekshirish"),
+
+        // Plan 05 Task 9b -- device health
+        New("health.stale_after_seconds",    "1800",  "int",  "health",   "Qurilma salomatligi hisoboti eskirgan deb hisoblanadigan muddat (soniya)"),
     ];
 
     private static ServerSettingEntity New(

@@ -1,3 +1,4 @@
+using CustomSync.Capture.Maintenance;
 using CustomSync.Capture.Media;
 using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.Configuration;
@@ -68,6 +69,8 @@ public static class CaptureHandlerRegistration
                 sp.GetService<ILogger<MediaDownloader>>());
         });
 
+        services.TryAddSingleton<ICaptureHealthReporter, NullCaptureHealthReporter>();
+
         services.TryAddSingleton<CustomSync.Capture.Maintenance.StorageMaintenance>(sp =>
         {
             var config = sp.GetService<IConfiguration>();
@@ -82,7 +85,8 @@ public static class CaptureHandlerRegistration
                 sp.GetRequiredService<MediaCaptureConfig>(),
                 retentionDays,
                 sp.GetService<ILogger<CustomSync.Capture.Maintenance.StorageMaintenance>>(),
-                timeProvider: sp.GetService<TimeProvider>());
+                timeProvider: sp.GetService<TimeProvider>(),
+                reporter: sp.GetRequiredService<ICaptureHealthReporter>());
         });
 
         services.AddSingleton(sp =>

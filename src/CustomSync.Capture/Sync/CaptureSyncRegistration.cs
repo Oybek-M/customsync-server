@@ -36,6 +36,9 @@ public static class CaptureSyncRegistration
 
         services.AddSingleton<CaptureSyncLoop>();
 
+        services.AddSingleton<CaptureHealthReporter>();
+        services.Replace(ServiceDescriptor.Singleton<CustomSync.Capture.Maintenance.ICaptureHealthReporter>(sp => sp.GetRequiredService<CaptureHealthReporter>()));
+
         return services;
     }
 }

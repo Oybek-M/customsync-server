@@ -72,6 +72,13 @@ public enum MediaUploadStatus
     Error
 }
 
+public enum PostHealthStatus
+{
+    Success,
+    Unauthorized,
+    Error
+}
+
 /// <param name="Failed">404 ham, 200 ham emas (5xx, 400 ...): blob bor-yo'qligi NOMA'LUM —
 /// bu holatni 404 deb talqin qilish keraksiz PUT'ga va noto'g'ri nonce'ga olib kelardi.</param>
 public record HeadMediaResult(bool Exists, string? NonceBase64 = null, bool Unauthorized = false, bool Failed = false);
@@ -499,5 +506,58 @@ public class CaptureSyncHttpClient
 
         var err = await response.Content.ReadAsStringAsync(ct);
         return new PutMediaResult(MediaUploadStatus.Error, ErrorMessage: $"HTTP {(int)response.StatusCode}: {err}");
+    }
+
+    public virtual async Task<PostHealthStatus> PostHealthAsync(
+        string serverUrl,
+        string token,
+        CustomSync.Capture.Maintenance.StorageSnapshot snapshot,
+        CancellationToken ct = default)
+    {
+        var endpoint = $"{serverUrl.TrimEnd('/')}/api/v1/devices/health";
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var body = new Dictionary<string, object?>
+        {
+            ["rss_bytes"] = snapshot.ProcessRssBytes,
+            ["memory_limit_bytes"] = snapshot.MemoryLimitBytes,
+            ["cache_db_bytes"] = snapshot.CacheDatabaseBytes,
+            ["media_store_bytes"] = snapshot.MediaStoreBytes,
+            ["media_store_files"] = snapshot.MediaStoreFiles,
+            ["tdlib_files_bytes"] = snapshot.TdlibFilesBytes,
+            ["tdlib_database_bytes"] = snapshot.TdlibDatabaseBytes,
+            ["free_disk_bytes"] = snapshot.FreeDiskBytes
+        };
+
+        var json = JsonSerializer.Serialize(body);
+        request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning("Health report HTTP request failed: {ExceptionType}", ex.GetType().Name);
+            return PostHealthStatus.Error;
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            return PostHealthStatus.Unauthorized;
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            return PostHealthStatus.Success;
+        }
+
+        return PostHealthStatus.Error;
     }
 }

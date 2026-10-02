@@ -20,6 +20,7 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
     public DbSet<RetentionPolicyEntity> RetentionPolicies => Set<RetentionPolicyEntity>();
     public DbSet<ArchiveRunEntity>     ArchiveRuns       => Set<ArchiveRunEntity>();
     public DbSet<ArchiveJobRunEntity>  ArchiveJobRuns    => Set<ArchiveJobRunEntity>();
+    public DbSet<DeviceHealthEntity>   DeviceHealth      => Set<DeviceHealthEntity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -133,6 +134,16 @@ public class SyncDbContext(DbContextOptions<SyncDbContext> options)
         {
             e.ToTable("archive_job_runs");
             e.HasKey(x => x.RunDate);
+        });
+
+        b.Entity<DeviceHealthEntity>(e =>
+        {
+            e.ToTable("device_health");
+            e.HasKey(x => x.DeviceId);
+            e.HasOne(x => x.Device)
+             .WithOne()
+             .HasForeignKey<DeviceHealthEntity>(x => x.DeviceId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
