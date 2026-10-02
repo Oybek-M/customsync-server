@@ -85,7 +85,28 @@ public class CaptureSyncRunner
         return true;
     }
 
+    // Token oqimini ikki oqim chaqiradi: sync sikli va maintenance'ning
+    // health hisoboti (Task 9b). Refresh token har ishlatilganda almashadi,
+    // shuning uchun parallel ikki refresh bir xil eski tokenni yuboradi:
+    // ikkinchisi 401 oladi va sync "bekor qilingan" deb to'xtaydi, yoki
+    // xotirada server bilmaydigan token qolib qurilmani qayta enroll qilish
+    // kerak bo'ladi. Bir vaqtda faqat bitta chaqiruv tokenni yangilaydi.
+    private readonly SemaphoreSlim _tokenGate = new(1, 1);
+
     private async Task<string?> EnsureAccessTokenAsync(bool forceRefresh = false, CancellationToken ct = default)
+    {
+        await _tokenGate.WaitAsync(ct);
+        try
+        {
+            return await EnsureAccessTokenCoreAsync(forceRefresh, ct);
+        }
+        finally
+        {
+            _tokenGate.Release();
+        }
+    }
+
+    private async Task<string?> EnsureAccessTokenCoreAsync(bool forceRefresh, CancellationToken ct)
     {
         if (_isStopped) return null;
 
@@ -598,19 +619,21 @@ public class CaptureSyncRunner
             return false;
         }
 
-        if (!EnsureCredentialsLoaded())
-        {
-            return false;
-        }
-
-        var serverUrl = _config["Capture:Sync:ServerUrl"];
-        if (string.IsNullOrWhiteSpace(serverUrl))
-        {
-            return false;
-        }
-
         try
         {
+            // Fayl o'qish xatosi ham shu yerda ushlanadi: hisobot
+            // maintenance'dan faqat bekor qilish bilan chiqadi.
+            if (!EnsureCredentialsLoaded())
+            {
+                return false;
+            }
+
+            var serverUrl = _config["Capture:Sync:ServerUrl"];
+            if (string.IsNullOrWhiteSpace(serverUrl))
+            {
+                return false;
+            }
+
             var token = await EnsureAccessTokenAsync(forceRefresh: false, ct);
             if (token == null)
             {

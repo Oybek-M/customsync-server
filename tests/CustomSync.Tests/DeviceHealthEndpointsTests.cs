@@ -327,6 +327,143 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
         Assert.Equal("int", setting.ValueType);
         Assert.Equal("health", setting.Category);
     }
+
+    // ---------- Plan 05 Task 9b tekshiruvi (2026-10-02) ----------
+    // Shu klassda: Test07 va Test11 umumiy bazadagi bitta sozlamani
+    // o'zgartiradi, klass ichidagi testlar esa ketma-ket yuradi.
+
+    private async Task<(HttpClient Client, string DeviceId)> EnrollAsync(string role, string name, string platform)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var devices = scope.ServiceProvider.GetRequiredService<DeviceService>();
+        var jwt = scope.ServiceProvider.GetRequiredService<JwtIssuer>();
+
+        var code = await devices.CreateEnrollmentCodeAsync(role);
+        var enrolled = await devices.RedeemAsync(code, name, platform);
+        Assert.NotNull(enrolled);
+
+        var (token, _) = await jwt.IssueAsync(enrolled.DeviceId, enrolled.Role);
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return (client, enrolled.DeviceId);
+    }
+
+    // 10. GET yozuvida qurilma nomi, platformasi, bekor qilinganligi va
+    // server vaqti bor, null metrikalar null bo'lib qaytadi, ro'yxat nom
+    // bo'yicha tartiblangan. Delegate testi nom, platforma, vaqt va
+    // tartibni umuman tekshirmasdi.
+    [Fact]
+    public async Task Test10_Get_lists_name_platform_revoked_and_reported_at_ordered_by_name()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var (admin, _) = await EnrollAsync("admin", $"admin-{suffix}", "web");
+        var (zClient, zId) = await EnrollAsync("device", $"zz-{suffix}", "linux");
+        var (aClient, aId) = await EnrollAsync("device", $"aa-{suffix}", "windows");
+
+        var before = DateTime.UtcNow;
+        var zResp = await zClient.PostAsJsonAsync("/api/v1/devices/health", new Dictionary<string, object?>
+        {
+            ["rss_bytes"] = 11L, ["memory_limit_bytes"] = null, ["cache_db_bytes"] = 12L, ["media_store_bytes"] = 13L,
+            ["media_store_files"] = 14, ["tdlib_files_bytes"] = 15L, ["tdlib_database_bytes"] = null, ["free_disk_bytes"] = 16L
+        });
+        Assert.Equal(HttpStatusCode.NoContent, zResp.StatusCode);
+        var aResp = await aClient.PostAsJsonAsync("/api/v1/devices/health", new Dictionary<string, object?>
+        {
+            ["rss_bytes"] = 21L, ["cache_db_bytes"] = 22L, ["media_store_bytes"] = 23L, ["media_store_files"] = 24
+        });
+        Assert.Equal(HttpStatusCode.NoContent, aResp.StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<DeviceService>().RevokeAsync(zId);
+
+        var getResp = await admin.GetAsync("/api/v1/devices/health");
+        Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
+        var list = await getResp.Content.ReadFromJsonAsync<List<JsonElement>>(TestJson.Options);
+        Assert.NotNull(list);
+        var ids = list.Select(e => e.GetProperty("device_id").GetString()).ToList();
+        Assert.Contains(aId, ids);
+        Assert.Contains(zId, ids);
+        Assert.True(ids.IndexOf(aId) < ids.IndexOf(zId), "ro'yxat qurilma nomi bo'yicha tartiblanishi kerak");
+
+        var z = list.Single(e => e.GetProperty("device_id").GetString() == zId);
+        Assert.Equal($"zz-{suffix}", z.GetProperty("name").GetString());
+        Assert.Equal("linux", z.GetProperty("platform").GetString());
+        Assert.True(z.GetProperty("revoked").GetBoolean());
+        var reportedAt = z.GetProperty("reported_at").GetDateTime().ToUniversalTime();
+        Assert.InRange(reportedAt, before.AddSeconds(-5), DateTime.UtcNow.AddSeconds(5));
+        Assert.Equal(11, z.GetProperty("rss_bytes").GetInt64());
+        Assert.Equal(JsonValueKind.Null, z.GetProperty("memory_limit_bytes").ValueKind);
+        Assert.Equal(12, z.GetProperty("cache_db_bytes").GetInt64());
+        Assert.Equal(13, z.GetProperty("media_store_bytes").GetInt64());
+        Assert.Equal(14, z.GetProperty("media_store_files").GetInt64());
+        Assert.Equal(15, z.GetProperty("tdlib_files_bytes").GetInt64());
+        Assert.Equal(JsonValueKind.Null, z.GetProperty("tdlib_database_bytes").ValueKind);
+        Assert.Equal(16, z.GetProperty("free_disk_bytes").GetInt64());
+
+        var a = list.Single(e => e.GetProperty("device_id").GetString() == aId);
+        Assert.Equal($"aa-{suffix}", a.GetProperty("name").GetString());
+        Assert.Equal("windows", a.GetProperty("platform").GetString());
+        Assert.False(a.GetProperty("revoked").GetBoolean());
+    }
+
+    // 11. Sozlamani o'qib bo'lmasa (admin noto'g'ri qiymat yozgan) GET
+    // buni yashirmaydi. Avval kodga yozilgan 1800 ga jimgina o'tib
+    // "stale" ni noto'g'ri hisoblardi — standartning kod ichidagi ikkinchi
+    // nusxasi (K1). Boshqa endpoint'lar ham GetIntAsync xatosini yutmaydi.
+    [Fact]
+    public async Task Test11_Get_does_not_fall_back_to_a_hard_coded_stale_limit()
+    {
+        var (admin, _) = await EnrollAsync("admin", $"adm-{Guid.NewGuid().ToString("N")[..8]}", "web");
+        using (var scope = _factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<SettingsService>().SetAsync("health.stale_after_seconds", "not-a-number");
+
+        try
+        {
+            HttpResponseMessage? response = null;
+            Exception? thrown = null;
+            try { response = await admin.GetAsync("/api/v1/devices/health"); }
+            catch (Exception ex) { thrown = ex; }
+
+            Assert.True(thrown is not null || response!.StatusCode == HttpStatusCode.InternalServerError,
+                $"status {(int?)response?.StatusCode}");
+        }
+        finally
+        {
+            using var scope = _factory.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<SettingsService>().SetAsync("health.stale_after_seconds", "1800");
+        }
+    }
+
+    // 12. Body shakli buzuq bo'lsa ham 400 va saqlangan qator o'zgarmaydi:
+    // massiv, buzuq JSON, bo'sh body, kasr, eksponenta, majburiy maydonda
+    // null, bool.
+    [Theory]
+    [InlineData("array", "[]")]
+    [InlineData("broken_json", "{")]
+    [InlineData("empty", "")]
+    [InlineData("fraction", """{"rss_bytes": 1.5, "cache_db_bytes": 1, "media_store_bytes": 1, "media_store_files": 1}""")]
+    [InlineData("exponent", """{"rss_bytes": 1e3, "cache_db_bytes": 1, "media_store_bytes": 1, "media_store_files": 1}""")]
+    [InlineData("null_required", """{"rss_bytes": null, "cache_db_bytes": 1, "media_store_bytes": 1, "media_store_files": 1}""")]
+    [InlineData("bool_optional", """{"rss_bytes": 1, "cache_db_bytes": 1, "media_store_bytes": 1, "media_store_files": 1, "tdlib_files_bytes": true}""")]
+    public async Task Test12_PostHealth_malformed_bodies_return_400_and_row_unchanged(string caseName, string json)
+    {
+        Assert.NotEmpty(caseName);
+        var (client, deviceId, _) = await CreateEnrolledDeviceAsync();
+        var seed = await client.PostAsJsonAsync("/api/v1/devices/health", new Dictionary<string, object?>
+        {
+            ["rss_bytes"] = 77L, ["cache_db_bytes"] = 1L, ["media_store_bytes"] = 1L, ["media_store_files"] = 1
+        });
+        Assert.Equal(HttpStatusCode.NoContent, seed.StatusCode);
+
+        var response = await client.PostAsync("/api/v1/devices/health", new StringContent(json, Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SyncDbContext>();
+        var row = await db.DeviceHealth.AsNoTracking().SingleAsync(h => h.DeviceId == deviceId);
+        Assert.Equal(77L, row.RssBytes);
+        Assert.Null(row.TdlibFilesBytes);
+    }
 }
 
 file sealed class NonSeekableStream : Stream

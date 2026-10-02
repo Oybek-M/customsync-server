@@ -558,6 +558,10 @@ public class CaptureSyncHttpClient
             return PostHealthStatus.Success;
         }
 
+        // Faqat status kodi: URL, token va javob tanasi log'ga tushmaydi.
+        // Logsiz doim rad etilayotgan hisobot (masalan, eski server)
+        // capture tomonida butunlay ko'rinmas edi.
+        _logger?.LogWarning("Health report was rejected: HTTP {StatusCode}", (int)response.StatusCode);
         return PostHealthStatus.Error;
     }
 }

@@ -252,15 +252,10 @@ public static class DeviceEndpoints
 
         group.MapGet("/health", async (SyncDbContext db, SettingsService settings) =>
         {
-            int staleAfterSeconds = 1800;
-            try
-            {
-                staleAfterSeconds = await settings.GetIntAsync("health.stale_after_seconds");
-            }
-            catch
-            {
-                staleAfterSeconds = 1800;
-            }
+            // Xato yutilmaydi (boshqa endpoint'lar kabi): kodga yozilgan
+            // zaxira qiymat noto'g'ri sozlamani yashirib, "stale" ni
+            // jimgina boshqa chegara bilan hisoblardi (K1).
+            var staleAfterSeconds = await settings.GetIntAsync("health.stale_after_seconds");
             var now = DateTime.UtcNow;
 
             var rows = await db.DeviceHealth
