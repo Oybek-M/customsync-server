@@ -518,8 +518,30 @@ testlar: `CaptureHealthVerificationTests` (7) va
 `DeviceHealthEndpointsTests` dagi Test10–13 (11); sozlamani
 o'zgartiruvchi Test07 va Test11 bitta klassda — ketma-ket yuradi.
 
-Buzishlar (tuzatilgan kodga qarshi, alohida worktree'da, `--no-incremental`
-build): promptdagi a–h1 sakkiztasi yurgizildi — 8/8 ushlandi: a (Test01, Test02), b (Test01), c (Test04), d (Test05), e (Test08), f (Test07, Test11) — server `DeviceHealthEndpointsTests`; g (Test13), h1 (Test11) — `CaptureHealthReportingTests`. h2 (401 ni chegarasiz qayta urinish) Test11 ni yiqitmay OSIB qo'ydi: soxta handler'da hamma await sinxron tugaydi, cheksiz sikl test oqimining o'zida aylanib `WaitAsync` gacha yetmasdi — Test11 endi `Task.Run` + 10 s chegara (`9a12266`). Egasi ketishi kerak bo'lgani uchun YURGIZILMADI (keyingi sessiyada): h2 qayta, i–l va o'zimning 15 mutatsiyam (qulfni olib tashlash, ro'yxatdagi reporter'siz maintenance, rad etish logisiz, GET'da nom/platforma almashuvi, teskari tartib, `revoked` doim false, `stale` teskari, fayllar chegarasi 2^53, `cache_db_bytes` ga boshqa qiymat, 401 = muvaffaqiyat, null ixtiyoriy rad etilsa, upsert har doim insert, chegara 1024 va `>=`, majburiy maydonsiz). Tuzatilgan 4 nuqsonning har biri uchun yangi test tuzatishdan OLDIN yiqilishi ko'rilgan (Test02, Test03, Test04 ×3, server Test11).
+Buzishlar (tuzatilgan kodga qarshi, alohida worktree'da, har biri
+`--no-incremental` build bilan) — **29/29 ushlanadi**. Promptdagi 12 ta
+(h va l ikki variantda): a (server Test01, Test02), b (Test01), c
+(Test04), d (Test05), e (Test08), f (Test07, Test11), g (capture
+Test13), h1 (Test11), h2 (Test11), i (Test14, tekshiruv Test01), j
+(Test15), k (Test10), l1 (Test15, tekshiruv Test05), l2 (faqat
+tekshiruv Test05). h2 birinchi yurishda Test11 ni yiqitmay OSIB qo'ydi:
+soxta handler'da hamma await sinxron tugaydi, cheksiz sikl test
+oqimining o'zida aylanib `WaitAsync` gacha yetmasdi — Test11 endi
+`Task.Run` + 10 s chegara (`9a12266`), shundan keyin toza yiqiladi.
+O'zimning 15 ta: qulfni olib tashlash (faqat tekshiruv Test02),
+ro'yxatdagi maintenance reporter'siz (faqat tekshiruv Test01), rad
+etish logisiz (faqat tekshiruv Test04), GET'da nom/platforma
+almashuvi, teskari tartib, `revoked` doim false, null ixtiyoriy rad
+etilsa (to'rttalasi faqat server Test10), `stale` teskari (Test07),
+fayllar chegarasi 2^53 (Test04), `cache_db_bytes` ga boshqa qiymat
+(capture Test10, tekshiruv Test01), 401 = muvaffaqiyat (Test11), upsert
+har doim insert (Test03), chegara 1024 va `>=` (ikkalasi faqat
+Test13), majburiy maydonsiz (Test01, Test04, Test10). Ya'ni 10 ta
+buzishni FAQAT tekshiruvda qo'shilgan testlar ushlaydi — delegate
+testlarining o'zi bilan ular o'tib ketardi. Tuzatilgan 4 nuqsonning har
+biri uchun yangi test tuzatishdan OLDIN yiqilishi ko'rilgan (Test02,
+Test03, Test04 ×3, server Test11). Worktree'da server testlari uchun
+`appsettings.Development.json` kerak — §7.
 
 Mayda, tuzatilmagan: bir qurilmadan ikki parallel BIRINCHI hisobot —
 ikkinchisi PK to'qnashuvidan 500 oladi (upsert `ON CONFLICT` emas;
