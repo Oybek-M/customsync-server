@@ -73,7 +73,14 @@ report instead of silently doing something else.
    supergroup or channel → `−1000000000000 − supergroup_id`) this gives
    the expected peer id for every chat type **independently of the
    capture's `TdIdMapper`** — the tests must compute it that way.
-4. The 10a harness and tests; `Capture/CaptureScopeEvaluator.cs`
+4. The 10a harness and tests: `tests/CustomSync.Tests/CaptureContractTests.cs`
+   (`CaptureContractCollection` — `DisableParallelization`, shares one
+   `CustomSyncWebApplicationFactory`; `CreateCaptureHarnessAsync`,
+   `CaptureHarness`, `CreateEnrolledDeviceAsync`, `CreateAdminClientAsync`,
+   `GetCurrentMaxSeqAsync`, `LoadVectorCase1`). These helpers are
+   `private` today: move them into a shared test helper that both files
+   use — do not copy them — and keep every 10a test unchanged and green.
+   Put the 10b tests in the same collection. `Capture/CaptureScopeEvaluator.cs`
    (server `Capture:Scope:Block` / `Allow`, synced snapshot,
    `DefaultEnabled`), `Media/*`, `Sync/CaptureSyncRunner.cs` (media
    path), `Api/Endpoints/MediaEndpoints.cs`.

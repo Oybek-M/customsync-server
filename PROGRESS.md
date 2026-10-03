@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-03** (laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-04** (laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -12,12 +12,12 @@ Branch `Oybek`, ish daraxti toza.
 
 | | |
 |---|---|
-| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9b** — capture health hisoboti backend'ga: `POST`/`GET /api/v1/devices/health`, `device_health` jadvali, `health.stale_after_seconds` (`cb9dc2d` + tekshiruv tuzatishlari `ceaec17`, `62d6ec8`) |
-| **Keyingi bajariladigan** | Gemini promptlari TAYYOR (2026-10-03), shu tartibda, har biri oldingisi tekshirilgach: `docs/05-task10a-prompt.md` → `05-task10b-prompt.md` → `05-task4d-prompt.md` (photo/story signallari) → `05-task11-prompt.md` (sessiya himoyasi, deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan). TeamLead tuzatishlari (2026-10-03): capture chiqish kodi, server `RefreshAsync` poygasi, test fabrikasi `Storage:MediaRoot` → temp — §8 band 42–43 |
+| **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 10a** — capture ↔ haqiqiy API kontrakt testlari, in-process (`88ae43b`, 9 stsenariy, 544 test). Tekshiruvda nuqson topilmadi — pastdagi "Plan 05 Task 10a tekshiruvi" |
+| **Keyingi bajariladigan** | Gemini'ga `docs/05-task10b-prompt.md` (10a harness'i nomlari bilan yangilangan), keyin `05-task4d-prompt.md` → `05-task11-prompt.md` (deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan) — §2 |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10 ⏸ (bloklangan; 10a/10b prompt tayyor), 4d 📝, 11 📝 (prompt tayyor) |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b 📝, 4d 📝, 11 📝 (prompt tayyor), 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
@@ -319,7 +319,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 8 — O'chirilgan xabarlar media'si (opt-in) | `7181cc2` + `bb1bcb4` | Server media kontrakti: `{hash}` faqat `^[0-9a-f]{64}$` (HEAD/PUT/GET va `MediaService` da), PUT'da 12 baytli `X-Nonce` majburiy (aks holda 400), HEAD/GET saqlangan `X-Nonce` ni qaytaradi, push'da `media_hash_missing`/`media_ref_invalid`; `Capture:Media:*` + preflight; `downloadFile` allow-list'da (`file_id > 0`); SQLite v4 `captured_media`; 7 media turi va `MaxBytes`; `MediaDownloader` (ko'rinmaslik tasdiqlangach); kech yuklash — faqat `deleted` yozuv havola qilganda (HEAD → 404 → shifrlab PUT); 17 test (jami 393) | Promptdagi f buzishi (ShouldAntiDelete) delegate testlarida ushlanmasdi; buzishlar f/g/h/i + 20 mustaqil mutatsiya; 6 nuqson (vaqtinchalik xatoda media abadiy yo'qolardi, HEAD xatosi 404 deb talqin qilinib blob ochib bo'lmaydigan nonce bilan bog'lanardi, yuklangandan keyin o'zgargan fayl ulanardi, o'qib bo'lmaydigan fayl butun push'ni to'xtatardi, o'chgan xabar `MaxAttempts` marta qayta yuklanardi, restart urinishni yerdi) va 6 test bo'shlig'i tuzatildi (jami 419) |
 | 9a — Capture diski: media ombori, retention, TDLib tozalash, systemd unit | `c07ae35` + `a4d74a4` | `MediaStore` (`<peer_id>-<msg_id>.bin`, 0700/0600, o'z oqimi bilan nusxa, xesh nusxadan); disk himoyasi (`MinFreeBytes`, `MaxTotalBytes`, urinish sarflanmaydi); sxema v5 (`captured_media.created_at`, tuzoq hal qilingan); retention 5 qoidasi va yetim tozalash (media o'chiq bo'lsa ham); darvozada `optimizeStorage`/`getStorageStatisticsFast`/`setLogVerbosityLevel`; `StorageMaintenance` + `StorageSnapshot`; preflight; `deploy/customsync-capture.service`; 42 test (jami 461) | Promptdagi buzishlardan 8 tasi almashtirilgan, d ning 3-qoida varianti ushlanmasdi; 7 nuqson (🔴 retention xabarni TDLib ID bilan qidirib, yuklangan media'ni 10 daqiqada o'chirardi; soxta "100 GB" o'lchagichli ikkinchi konstruktor; testlar `C:\var\lib\...` ga yozardi va maintenance standart omborni tozalardi; oxiri `/` li ombor fayllari hech qachon o'chmasdi; standart immunity tekshirilmasdi; to'xtash shovqinli, kutilmagan istisno tozalashni o'ldirardi; README kod va parolni buyruq qatoriga yozishni o'rgatardi) va 7 test bo'shlig'i tuzatildi (jami 493) |
 | 9b — Capture health hisoboti backend'ga | `cb9dc2d` + `ceaec17` + `62d6ec8` | Server: `POST /api/v1/devices/health` (qurilma ID faqat tokendan, vaqt server soatidan, 4096 bayt o'qish paytida → 413, qat'iy butun sonlar, upsert, 204), `GET` (faqat admin, nom bo'yicha, `stale` = `health.stale_after_seconds`, standart 1800), `device_health` jadvali (migratsiya `AddDeviceHealth`, CASCADE). Capture: `PostHealthAsync` (aniq 8 maydon), `ICaptureHealthReporter` (null + `services.Replace`), `ReportHealthAsync` (runner'ning token oqimi, 401 da bitta refresh va bitta qayta urinish), `StorageMaintenance` 6-qadam; 21 test (jami 514) | 🔴 parallel refresh (sync sikli + health) sync'ni to'xtatardi yoki refresh token'ni yo'qotardi — qulf; kalit faylini o'qish istisnosi reporter'dan chiqib ketardi; rad etilgan hisobot hech qayerda loglanmasdi; GET sozlamani o'qiy olmasa kodga yozilgan 1800 ga jimgina o'tardi; 4 test bo'shlig'i (ro'yxatdagi ulanish, 6-qadamdan oldingi to'xtash, GET maydonlari va tartibi, aniq 4096 chegara) yopildi (jami 532) |
-| 10a — Capture ↔ real API kontrakt testlari (in-process) | `(this commit)` | In-process integratsiya: `CustomSyncWebApplicationFactory` orqali to'liq server quvuri (autentifikatsiya, token rotatsiyasi, bekor qilish, PostgreSQL, HTTP xatolar); haqiqiy capture qismlari (`SyncCliCommands`, `CaptureSyncRunner`, `MessageCache`, `ActivityMapper`, `StorageSnapshot`); 9 ta stsenariy: (1) enroll va qayta enroll rad etilishi, (2) key setup va noto'g'ri parol, (3) refresh va rotatsiya, (4) push (deleted, edited, activity online status) va shifrlangan payload tekshiruvi, (5) dedup va kichikroq observed_at yutishi, (6) batch limit qisqarishi, (7) settings pull va kursor saqlanishi, (8) health hisoboti va admin GET, (9) bekor qilingan qurilma to'xtashi; 9 yangi test (jami 544) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
+| 10a — Capture ↔ real API kontrakt testlari (in-process) | `88ae43b` | In-process integratsiya: `CustomSyncWebApplicationFactory` orqali to'liq server quvuri (autentifikatsiya, token rotatsiyasi, bekor qilish, PostgreSQL, HTTP xatolar); haqiqiy capture qismlari (`SyncCliCommands`, `CaptureSyncRunner`, `MessageCache`, `ActivityMapper`, `StorageSnapshot`); 9 ta stsenariy: (1) enroll va qayta enroll rad etilishi, (2) key setup va noto'g'ri parol, (3) refresh va rotatsiya, (4) push (deleted, edited, activity online status) va shifrlangan payload tekshiruvi, (5) dedup va kichikroq observed_at yutishi, (6) batch limit qisqarishi, (7) settings pull va kursor saqlanishi, (8) health hisoboti va admin GET, (9) bekor qilingan qurilma to'xtashi; 9 yangi test (jami 544) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -445,6 +445,26 @@ tirik qoldi. Topilgan va tuzatilgan (`CaptureSyncVerificationTests`):
    kod chiqarilmasligi (S10), `BuildRecord` ichidagi §0.14 (S11).
 
 Tuzatishdan keyin 14/14 ushlanadi. 317/317 x3.
+
+### Plan 05 Task 10a tekshiruvi (2026-10-04, laptop) — qanday qabul qilindi
+
+Delegate `88ae43b` (`CaptureContractTests.cs`, 9 stsenariy). Mustaqil
+tekshiruv: `dotnet build` 0 warning, to'liq `dotnet test` 3 marta
+544/544 (laptop'da eskirgan vektorlar workaround'i bilan). Harness
+capture'ning haqiqiy registratsiyalarini (`AddMessageCache`,
+`AddCaptureHandlers`, `AddCaptureSyncClient`) `factory.Server.CreateHandler()`
+ga ulaydi; outbox qatorlari faqat soxta TDLib update'lari orqali haqiqiy
+handler'dan keladi (to'g'ridan-to'g'ri `INSERT` yoki `RecordActivity` yo'q);
+natija serverning o'z API'si (pull) va deshifrlash bilan tekshiriladi;
+`peer_hash` mustaqil hisoblanadi, activity uchun `account_hash` bo'shligi
+tekshiriladi. Klass `DisableParallelization` kolleksiyasida,
+`sync.push_batch_size` `finally` da tiklanadi. Delegate buzishlari a–j
+promptdagi ro'yxatga mos. O'zimning 3 buzishim ham ushlandi:
+`observed_at` o'rniga `occurred_at` (Scenario05), health'da
+`cache_db_bytes` ga media hajmi (Scenario08), server pull'i `seq >= since`
+(Scenario07). Nuqson topilmadi, tuzatish kerak bo'lmadi. 10b uchun:
+harness metodlari `CaptureContractTests` ichida `private` — 10b ularni
+nusxalamasdan umumiy yordamchiga ajratishi kerak (promptga yozildi).
 
 ### Plan 05 Task 9b tekshiruvi (2026-10-02, laptop) — qanday qabul qilindi
 
@@ -1711,7 +1731,7 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 
 42. **Capture chiqish kodi jarayonga yetmasdi (TeamLead, 2026-10-03, Task 11 tayyorgarligi)** — `Worker.Fail()` `Environment.ExitCode = 1` qo'yardi, lekin `Program.cs` oxiridagi `return 0;` uni yo'qotardi: `Main` `int` qaytarsa runtime `Environment.ExitCode` ni e'tiborsiz qoldiradi (Microsoft hujjati, `Environment.ExitCode` Remarks). Ya'ni preflight, avtorizatsiya yoki ko'rinmaslik xatosida ham systemd 0 ("muvaffaqiyat") ko'rardi; Task 7 testlari jarayon ichida `Environment.ExitCode` ni tekshirgani uchun o'tib ketardi — yana bir "ulanmagan himoya". Tuzatish: kirish nuqtasi `CaptureProgram.RunAsync` ga ko'chirildi (`Program.cs` faqat uni chaqiradi), u host to'xtagach `Environment.ExitCode` ni qaytaradi. `CaptureProgramTests.Test01` (hamma yo'l temp'da, TDLib yo'li mavjud bo'lmagan fayl → preflight xatosi) tuzatishdan oldin "Expected 1, Actual 0" bilan yiqilgan. Task 11 shu testni kengaytiradi (exit 78 + `RestartPreventExitStatus=78`).
 43. **Server refresh poygasi va test media papkasi (TeamLead, 2026-10-03)** — (1) `DeviceService.RefreshAsync` o'qish → tekshirish → yozish edi: bitta refresh token bilan 8 ta parallel so'rovning **8 tasi ham** yangi token olardi (`DeviceAuthTests.Concurrent_refresh_with_one_token_rotates_exactly_once` tuzatishdan oldin shunday yiqilgan), bazada oxirgisi qolib, qolgan mijozlar bilmaydigan token bilan qolardi. Endi `RedeemAsync` kabi shartli `ExecuteUpdateAsync` (`WHERE refresh_hash = eski AND revoked_at IS NULL`), 0 qator → `null`; doimiy vaqtli taqqoslash saqlangan. (2) `CustomSyncWebApplicationFactory` har safar o'z temp papkasini beradi (`Storage:MediaRoot`, `Storage:ArchiveStagingRoot` — `UseSetting`, chunki `Program.cs` ularni build paytida o'qiydi) va `Dispose` da o'chiradi; `ServerTestStorageTests.Test01` blob haqiqatan temp'ga tushishini tekshiradi (oldin yiqilgan). Testlar yig'gan eski `C:/var/lib/customsync` (faqat test bloblari) o'chirildi. Ikkala qator §5 dan olib tashlandi.
-44. **Capture ↔ real API kontrakt testlari (in-process) (Plan 05 Task 10a)** — `(this commit)`.
+44. **Capture ↔ real API kontrakt testlari (in-process) (Plan 05 Task 10a)** — `88ae43b`.
     - **Tavsif**: `tests/CustomSync.Tests/CaptureContractTests.cs` (9 stsenariy, 544 test, 0 warning).
     - **In-process test arxitekturasi**: `CustomSyncWebApplicationFactory` orqali server quvuri (ASP.NET Core minimal API, JWT autentifikatsiya, OnTokenValidated orqali revocation tekshiruvi, PostgreSQL bazasi) xotirada, hech qanday tashqi jarayon yoki ochiq tarmoq portisiz `factory.Server.CreateHandler()` orqali capture servisiga ulandi.
     - **Haqiqiy capture qismlari**: `SyncCliCommands.EnrollAsync`, `SyncCliCommands.SetKeyAsync`, `CaptureSyncRunner`, `MessageCache`, `ActivityMapper`, `StorageSnapshot`.
