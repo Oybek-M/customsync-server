@@ -19,8 +19,8 @@ score. The only output that counts is committed source code plus tests.
 - **`<tdesktop>` is READ-ONLY.** No edits, commits, pulls, pushes or
   builds there. Read the plan, the spec and `test-vectors.json` with
   `git -C <tdesktop> show origin/Oybek:<path>`.
-- Starting state: HEAD `ac32f79` or later (see the `PROGRESS.md` hand-off
-  block), `dotnet build` 0 warnings, full `dotnet test` 532/532.
+- Starting state: HEAD `1738606` or later (see the `PROGRESS.md` hand-off
+  block), `dotnet build` 0 warnings, full `dotnet test` 535/535.
 - The stale-test-vectors workaround (laptop), the PC NuGet workaround and
   the known intermittent test are exactly as described in
   `docs/05-task9a-prompt.md`, section REPOSITORY — apply them the same
