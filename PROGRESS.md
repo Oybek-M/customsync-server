@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-10-03** (laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **533 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **535 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-02, laptop `DESKTOP-L2J53IK`)
@@ -13,7 +13,7 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 9b** — capture health hisoboti backend'ga: `POST`/`GET /api/v1/devices/health`, `device_health` jadvali, `health.stale_after_seconds` (`cb9dc2d` + tekshiruv tuzatishlari `ceaec17`, `62d6ec8`) |
-| **Keyingi bajariladigan** | Gemini promptlari TAYYOR (2026-10-03), shu tartibda, har biri oldingisi tekshirilgach: `docs/05-task10a-prompt.md` → `05-task10b-prompt.md` → `05-task4d-prompt.md` (photo/story signallari) → `05-task11-prompt.md` (sessiya himoyasi, deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan). TeamLead'ning o'zi: server `RefreshAsync` poygasi, test fabrikasi `Storage:MediaRoot` → temp (§5) — §2 |
+| **Keyingi bajariladigan** | Gemini promptlari TAYYOR (2026-10-03), shu tartibda, har biri oldingisi tekshirilgach: `docs/05-task10a-prompt.md` → `05-task10b-prompt.md` → `05-task4d-prompt.md` (photo/story signallari) → `05-task11-prompt.md` (sessiya himoyasi, deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan). TeamLead tuzatishlari (2026-10-03): capture chiqish kodi, server `RefreshAsync` poygasi, test fabrikasi `Storage:MediaRoot` → temp — §8 band 42–43 |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
@@ -1152,7 +1152,7 @@ Bloklanmaganlar — promptlar tayyor (2026-10-03), shu tartibda:
 2. `docs/05-task10b-prompt.md` — uchidan-uchiga zanjirlar (scope, bitta hodisa = bitta yozuv, media);
 3. `docs/05-task4d-prompt.md` — `photo`/`story` maydonlari va rasm/story onlayn lahzalari (tdesktop bilan bir xil);
 4. `docs/05-task11-prompt.md` — sessiya himoyasi (bekor qilingan sessiya → exit 78, umask/0700, TDLib baza kaliti, runbook).
-TeamLead'ning o'zi (prompt kerak emas): server `RefreshAsync` poygasi va test fabrikasi `Storage:MediaRoot` → temp (ikkalasi §5).
+TeamLead'ning o'zi: server `RefreshAsync` poygasi va test fabrikasi `Storage:MediaRoot` → temp — ✅ tuzatildi (2026-10-03, §8 band 43).
 tdesktop sessiyasiga bir qator: yangi API endpoint'lari (`/api/v1/devices/health`) — sync protokoli emas, CHANGELOG kerak emas.
 
 ### Oldingi qadam tarixi — plan 05 Task 9b (health hisobot backend'ga)
@@ -1491,10 +1491,8 @@ Hech biri bloklamaydi, lekin unutilmasin:
 | `never_delete` siyosatida `OlderThanDays` endi ma'nosiz — formada yashirilmasa operator uni ishlayapti deb o'ylaydi | Plan 03 (UI) |
 | ✅ `SummaryAsync` agregatsiyasi `StorageAsync` bilan takrorlanardi | Hal qilindi (Task 7): ikkalasi `GetStorageCountsAndBytesAsync` ni chaqiradi |
 | `SyncEndpointsTests.Pull_returns_pushed_records_and_advances_cursor` beqaror: 2026-10-01 da ~30 to'liq yurgizishdan birida yiqildi (Task 8 ga aloqasiz), alohida 3/3 o'tadi. Ehtimoliy sabab — barcha server testlari bitta dev bazasida parallel yuradi va boshqa klass (purge/retention) yangi push qilingan eski `occurred_at` li yozuvni o'chirib yuborishi mumkin | Test infratuzilmasi — alohida vazifa (har klassga alohida baza yoki purge testlarini ketma-ket kolleksiyaga) |
-| Server testlari media bloblarini standart `Storage:MediaRoot` ga (`/var/lib/customsync/media`, Windows'da `C:\var\lib\customsync\media`) yozadi — test fabrikasi uni temp'ga bermaydi; 2026-09-10 dan beri yig'iladi (9a tekshiruvida topildi) | Test infratuzilmasi — alohida vazifa (fabrikada `Storage:MediaRoot` = temp) |
 | `TdClient.SendAsync`: `transport.Send` istisno tashlasa kutilayotgan so'rov `_pendingRequests` da abadiy qoladi (kichik oqish; native `td_send` amalda tashlamaydi) | Plan 05 keyingi ishi |
 | Bir qurilmadan ikki parallel BIRINCHI health hisobot — ikkinchisi 500 (PK to'qnashuvi; upsert `INSERT ... ON CONFLICT` emas). Capture ketma-ket yuboradi, ma'lumot buzilmaydi | Kerak bo'lsa — server (9b tekshiruvida topildi) |
-| Server `DeviceService.RefreshAsync` refresh token'ni qulfsiz almashtiradi (o'qish → tekshirish → yozish): bitta token bilan parallel ikki refresh ikkalasi ham o'tishi mumkin, bazada oxirgisi qoladi — ikkinchi mijoz bilmaydigan token bilan qoladi. Capture 9b tekshiruvidan beri parallel refresh qilmaydi; boshqa mijoz qilsa qurilma bloklanadi | Server — alohida vazifa (`UPDATE ... WHERE refresh_hash = eski` yoki concurrency token) |
 | `ArchiveTargetTests.Test1` SHA-256 ni asl kontentdan hisoblaydi — checksum diskdan emas, kirish oqimidan olinsa ham o'tadi | Buzilgan fayl tizimi simulyatsiyasi kerak; hozircha oqlanmaydi |
 
 ---
@@ -1711,6 +1709,7 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - Delegate 21 test yozgan (jami 514); tekshiruv 18 test (jami 532) — §1 "Plan 05 Task 9b tekshiruvi".
 
 42. **Capture chiqish kodi jarayonga yetmasdi (TeamLead, 2026-10-03, Task 11 tayyorgarligi)** — `Worker.Fail()` `Environment.ExitCode = 1` qo'yardi, lekin `Program.cs` oxiridagi `return 0;` uni yo'qotardi: `Main` `int` qaytarsa runtime `Environment.ExitCode` ni e'tiborsiz qoldiradi (Microsoft hujjati, `Environment.ExitCode` Remarks). Ya'ni preflight, avtorizatsiya yoki ko'rinmaslik xatosida ham systemd 0 ("muvaffaqiyat") ko'rardi; Task 7 testlari jarayon ichida `Environment.ExitCode` ni tekshirgani uchun o'tib ketardi — yana bir "ulanmagan himoya". Tuzatish: kirish nuqtasi `CaptureProgram.RunAsync` ga ko'chirildi (`Program.cs` faqat uni chaqiradi), u host to'xtagach `Environment.ExitCode` ni qaytaradi. `CaptureProgramTests.Test01` (hamma yo'l temp'da, TDLib yo'li mavjud bo'lmagan fayl → preflight xatosi) tuzatishdan oldin "Expected 1, Actual 0" bilan yiqilgan. Task 11 shu testni kengaytiradi (exit 78 + `RestartPreventExitStatus=78`).
+43. **Server refresh poygasi va test media papkasi (TeamLead, 2026-10-03)** — (1) `DeviceService.RefreshAsync` o'qish → tekshirish → yozish edi: bitta refresh token bilan 8 ta parallel so'rovning **8 tasi ham** yangi token olardi (`DeviceAuthTests.Concurrent_refresh_with_one_token_rotates_exactly_once` tuzatishdan oldin shunday yiqilgan), bazada oxirgisi qolib, qolgan mijozlar bilmaydigan token bilan qolardi. Endi `RedeemAsync` kabi shartli `ExecuteUpdateAsync` (`WHERE refresh_hash = eski AND revoked_at IS NULL`), 0 qator → `null`; doimiy vaqtli taqqoslash saqlangan. (2) `CustomSyncWebApplicationFactory` har safar o'z temp papkasini beradi (`Storage:MediaRoot`, `Storage:ArchiveStagingRoot` — `UseSetting`, chunki `Program.cs` ularni build paytida o'qiydi) va `Dispose` da o'chiradi; `ServerTestStorageTests.Test01` blob haqiqatan temp'ga tushishini tekshiradi (oldin yiqilgan). Testlar yig'gan eski `C:/var/lib/customsync` (faqat test bloblari) o'chirildi. Ikkala qator §5 dan olib tashlandi.
 
 ---
 

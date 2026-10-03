@@ -111,14 +111,23 @@ public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRev
     public async Task<EnrolledDevice?> RefreshAsync(
         string deviceId, string refreshToken, CancellationToken ct = default)
     {
-        var device = await db.Devices.FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
         if (device is null || device.RevokedAt is not null) return null;
-        if (!FixedTimeEquals(device.RefreshHash, Sha256Hex(refreshToken))) return null;
+        var oldHash = Sha256Hex(refreshToken);
+        if (!FixedTimeEquals(device.RefreshHash, oldHash)) return null;
 
+        // Shartli yozish (RedeemAsync kabi): o'qish-keyin-yozishda bitta
+        // token bilan parallel so'rovlarning HAMMASI o'tardi, bazada esa
+        // oxirgisi qolib, qolgan mijozlar bilmaydigan token bilan qolardi.
         var rotated = Base32(RandomNumberGenerator.GetBytes(32));
-        device.RefreshHash = Sha256Hex(rotated);
-        device.LastSeenAt  = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
+        var newHash = Sha256Hex(rotated);
+        var now = DateTime.UtcNow;
+        var updated = await db.Devices
+            .Where(d => d.DeviceId == deviceId && d.RevokedAt == null && d.RefreshHash == oldHash)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.RefreshHash, newHash)
+                .SetProperty(d => d.LastSeenAt, now), ct);
+        if (updated == 0) return null;
 
         return new EnrolledDevice(device.DeviceId, rotated, device.Name, device.Platform, device.Role);
     }

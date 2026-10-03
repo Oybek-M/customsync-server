@@ -105,6 +105,42 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
     }
 
     /// <summary>
+    /// Bitta refresh token bilan parallel so'rovlardan faqat BITTASI yangi
+    /// token oladi. Aks holda bir nechtasi "muvaffaqiyatli" bo'lib, bazada
+    /// oxirgi yozilgani qolardi — qolgan mijozlar bilmaydigan token bilan
+    /// qolib, qurilma bloklanardi.
+    /// </summary>
+    [Fact]
+    public async Task Concurrent_refresh_with_one_token_rotates_exactly_once()
+    {
+        for (var round = 0; round < 5; round++)
+        {
+            await using var setup = _fixture.CreateContext();
+            var service = await CreateServiceAsync(setup);
+            var code = await service.CreateEnrollmentCodeAsync();
+            var enrolled = await service.RedeemAsync(code, $"refresh-race-{round}", "desktop-win");
+            Assert.NotNull(enrolled);
+
+            // Har urinish O'Z DbContext'ida (yuqoridagi redeem testi kabi).
+            async Task<EnrolledDevice?> Attempt()
+            {
+                await using var db = _fixture.CreateContext();
+                var s = new DeviceService(db, new SettingsService(db), new DeviceRevocationCache());
+                return await s.RefreshAsync(enrolled!.DeviceId, enrolled.RefreshToken);
+            }
+
+            var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => Task.Run(Attempt)));
+            var winners = results.Where(r => r is not null).ToList();
+            Assert.Single(winners);
+
+            // G'olib olgan token bazadagi token bo'lishi kerak.
+            await using var check = _fixture.CreateContext();
+            var checker = new DeviceService(check, new SettingsService(check), new DeviceRevocationCache());
+            Assert.NotNull(await checker.RefreshAsync(enrolled!.DeviceId, winners[0]!.RefreshToken));
+        }
+    }
+
+    /// <summary>
     /// `deviceId` PRIMARY KEY. Uzun platform nomi GUID qismini kesib
     /// tashlamasligi va ikki qurilma bir xil id olmasligi kerak.
     /// </summary>
