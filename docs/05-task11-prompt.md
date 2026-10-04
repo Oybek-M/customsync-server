@@ -137,7 +137,8 @@ report instead of silently doing something else.
   `authorizationStateReady` while the host is **not** shutting down —
   `LoggingOut`, `Closing`, `Closed`, `WaitPhoneNumber` or any other —
   logs **one** error (the state type only), stops the background loops
-  (media downloader, maintenance, sync) and stops the host with **exit
+  (media downloader, maintenance, sync, the photo-date lookup
+  from Task 4d) and stops the host with **exit
   code 78** (`EX_CONFIG`: the session needs the owner, restarting cannot
   help). States seen during our own shutdown are ignored.
 - Exit code 78 also for: "not authorized" at startup (the gate), a
