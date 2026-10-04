@@ -84,7 +84,7 @@ public class ProfilePhotoLookup
             // Queue full -> drop and increment dropped count
             _inFlight.TryRemove(key, out _);
             Interlocked.Increment(ref _droppedCount);
-            _logger?.LogWarning("Profile photo lookup queue is full. Dropped lookup for peer {PeerId}, photo {PhotoId}", peerId, photoId);
+            _logger?.LogWarning("Profile photo lookup queue is full; lookup dropped (total dropped {DroppedCount}).", Interlocked.Read(ref _droppedCount));
             return false;
         }
 
@@ -102,14 +102,28 @@ public class ProfilePhotoLookup
                 {
                     while (_channel.Reader.TryRead(out var item))
                     {
-                        await ProcessItemAsync(item, _cts.Token);
+                        // Bitta buzuq javob yoki kesh xatosi siklni o'ldirmasin:
+                        // ilgari istisno siklni tugatardi va keyingi barcha
+                        // so'rovlar navbatda jim qolib ketardi.
+                        try
+                        {
+                            await ProcessItemAsync(item, _cts.Token);
+                        }
+                        catch (OperationCanceledException) when (_cts.Token.IsCancellationRequested)
+                        {
+                            throw;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger?.LogWarning("Profile photo lookup failed ({ErrorType}).", ex.GetType().Name);
+                        }
                     }
                 }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Profile photo lookup loop failed.");
+                _logger?.LogError("Profile photo lookup loop failed ({ErrorType}).", ex.GetType().Name);
             }
         }, _cts.Token);
     }
@@ -158,7 +172,8 @@ public class ProfilePhotoLookup
             }
             catch (Exception ex)
             {
-                _logger?.LogWarning("TDLib getUserProfilePhotos request failed for peer {PeerId}: {Error}", item.PeerId, ex.Message);
+                // Log'da id va xabar matni yo'q — faqat tur (capture qoidasi).
+                _logger?.LogWarning("TDLib getUserProfilePhotos request failed ({ErrorType}).", ex.GetType().Name);
                 return;
             }
 

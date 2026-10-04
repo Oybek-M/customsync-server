@@ -676,7 +676,13 @@ public class CaptureUpdateHandler
 
     private void HandleUpdateChatActiveStories(JsonElement root)
     {
-        if (!root.TryGetProperty("chat_id", out var chatProp) || !root.TryGetProperty("active_stories", out var storiesObj))
+        // td_api.tl: `updateChatActiveStories active_stories:chatActiveStories`
+        // — yagona maydon, `chat_id` FAQAT `active_stories` ichida keladi.
+        // Yuqori darajadan o'qilganda haqiqiy TDLib bilan signal hech qachon
+        // ishlamasdi (testlar `chat_id` ni ikkala joyga qo'ygani uchun o'tardi).
+        if (!root.TryGetProperty("active_stories", out var storiesObj) || storiesObj.ValueKind != JsonValueKind.Object)
+            return;
+        if (!storiesObj.TryGetProperty("chat_id", out var chatProp) || chatProp.ValueKind != JsonValueKind.Number)
             return;
 
         long chatId = chatProp.GetInt64();
