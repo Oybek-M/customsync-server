@@ -22,13 +22,16 @@ public class CaptureAuthTests
 {
     private static IConfiguration CreateConfig(int apiId = 12345, string apiHash = "fake_hash")
     {
+        var tempKey = Path.Combine(Path.GetTempPath(), "cs-auth-key-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(tempKey, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
         return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Telegram:ApiId"] = apiId.ToString(),
                 ["Telegram:ApiHash"] = apiHash,
                 ["Telegram:DatabaseDirectory"] = "/tmp/tdlib_db",
-                ["Telegram:FilesDirectory"] = "/tmp/tdlib_files"
+                ["Telegram:FilesDirectory"] = "/tmp/tdlib_files",
+                ["Telegram:DatabaseEncryptionKeyFile"] = tempKey
             })
             .Build();
     }

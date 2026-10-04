@@ -1048,12 +1048,16 @@ public class CaptureProfilePhotoAndStoryTests : IDisposable
         Directory.CreateDirectory(tempDir);
         _tempFiles.Add(tempDir);
 
+        var keyPath = Path.Combine(tempDir, "tdlib-db-key");
+        File.WriteAllText(keyPath, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Telegram:ApiId"] = "12345",
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = tempDir,
             ["Telegram:FilesDirectory"] = tempDir,
+            ["Telegram:DatabaseEncryptionKeyFile"] = keyPath,
             ["Capture:CacheDatabasePath"] = Path.Combine(tempDir, "cache.db"),
             ["Capture:Activity:TrackAllContacts"] = "true",
             ["Capture:SessionInvisibilityTimeoutSeconds"] = "5",

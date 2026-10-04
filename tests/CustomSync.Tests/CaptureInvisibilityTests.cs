@@ -47,7 +47,7 @@ public class FakeRecordingTdTransport : ITdTransport
         {
             if (AutoRepeatReadyState && msg.Contains("updateAuthorizationState"))
             {
-                if (!SentPayloads.Any(p => p.Contains("setOption")))
+                if (!SentPayloads.Any(p => p.Contains("setOption") || p.Contains("setTdlibParameters")))
                 {
                     IncomingQueue.Enqueue(msg);
                 }
@@ -141,6 +141,12 @@ public class CaptureInvisibilityTests : IDisposable
 
     private static IConfiguration CreateValidConfig(string tempDir)
     {
+        var keyPath = Path.Combine(tempDir, "tdlib-db-key");
+        if (!File.Exists(keyPath))
+        {
+            File.WriteAllText(keyPath, Convert.ToBase64String(new byte[32]));
+        }
+
         return new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -148,6 +154,7 @@ public class CaptureInvisibilityTests : IDisposable
                 ["Telegram:ApiHash"] = "test_hash",
                 ["Telegram:DatabaseDirectory"] = tempDir,
                 ["Telegram:FilesDirectory"] = tempDir,
+                ["Telegram:DatabaseEncryptionKeyFile"] = keyPath,
                 ["Capture:CacheDatabasePath"] = Path.Combine(tempDir, "cache.db"),
                 ["Capture:Media:StorageDirectory"] = Path.Combine(tempDir, "media"),
                 ["Capture:SessionInvisibilityTimeoutSeconds"] = "5",

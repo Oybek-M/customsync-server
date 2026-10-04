@@ -102,14 +102,7 @@ public class MediaStore
 
         if (!Directory.Exists(_storageDirectory))
         {
-            if (!OperatingSystem.IsWindows())
-            {
-                Directory.CreateDirectory(_storageDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            }
-            else
-            {
-                Directory.CreateDirectory(_storageDirectory);
-            }
+            CustomSync.Capture.Preflight.PosixSandbox.CreateDirectory0700(_storageDirectory);
         }
     }
 

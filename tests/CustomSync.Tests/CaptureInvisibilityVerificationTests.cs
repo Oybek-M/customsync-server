@@ -176,7 +176,7 @@ public class CaptureInvisibilityVerificationTests : IDisposable
             Assert.True(worker.ExecuteTask is null || !worker.ExecuteTask.IsFaulted,
                 "Worker native xato bilan yiqildi — preflight uni ushlamadi");
             Assert.True(lifetime.StopRequested, "xizmat to'xtatilmadi");
-            Assert.Equal(1, Environment.ExitCode);
+            Assert.Equal(78, Environment.ExitCode);
             Assert.Contains("does not exist", logger.AllText);
         }
         finally

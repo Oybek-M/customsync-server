@@ -577,12 +577,16 @@ public class CaptureMediaTests : IDisposable
         Directory.CreateDirectory(tempDir);
         try
         {
+            var keyPath = Path.Combine(tempDir, "tdlib-db-key");
+            File.WriteAllText(keyPath, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Telegram:ApiId"] = "12345",
                 ["Telegram:ApiHash"] = "test_hash",
                 ["Telegram:DatabaseDirectory"] = tempDir,
                 ["Telegram:FilesDirectory"] = tempDir,
+                ["Telegram:DatabaseEncryptionKeyFile"] = keyPath,
                 ["Capture:CacheDatabasePath"] = Path.Combine(tempDir, "cache.db"),
                 ["Capture:SessionInvisibilityTimeoutSeconds"] = "5",
                 ["Capture:Scope:DefaultEnabled"] = "true",

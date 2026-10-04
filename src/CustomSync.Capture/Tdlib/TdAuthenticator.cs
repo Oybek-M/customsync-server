@@ -104,11 +104,19 @@ public class TdAuthenticator
         var dbDir = _config["Telegram:DatabaseDirectory"] ?? "/var/lib/customsync-capture/tdlib";
         var filesDir = _config["Telegram:FilesDirectory"] ?? "/var/lib/customsync-capture/files";
 
+        var (keySuccess, keyBase64, keyError) = DatabaseEncryptionKey.LoadKey(_config);
+        if (!keySuccess)
+        {
+            _logger?.LogError("Failed to load TDLib database encryption key: {Error}", keyError);
+            throw new InvalidOperationException(keyError ?? "Failed to load database encryption key.");
+        }
+
         var payload = new JsonObject
         {
             ["@type"] = "setTdlibParameters",
             ["database_directory"] = dbDir,
             ["files_directory"] = filesDir,
+            ["database_encryption_key"] = keyBase64,
             ["api_id"] = apiId,
             ["api_hash"] = apiHash,
             ["system_language_code"] = "en",
@@ -121,7 +129,15 @@ public class TdAuthenticator
         }.ToJsonString();
 
         _logger?.LogInformation("Sending setTdlibParameters to TDLib.");
-        return await _client.SendAsync(payload, ct: ct);
+        try
+        {
+            return await _client.SendAsync(payload, ct: ct);
+        }
+        catch (TdException ex) when (ex.Code == 401 || ex.Message.Contains("encryption key", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger?.LogError("TDLib database encryption key is invalid or wrong: {Message}. Check Telegram:DatabaseEncryptionKeyFile or tdlib-db-key.", ex.Message);
+            throw new InvalidOperationException($"TDLib database encryption key is invalid or wrong ({ex.Message}). Check the encryption key file.");
+        }
     }
 
     private async Task<string> HandleWaitPhoneNumberAsync(CancellationToken ct)

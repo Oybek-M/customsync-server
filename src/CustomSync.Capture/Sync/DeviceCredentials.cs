@@ -50,7 +50,7 @@ public static class DeviceCredentials
         var dir = Path.GetDirectoryName(targetPath);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         {
-            Directory.CreateDirectory(dir);
+            CustomSync.Capture.Preflight.PosixSandbox.CreateDirectory0700(dir);
         }
         else if (string.IsNullOrEmpty(dir))
         {

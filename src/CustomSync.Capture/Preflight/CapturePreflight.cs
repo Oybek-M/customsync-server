@@ -12,7 +12,10 @@ public record PreflightReport(bool Success, IReadOnlyList<string> Errors)
 
 public static class CapturePreflight
 {
-    public static PreflightReport Check(IConfiguration config, Func<string?, bool>? nativeLibChecker = null)
+    public static PreflightReport Check(
+        IConfiguration config,
+        Func<string?, bool>? nativeLibChecker = null,
+        bool checkDatabaseKey = false)
     {
         var errors = new List<string>();
 
@@ -52,9 +55,26 @@ public static class CapturePreflight
             errors.Add("Telegram:ApiHash is not configured.");
         }
 
-        // 3. DatabaseDirectory / FilesDirectory check
-        CheckDirectory(config["Telegram:DatabaseDirectory"], "DatabaseDirectory", errors);
-        CheckDirectory(config["Telegram:FilesDirectory"], "FilesDirectory", errors);
+        // 3. DatabaseDirectory / FilesDirectory validation
+        var dbDir = config["Telegram:DatabaseDirectory"];
+        if (string.IsNullOrWhiteSpace(dbDir))
+        {
+            errors.Add("Telegram:DatabaseDirectory is not configured.");
+        }
+        else if (Directory.Exists(dbDir))
+        {
+            ValidateDirectoryPermissions(dbDir, "Telegram:DatabaseDirectory", errors);
+        }
+
+        var filesDir = config["Telegram:FilesDirectory"];
+        if (string.IsNullOrWhiteSpace(filesDir))
+        {
+            errors.Add("Telegram:FilesDirectory is not configured.");
+        }
+        else if (Directory.Exists(filesDir))
+        {
+            ValidateDirectoryPermissions(filesDir, "Telegram:FilesDirectory", errors);
+        }
 
         // 4. Cache database directory check
         var cacheDbPath = config["Capture:CacheDatabasePath"];
@@ -67,21 +87,46 @@ public static class CapturePreflight
         {
             cacheDir = ".";
         }
-
-        try
+        if (Directory.Exists(cacheDir))
         {
-            if (!Directory.Exists(cacheDir))
-            {
-                Directory.CreateDirectory(cacheDir);
-            }
-
-            var testFile = Path.Combine(cacheDir, $".preflight_test_{Guid.NewGuid():N}");
-            File.WriteAllText(testFile, "test");
-            File.Delete(testFile);
+            ValidateDirectoryPermissions(cacheDir, "Capture:CacheDatabasePath", errors);
         }
-        catch (Exception ex)
+
+        // Device key directories check
+        var statePath = config["Capture:Sync:StatePath"] ?? "/var/lib/customsync-capture/device-state.json";
+        var stateDir = Path.GetDirectoryName(statePath);
+        if (!string.IsNullOrWhiteSpace(stateDir) && Directory.Exists(stateDir))
         {
-            errors.Add($"Capture:CacheDatabasePath directory '{cacheDir}' cannot be created or is not writable: {ex.Message}");
+            ValidateDirectoryPermissions(stateDir, "Capture:Sync:StatePath", errors);
+        }
+
+        var masterKeyPath = config["Capture:Sync:MasterKeyPath"] ?? "/var/lib/customsync-capture/master.key";
+        var masterKeyDir = Path.GetDirectoryName(masterKeyPath);
+        if (!string.IsNullOrWhiteSpace(masterKeyDir) && Directory.Exists(masterKeyDir))
+        {
+            ValidateDirectoryPermissions(masterKeyDir, "Capture:Sync:MasterKeyPath", errors);
+        }
+
+        // Check content root appsettings.<Environment>.json permissions
+        ValidateAppSettingsPermissions(errors);
+
+        // Check TDLib database encryption key
+        if (checkDatabaseKey)
+        {
+            var (keySuccess, _, keyError) = DatabaseEncryptionKey.LoadKey(config);
+            if (!keySuccess)
+            {
+                errors.Add(keyError!);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(config["Telegram:DatabaseEncryptionKeyFile"]) ||
+                 !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY")))
+        {
+            var (keySuccess, _, keyError) = DatabaseEncryptionKey.LoadKey(config);
+            if (!keySuccess)
+            {
+                errors.Add(keyError!);
+            }
         }
 
         // 5. Scope configuration check (Capture:Scope:Block, Capture:Scope:Allow)
@@ -369,9 +414,10 @@ public static class CapturePreflight
             bool.TryParse(mediaEnabledStr, out isMediaEnabled);
         }
 
+        string? storageDir = null;
         if (isMediaEnabled)
         {
-            var storageDir = config["Capture:Media:StorageDirectory"];
+            storageDir = config["Capture:Media:StorageDirectory"];
             if (string.IsNullOrWhiteSpace(storageDir))
             {
                 storageDir = "/var/lib/customsync-capture/media";
@@ -392,23 +438,31 @@ public static class CapturePreflight
                 CheckConflictingFile(cacheDbPath, "Capture:CacheDatabasePath", fullStore, comparison, errors);
                 CheckConflictingFile(config["Capture:Sync:StatePath"] ?? "/var/lib/customsync-capture/device-state.json", "Capture:Sync:StatePath", fullStore, comparison, errors);
                 CheckConflictingFile(config["Capture:Sync:MasterKeyPath"] ?? "/var/lib/customsync-capture/master.key", "Capture:Sync:MasterKeyPath", fullStore, comparison, errors);
-
-                if (!errors.Any(e => e.Contains("Capture:Media:StorageDirectory")))
-                {
-                    try
-                    {
-                        var store = new CustomSync.Capture.Media.MediaStore(storageDir);
-                        store.EnsureDirectoryCreated();
-                        var testFile = Path.Combine(storageDir, $".preflight_test_{Guid.NewGuid():N}");
-                        File.WriteAllText(testFile, "test");
-                        File.Delete(testFile);
-                    }
-                    catch (Exception ex)
-                    {
-                        errors.Add($"Capture:Media:StorageDirectory '{storageDir}' cannot be created or is not writable: {ex.Message}");
-                    }
-                }
             }
+        }
+
+        // Fail closed: if any configuration or permission errors exist, do NOT create directories
+        if (errors.Count > 0)
+        {
+            return new PreflightReport(false, errors);
+        }
+
+        // Only after all validations pass, create missing directories with mode 0700 and test writability
+        if (!string.IsNullOrWhiteSpace(dbDir))
+        {
+            EnsureDirectoryCreatedAndWritable(dbDir, "Telegram:DatabaseDirectory", errors);
+        }
+        if (!string.IsNullOrWhiteSpace(filesDir))
+        {
+            EnsureDirectoryCreatedAndWritable(filesDir, "Telegram:FilesDirectory", errors);
+        }
+        if (!string.IsNullOrWhiteSpace(cacheDir))
+        {
+            EnsureDirectoryCreatedAndWritable(cacheDir, "Capture:CacheDatabasePath", errors);
+        }
+        if (isMediaEnabled && !string.IsNullOrWhiteSpace(storageDir))
+        {
+            EnsureDirectoryCreatedAndWritable(storageDir, "Capture:Media:StorageDirectory", errors);
         }
 
         return new PreflightReport(errors.Count == 0, errors);
@@ -455,29 +509,68 @@ public static class CapturePreflight
         }
     }
 
-    private static void CheckDirectory(string? dirPath, string name, List<string> errors)
+    private static void EnsureDirectoryCreatedAndWritable(string dirPath, string name, List<string> errors)
     {
-        if (string.IsNullOrWhiteSpace(dirPath))
-        {
-            errors.Add($"Telegram:{name} is not configured.");
-            return;
-        }
-
         try
         {
             if (!Directory.Exists(dirPath))
             {
-                Directory.CreateDirectory(dirPath);
+                PosixSandbox.CreateDirectory0700(dirPath);
             }
 
-            // Test write permission with temporary probe file
             var testFile = Path.Combine(dirPath, $".preflight_test_{Guid.NewGuid():N}");
             File.WriteAllText(testFile, "test");
             File.Delete(testFile);
         }
         catch (Exception ex)
         {
-            errors.Add($"Telegram:{name} directory '{dirPath}' cannot be created or is not writable: {ex.Message}");
+            errors.Add($"{name} directory '{dirPath}' cannot be created or is not writable: {ex.Message}");
+        }
+    }
+
+    private static void ValidateDirectoryPermissions(string? dirPath, string settingName, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(dirPath)) return;
+        if (!Directory.Exists(dirPath)) return;
+
+        if (PosixSandbox.Current.TryGetPathPermissions(dirPath, out var ownerUid, out var mode))
+        {
+            var currentUid = PosixSandbox.Current.GetCurrentUserId();
+            if (ownerUid != currentUid)
+            {
+                errors.Add($"{settingName} directory '{dirPath}' is owned by user ID {ownerUid}, but current process user ID is {currentUid}. Directory must be owned by current user.");
+            }
+
+            if (((int)mode & 0x3F) != 0)
+            {
+                errors.Add($"{settingName} directory '{dirPath}' has permissions {mode}. Group and other bits are not allowed (expected 0700).");
+            }
+        }
+    }
+
+    private static void ValidateAppSettingsPermissions(List<string> errors)
+    {
+        var env = Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+            ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+            ?? "Production";
+        var fileName = $"appsettings.{env}.json";
+        var candidateRoots = new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory };
+
+        foreach (var root in candidateRoots)
+        {
+            var configFilePath = Path.Combine(root, fileName);
+            if (File.Exists(configFilePath))
+            {
+                if (PosixSandbox.Current.TryGetPathPermissions(configFilePath, out _, out var mode))
+                {
+                    var forbidden = UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute | UnixFileMode.GroupWrite;
+                    if ((mode & forbidden) != 0)
+                    {
+                        errors.Add($"Configuration file '{configFilePath}' has permissions {mode}. Other bits and group write are not allowed (expected <= 0640).");
+                    }
+                }
+                break;
+            }
         }
     }
 }

@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-10-04** (laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **563 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **583 test, hammasi o'tadi** (2 Linux-only skip, jami 585). `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-04, laptop `DESKTOP-L2J53IK`)
@@ -17,7 +17,7 @@ Branch `Oybek`, ish daraxti toza.
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 📝 (prompt tayyor), 10 ⏸ (bloklangan) |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 🟡 (this commit), 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
@@ -322,6 +322,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 10a — Capture ↔ real API kontrakt testlari (in-process) | `88ae43b` | In-process integratsiya: `CustomSyncWebApplicationFactory` orqali to'liq server quvuri (autentifikatsiya, token rotatsiyasi, bekor qilish, PostgreSQL, HTTP xatolar); haqiqiy capture qismlari (`SyncCliCommands`, `CaptureSyncRunner`, `MessageCache`, `ActivityMapper`, `StorageSnapshot`); 9 ta stsenariy: (1) enroll va qayta enroll rad etilishi, (2) key setup va noto'g'ri parol, (3) refresh va rotatsiya, (4) push (deleted, edited, activity online status) va shifrlangan payload tekshiruvi, (5) dedup va kichikroq observed_at yutishi, (6) batch limit qisqarishi, (7) settings pull va kursor saqlanishi, (8) health hisoboti va admin GET, (9) bekor qilingan qurilma to'xtashi; 9 yangi test (jami 544) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
 | 10b — Capture ↔ real API uchidan-uchiga zanjirlar (in-process) | `c4cf0e7` + `03d2e10` | In-process E2E zanjirlar: `CaptureContractTestBase` umumiy tayanch klassiga ajratildi; `CaptureEndToEndTests.cs` da 5 ta chuqur stsenariy: (1) scope zanjiri (tdesktop sozlamalari, server bloki ustunligi, tahrir filtratsiyasi), (2) bitta hodisa = bitta yozuv (user/chat/channel, tahrir, o'chirish bo'yicha dedup va record_id mosligi), (3) o'chirilgan xabar media omon qolishi va HEAD 200 qayta ishlatilishi, (4) media chegaralari (413 da outbox tozalanib yozuv media'siz o'tishi, 507 da keyingi siklgacha kechiktirilishi), (5) ro'yxatdan o'tgan StorageMaintenance dan health yuborilishi va admin API da ko'rinishi; 5 yangi test (jami 549) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
 | 4d — Profile-photo va story activity signallari (tdesktop parity) | `410b906` + `1fb0c19` | tdesktop pariteti: profile photo kuzatuvi (`photo` maydoni: ulong o'nlik qatori yoki birinchi kuzatuvda "empty", yangi rasmda retroaktiv status `online:added_date`), story signallari (`updateChatActiveStories` da har bir story uchun `online:date` status momenti va `story` maydoni `max(date)` at `now`), A19 qoidasi (`observed_at >= stored.observed_at` bo'lsagina `activity_latest` yangilanadi), sxema v6 (`activity_history` durativ jadvali va 31 kunlik retention), xavfsiz va ko'rinmas `ProfilePhotoLookup` fon sikli (chegaralangan navbat, parvozda dedup, `TdRequestPolicy` allow-list faqat user_id > 0, offset=0, limit=1); 12 test (jami 561 test) | 14 ta ataylab buzish (a–n) to'liq ushlandi |
+| 11 — Telegram sessiyasi himoyasi (deploy'dan oldin) | (this commit) | PosixSandbox (umask 0077, 0700 dir, owner/bits tekshiruvi), TDLib db encryption key (>=32B base64, redaction, 401 da exit 78), post-ready sessiya bekor qilinganda exit 78 (RestartPreventExitStatus=78), pinned DeviceModel ("CustomSync Capture") va AppVersion ("1.0"), preflight fail-closed tartib, runbook va inventar; 22 test (jami 583 o'tdi, 2 skipped Linux) | 14 ta ataylab buzish (a–n) to'liq ushlandi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -1049,6 +1050,10 @@ Auditda hal qilinadigan savollar:
   TDLib sig'adimi, `StateDirectory` egasi; CLI buyruqlari
   (`--login`/`--enroll`/`--set-key`) `cd /var/www/customsync-capture`
   dan va kod/parol faqat interaktiv (README).
+- Task 11 qo'shgan sessiya himoyasi elementlari (hali haqiqiy VPS'da yurgizilmagan, auditda tekshirilishi kerak — OCHIQ):
+  - `systemd-run --pty` yordamida CLI buyruqlari (`--login`, `--enroll`, `--set-key`) `umask 0077` bilan to'g'ri ishlashi va yaratilgan TDLib fayllari/kesh/kalitlar boshqa foydalanuvchilarga ko'rinmasligi (0700/0600).
+  - `LoadCredential=tdlib-db-key:...` orqali `$CREDENTIALS_DIRECTORY/tdlib-db-key` systemd xizmati tomonidan to'g'ri yuklanishi va TDLib unga muvaffaqiyatli ulanishi.
+  - Telefon yoki boshqa Telegram sessiyasidan "Terminate all other sessions" qilinganda, capture xizmati `RestartPreventExitStatus=78` sababli qayta aylanib ketmasdan (restart storm bo'lmasdan) bir marta baland xato bilan to'xtashi.
 
 ### Integratsiya auditi uchun yig'ilayotgan ro'yxat
 
@@ -1884,6 +1889,40 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - Real sessiyada `updateChatActiveStories` yangilanishlari foydalanuvchi interfeysida chat ochilmaganda ham push orqali yetib kelishi.
       - Haqiqiy hisoblarda `getUserProfilePhotos` yuborilganda foydalanuvchi faolligi/online ko'rsatkichiga ta'sir qilmasligi (invisibility).
       - Telegram serveri yuboradigan `chatPhoto.added_date` sanalari vaqtinchalik xatolarsiz (`now + 60` va 30 kun oralig'ida) aniq tushishi.
+
+47. **Telegram sessiyasi himoyasi (Plan 05 Task 11)** — `(this commit)`.
+    - **Tavsif**: `src/CustomSync.Capture/Preflight/PosixSandbox.cs` (POSIX umask 0077, 0700 katalog yaratish, Linux owner va ruxsat bitlari tekshiruvlari va cross-platform seam), `src/CustomSync.Capture/Tdlib/DatabaseEncryptionKey.cs` (TDLib baza shifrlash kalitini yuklash va tekshirish), `TdAuthenticator.cs` (database_encryption_key uzatish, pinned DeviceModel "CustomSync Capture" va ApplicationVersion "1.0", 401 xatosini ushlash), `TdRedactor.cs` (`database_encryption_key` ni yashirish), `AuthorizationGate.cs` va `Worker.cs` (post-ready updateAuthorizationState kuzatuvi, istalgan unauth/logout/close holatida bir marta baland xato bilan exit code 78 berib to'xtash, graceful shutdown'da exit 0), `CapturePreflight.cs` (fail-closed ruxsatlar tekshiruvi: owner == current user, papkalarda group/other 0, appsettings <= 0640, kalit fayli <= 0600), `CaptureProgram.cs` (barcha 4 ta rejimda umask 0077 ni host qurilishidan oldin chaqirish va Worker exit code'ni qaytarish), `deploy/customsync-capture.service` (`RestartPreventExitStatus=78`, `LoadCredential=tdlib-db-key`), `deploy/README.md` (inventar jadvali, barcha komandalar `systemd-run --pty` ko'rinishida `# hali yurgizilmagan — auditda tekshiring` bilan); `tests/CustomSync.Tests/CaptureSessionProtectionTests.cs` (22 ta yangi test, jami 583 test o'tdi, 2 ta Linux testi Windows'da skipped, 0 warning).
+    - **Amalga oshirilgan mexanizmlar**:
+      1. Post-ready sessiya kuzatuvi: Avtorizatsiya tayyor bo'lgach (`authenticator.IsReady`), `Worker` fon rejimida `updateAuthorizationState` yangilanishlarini kuzatishda davom etadi. Xost to'xtatilmayotgan vaqtda `authorizationStateReady` dan boshqa har qanday holat kelsa (`authorizationStateLoggingOut`, `authorizationStateClosed`, `authorizationStateWaitPhoneNumber` va h.k.), xizmat bitta aniq xato xabarini loglaydi, barcha fon sikllarini to'xtatadi va exit code 78 (`EX_CONFIG`) bilan chiqadi. Graceful shutdown paytida ko'rilgan holatlar e'tiborsiz qoldiriladi va xizmat 0 bilan to'xtaydi.
+      2. Restart storm himoyasi: systemd unit fayliga `RestartPreventExitStatus=78` qo'shildi (`Restart=always` va `RestartSec=15` saqlangan holda). Bu bekor qilingan sessiya tufayli xizmat har 15 soniyada qayta ishga tushib Telegram'ga yangi ulanishlar ochishining oldini oladi. Test deploy unit faylini o'qib, ushbu qator mavjudligini kafolatlaydi.
+      3. Umask 0077 va 0700 ruxsatlari: Unix tizimlarida jarayon boshlanishi bilan, har qanday fayl yoki katalog yaratilishidan oldin `PosixSandbox.EnforceStrictUmask()` orqali `umask 0077` o'rnatiladi (service, `--login`, `--enroll`, `--set-key` barcha 4 rejimda). Capture yaratadigan barcha kataloglar (`DatabaseDirectory`, `FilesDirectory`, `CacheDatabasePath` papkasi, media store, device credentials papkasi) 0700 ruxsat bilan yaratiladi.
+      4. Preflight fail-closed tartibi: `Worker.RunAsync` da `CapturePreflight.Check` kesh bazasi (`CaptureCacheStartup`) va sinxronizatsiya klienti ochilishidan OLDIN bajariladi. Preflight Unix muhitida kataloglarning joriy foydalanuvchiga tegishliligini va group/other bitlari yo'qligini, konfiguratsiya fayli esa faqat egasi va guruhi tomonidan o'qilishi mumkinligini (`<= 0640`) qat'iy tekshiradi.
+      5. TDLib ma'lumotlar bazasi shifrlash kaliti: Kamida 32 tasodifiy baytdan iborat base64 kalit `Telegram:DatabaseEncryptionKeyFile` yoki `$CREDENTIALS_DIRECTORY/tdlib-db-key` faylidan o'qiladi. `setTdlibParameters` ga `database_encryption_key` sifatida uzatiladi. `TdRedactor` ga kiritilganligi sababli loglar yoki istisnolarda hech qachon ko'rinmaydi. Noto'g'ri kalit bo'lganda (TDLib 401) baza fayllariga tegilmasdan (hech narsa o'chirilmasdan) exit code 78 bilan chiqiladi.
+      6. Telegram'da sessiya nomi: `TdAuthenticator` da `device_model = "CustomSync Capture"` va `application_version = "1.0"` qat'iy qadab qo'yildi (Settings → Devices bo'limida aniq tanib olinishi uchun).
+      7. Runbook va inventar: `deploy/README.md` to'liq yangilandi: inventar jadvali (fayllar, egasi, ruxsati, zaxiraga kiritilishi), barcha boshqaruv komandalari `systemd-run --pty` ko'rinishida yozildi va barchasi `# hali yurgizilmagan — auditda tekshiring` izohi bilan belgilandi. Shuningdek kalit generatsiyasi, sessiya bekor qilingandagi harakatlar va 2FA ko'rsatmalari berildi.
+    - **14 ta ataylab buzish (a–n)** to'liq tekshirildi va ushlandi:
+      - a) post-ready kuzatuvchi obuna bo'lmasa -> `Test01` yiqildi (`TimeoutException`).
+      - b) bekor qilingan sessiya 1 kodi bilan chiqsa -> `Test01` yiqildi (`Expected: 78, Actual: 1`).
+      - c) jarayon Worker xatosiga qaramay 0 qaytarsa -> `CaptureProgramTests.Test01` yiqildi (`Expected: 78, Actual: 0`).
+      - d) `RestartPreventExitStatus=78` unitdan olib tashlansa -> `Test04` yiqildi (`Assert.Contains Failure`).
+      - e) `--login` rejimida umask o'rnatilmasa -> `Test05` yiqildi (`Collection empty`).
+      - f) TDLib database dir standart rejimda yaratilsa -> `Test06` yiqildi (`Collection missing path`).
+      - g) preflight 0750 ruxsatli katalogni qabul qilsa -> `Test07` yiqildi (`Expected: False, Actual: True`).
+      - h) preflight boshqa foydalanuvchiga tegishli katalogni qabul qilsa -> `Test07` yiqildi (`Expected: False, Actual: True`).
+      - i) hammaga o'qish ruxsati bo'lgan konfiguratsiya qabul qilinsa -> `Test07` yiqildi (`Expected: False, Actual: True`).
+      - j) kesh preflight tekshiruvidan oldin ochilsa -> `Test08` yiqildi (`Assert.False Failure: message cache file should not have been created`).
+      - k) `database_encryption_key` `setTdlibParameters` ga qo'shilmasa -> `Test09b` yiqildi (`KeyNotFoundException`).
+      - l) kalit TdRedactor tomonidan yashirilmasa -> `Test10` yiqildi (`Assert.DoesNotContain Failure`).
+      - m) 31 baytli kalit qabul qilinsa -> `Test09` yiqildi (`Assert.False Failure`).
+      - n) noto'g'ri kalit javobida 1 bilan chiqilsa -> `Test11` yiqildi (`Expected: 78, Actual: 1`).
+    - **TDLib manbasi tadqiqoti va dalillar (github.com/tdlib/td, commit 7e997f0 / v1.8.30)**:
+      - Boshqa qurilmadan sessiya o'chirilganda: `td/telegram/AuthManager.cpp` da Telegram serveridan sessiya tugatilgani haqida xabar kelganda avval `authorizationStateLoggingOut`, keyin esa `authorizationStateClosed` holatlari yuboriladi. Muhimi: TDLib sessiya o'chirilganda mahalliy diskdagi fayllarni o'zi o'chirib yubormaydi (`destroy` chaqirilmaydi).
+      - Noto'g'ri kalit yuborilganda: `td/telegram/Td.cpp` va SqliteDB qismida noto'g'ri shifrlash kaliti berilsa, TDLib `code: 401, message: "Wrong database encryption key"` xatosi bilan javob beradi. Mahalliy ma'lumotlar bazasi fayllari buzilmaydi va o'chirilmaydi.
+      - Base64 shifrlash: TDLib JSON interfeysida bayt massivlari (`bytes` turi) base64 formatlangan string sifatida kutiladi.
+    - **Haqiqiy VPS da audit qilinishi kerak bo'lgan ochiq bandlar**:
+      - Haqiqiy Linux yadro va systemd ostida `umask 0077` hamda `0700`/`0600` ruxsatlarining to'g'ri qo'llanilishi.
+      - Systemd ning `LoadCredential=tdlib-db-key:...` direktivasi orqali `/run/credentials/...` papkasida kalit paydo bo'lishi va capture tomonidan o'qilishi.
+      - Haqiqiy `libtdjson.so` bilan `setTdlibParameters` va telefon orqali sessiya bekor qilinganda `RestartPreventExitStatus=78` ning restart loop'ni to'xtatishi.
 
 ---
 

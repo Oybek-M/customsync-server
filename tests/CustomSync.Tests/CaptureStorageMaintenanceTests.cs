@@ -1313,6 +1313,8 @@ public class CaptureStorageMaintenanceTests
         var tempDb = CreateTempDbPath();
         var timeline = new List<string>();
         var syncStatePath = Path.Combine(CreateTempDir(), "device-state.json");
+        var keyPath1 = Path.Combine(CreateTempDir(), "tdlib-db-key");
+        File.WriteAllText(keyPath1, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
 
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
@@ -1320,6 +1322,7 @@ public class CaptureStorageMaintenanceTests
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = CreateTempDir(),
             ["Telegram:FilesDirectory"] = CreateTempDir(),
+            ["Telegram:DatabaseEncryptionKeyFile"] = keyPath1,
             ["Capture:CacheDatabasePath"] = tempDb,
             ["Capture:Media:Enabled"] = "true",
             ["Capture:Media:StorageDirectory"] = storeDir,
@@ -1424,12 +1427,16 @@ public class CaptureStorageMaintenanceTests
         var tempDb = CreateTempDbPath();
         var timeline = new List<string>();
 
+        var keyPath2 = Path.Combine(CreateTempDir(), "tdlib-db-key");
+        File.WriteAllText(keyPath2, Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
+
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Telegram:ApiId"] = "12345",
             ["Telegram:ApiHash"] = "hash",
             ["Telegram:DatabaseDirectory"] = CreateTempDir(),
             ["Telegram:FilesDirectory"] = CreateTempDir(),
+            ["Telegram:DatabaseEncryptionKeyFile"] = keyPath2,
             ["Capture:CacheDatabasePath"] = tempDb,
             ["Capture:Media:Enabled"] = "true",
             ["Capture:Media:StorageDirectory"] = storeDir,

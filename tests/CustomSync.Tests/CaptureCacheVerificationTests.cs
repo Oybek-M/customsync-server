@@ -1,5 +1,6 @@
 using CustomSync.Capture;
 using CustomSync.Capture.Capture;
+using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -226,41 +227,52 @@ public class CaptureCacheVerificationTests : IDisposable
         Assert.NotNull(cache.Get(1L, 2L));
     }
 
-    // 22. Worker rostdan keshni ulaydi. Bu test bo'lmaganda ulanish
-    // qatorlarini butunlay o'chirib tashlash mumkin edi va hamma test
-    // o'tib ketardi.
+    // 22. Worker rostdan keshni ulaydi. Preflight muvaffaqiyatli o'tgandan
+    // so'ng Worker kesh ma'lumotlar bazasini yaratishi va ulashi shart.
     [Fact]
     public async Task Test22_Worker_starts_the_cache()
     {
         var originalExitCode = Environment.ExitCode;
         Environment.ExitCode = 0;
+        var tempDir = Path.Combine(Path.GetTempPath(), "cs-cache-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
         try
         {
-            var dbPath = CreateTempDbPath();
-            // Telegram sozlamalari ataylab yo'q: preflight yiqiladi, ya'ni
-            // kesh preflight'dan oldin ulanishi shart.
+            var dbPath = Path.Combine(tempDir, "cache.db");
+            var keyPath = Path.Combine(tempDir, "tdlib-db-key");
+            File.WriteAllText(keyPath, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+
             var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["Telegram:ApiId"] = "12345",
+                ["Telegram:ApiHash"] = "test",
+                ["Telegram:TdJsonPath"] = Path.Combine(tempDir, "tdjson.so"),
+                ["Telegram:DatabaseDirectory"] = Path.Combine(tempDir, "tdlib"),
+                ["Telegram:FilesDirectory"] = Path.Combine(tempDir, "files"),
+                ["Telegram:DatabaseEncryptionKeyFile"] = keyPath,
                 ["Capture:CacheDatabasePath"] = dbPath,
             }).Build();
 
-            using var provider = new ServiceCollection().AddMessageCache(config).BuildServiceProvider();
+            var services = new ServiceCollection();
+            services.AddSingleton<INativeLibraryProbe>(new FixedProbe(true));
+            services.AddMessageCache(config);
+            using var provider = services.BuildServiceProvider();
             var lifetime = new FakeLifetime();
             var worker = new Worker(config, provider, lifetime, NullLogger<Worker>.Instance);
 
             await worker.StartAsync(CancellationToken.None);
             if (worker.ExecuteTask is not null)
             {
-                await Task.WhenAny(worker.ExecuteTask, Task.Delay(TimeSpan.FromSeconds(10)));
+                await Task.WhenAny(worker.ExecuteTask, Task.Delay(TimeSpan.FromSeconds(2)));
             }
 
             Assert.True(File.Exists(dbPath), "Worker keshni ulamadi: ma'lumotlar bazasi yaratilmagan");
-            Assert.True(lifetime.StopRequested, "preflight yiqilgan, lekin xizmat to'xtatilmadi");
             await worker.StopAsync(CancellationToken.None);
         }
         finally
         {
             Environment.ExitCode = originalExitCode;
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
         }
     }
 

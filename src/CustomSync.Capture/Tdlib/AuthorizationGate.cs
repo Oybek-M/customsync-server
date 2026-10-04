@@ -40,14 +40,14 @@ public class AuthorizationGate(
                 else if (authenticator.IsClosed)
                 {
                     completion.TrySetResult(new AuthorizationOutcome(
-                        false, 1, "TDLib authorization closed."));
+                        false, 78, "TDLib authorization closed."));
                 }
             }
             catch (Exception ex)
             {
                 // Rad etilgan holat (masalan avtorizatsiya kerak, lekin bu
-                // fon rejimi) — xizmat to'xtaydi, xabar sababini aytadi.
-                completion.TrySetResult(new AuthorizationOutcome(false, 1, ex.Message));
+                // fon rejimi) — xizmat to'xtaydi, xabar sababini aytadi (exit code 78).
+                completion.TrySetResult(new AuthorizationOutcome(false, 78, ex.Message));
             }
         }
 

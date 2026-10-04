@@ -13,8 +13,10 @@ namespace CustomSync.Capture;
 /// </summary>
 public static class CaptureProgram
 {
-    public static async Task<int> RunAsync(string[] args)
+    public static async Task<int> RunAsync(string[] args, Action<IServiceCollection>? configureServices = null)
     {
+        Environment.ExitCode = 0;
+        CustomSync.Capture.Preflight.PosixSandbox.SetUmask0077();
         var builder = Host.CreateApplicationBuilder(args);
 
         // Configure native library resolution if specified
@@ -43,6 +45,8 @@ public static class CaptureProgram
         builder.Services.AddCaptureSyncClient(builder.Configuration);
 
         builder.Services.AddHostedService<Worker>();
+
+        configureServices?.Invoke(builder.Services);
 
         var host = builder.Build();
         await host.RunAsync();

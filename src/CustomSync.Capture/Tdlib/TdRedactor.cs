@@ -17,7 +17,8 @@ public static class TdRedactor
         "password",
         "recovery_code",
         "email_address",
-        "authentication_code"
+        "authentication_code",
+        "database_encryption_key"
     };
 
     public const string RedactedValue = "[REDACTED]";

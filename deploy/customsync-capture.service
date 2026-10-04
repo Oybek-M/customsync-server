@@ -14,6 +14,8 @@ WorkingDirectory=/var/www/customsync-capture
 ExecStart=/usr/bin/dotnet /var/www/customsync-capture/CustomSync.Capture.dll
 Restart=always
 RestartSec=15
+RestartPreventExitStatus=78
+LoadCredential=tdlib-db-key:/etc/customsync-capture/tdlib-db-key
 
 # DIQQAT: ASPNETCORE_ENVIRONMENT EMAS. Capture xizmati generic host
 # (Microsoft.Extensions.Hosting) ishlatadi, u esa ASPNETCORE_ENVIRONMENT ni

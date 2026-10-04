@@ -40,7 +40,7 @@ public class CaptureProgramTests
 
             var exitCode = await CaptureProgram.RunAsync(args).WaitAsync(TimeSpan.FromSeconds(60));
 
-            Assert.Equal(1, exitCode);
+            Assert.Equal(78, exitCode);
         }
         finally
         {
