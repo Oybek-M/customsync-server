@@ -5,7 +5,7 @@ Oxirgi yangilanish: **2026-10-04** (laptop `DESKTOP-L2J53IK`)
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **549 test, hammasi o'tadi**. `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **561 test, hammasi o'tadi**. `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
 ### ▶️ Qayerda to'xtadik (2026-10-04, laptop `DESKTOP-L2J53IK`)
@@ -13,12 +13,12 @@ Branch `Oybek`, ish daraxti toza.
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 10b** — uchidan-uchiga zanjirlar, in-process (`c4cf0e7` + `03d2e10`, 5 stsenariy, 549 test): scope zanjiri, bitta hodisa = bitta yozuv (user, guruh, superguruh, kanal, tahrir), media, 413/507, health — pastdagi "Plan 05 Task 10b tekshiruvi" |
-| **Oxirgi bajarilgan** | **Plan 05 Task 10b** — capture ↔ haqiqiy API uchidan-uchiga zanjirlar, in-process ((bu commit), 5 stsenariy, 549 test) |
-| **Keyingi bajariladigan** | Gemini'ga `docs/05-task4d-prompt.md` (photo/story signallari), keyin `05-task11-prompt.md` (deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan) — §2 |
+| **Oxirgi bajarilgan** | **Plan 05 Task 4d** — profil fotosurati va story activity signallari ((this commit), 12 test, 561 test) |
+| **Keyingi bajariladigan** | Gemini'ga `docs/05-task11-prompt.md` (deploy'dan OLDIN). Task 10 (haqiqiy sessiya) **BLOKLANGAN** (deploy to'xtatilgan) — §2 |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d 📝, 11 📝 (prompt tayyor), 10 ⏸ (bloklangan) |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d (this commit), 11 📝 (prompt tayyor), 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari hali ham yozadi — §5) |
@@ -322,6 +322,7 @@ Ma'lum, ongli qoldirilgan cheklovlar (Task 7 da e'tibor bering):
 | 9b — Capture health hisoboti backend'ga | `cb9dc2d` + `ceaec17` + `62d6ec8` | Server: `POST /api/v1/devices/health` (qurilma ID faqat tokendan, vaqt server soatidan, 4096 bayt o'qish paytida → 413, qat'iy butun sonlar, upsert, 204), `GET` (faqat admin, nom bo'yicha, `stale` = `health.stale_after_seconds`, standart 1800), `device_health` jadvali (migratsiya `AddDeviceHealth`, CASCADE). Capture: `PostHealthAsync` (aniq 8 maydon), `ICaptureHealthReporter` (null + `services.Replace`), `ReportHealthAsync` (runner'ning token oqimi, 401 da bitta refresh va bitta qayta urinish), `StorageMaintenance` 6-qadam; 21 test (jami 514) | 🔴 parallel refresh (sync sikli + health) sync'ni to'xtatardi yoki refresh token'ni yo'qotardi — qulf; kalit faylini o'qish istisnosi reporter'dan chiqib ketardi; rad etilgan hisobot hech qayerda loglanmasdi; GET sozlamani o'qiy olmasa kodga yozilgan 1800 ga jimgina o'tardi; 4 test bo'shlig'i (ro'yxatdagi ulanish, 6-qadamdan oldingi to'xtash, GET maydonlari va tartibi, aniq 4096 chegara) yopildi (jami 532) |
 | 10a — Capture ↔ real API kontrakt testlari (in-process) | `88ae43b` | In-process integratsiya: `CustomSyncWebApplicationFactory` orqali to'liq server quvuri (autentifikatsiya, token rotatsiyasi, bekor qilish, PostgreSQL, HTTP xatolar); haqiqiy capture qismlari (`SyncCliCommands`, `CaptureSyncRunner`, `MessageCache`, `ActivityMapper`, `StorageSnapshot`); 9 ta stsenariy: (1) enroll va qayta enroll rad etilishi, (2) key setup va noto'g'ri parol, (3) refresh va rotatsiya, (4) push (deleted, edited, activity online status) va shifrlangan payload tekshiruvi, (5) dedup va kichikroq observed_at yutishi, (6) batch limit qisqarishi, (7) settings pull va kursor saqlanishi, (8) health hisoboti va admin GET, (9) bekor qilingan qurilma to'xtashi; 9 yangi test (jami 544) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
 | 10b — Capture ↔ real API uchidan-uchiga zanjirlar (in-process) | `c4cf0e7` + `03d2e10` | In-process E2E zanjirlar: `CaptureContractTestBase` umumiy tayanch klassiga ajratildi; `CaptureEndToEndTests.cs` da 5 ta chuqur stsenariy: (1) scope zanjiri (tdesktop sozlamalari, server bloki ustunligi, tahrir filtratsiyasi), (2) bitta hodisa = bitta yozuv (user/chat/channel, tahrir, o'chirish bo'yicha dedup va record_id mosligi), (3) o'chirilgan xabar media omon qolishi va HEAD 200 qayta ishlatilishi, (4) media chegaralari (413 da outbox tozalanib yozuv media'siz o'tishi, 507 da keyingi siklgacha kechiktirilishi), (5) ro'yxatdan o'tgan StorageMaintenance dan health yuborilishi va admin API da ko'rinishi; 5 yangi test (jami 549) | 10 ta ataylab buzish (a–j) to'liq ushlandi |
+| 4d — Profile-photo va story activity signallari (tdesktop parity) | (this commit) | tdesktop pariteti: profile photo kuzatuvi (`photo` maydoni: ulong o'nlik qatori yoki birinchi kuzatuvda "empty", yangi rasmda retroaktiv status `online:added_date`), story signallari (`updateChatActiveStories` da har bir story uchun `online:date` status momenti va `story` maydoni `max(date)` at `now`), A19 qoidasi (`observed_at >= stored.observed_at` bo'lsagina `activity_latest` yangilanadi), sxema v6 (`activity_history` durativ jadvali va 31 kunlik retention), xavfsiz va ko'rinmas `ProfilePhotoLookup` fon sikli (chegaralangan navbat, parvozda dedup, `TdRequestPolicy` allow-list faqat user_id > 0, offset=0, limit=1); 12 test (jami 561 test) | 14 ta ataylab buzish (a–n) to'liq ushlandi |
 
 > ⚠️ **Muhim eslatma:** Capture xizmati egasi (owner) quyidagilarni bajarmaguncha VPS'da ishlay olmaydi:
 > 1) `libtdjson.so` kutubxonasini taqdim etish (prebuilt package, VPS'da build, yoki Docker orqali);
@@ -1818,6 +1819,42 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - Capture ↔ tdesktop o'rtasida `record_id` hisoblashda (user, chat, supergroup/channel, edit, delete) hech qanday kelishmovchilik topilmadi — barcha deterministik parametrlar (kanonik peer_id, server msg_id, edit_date / msg_date, account_id) to'liq mos keldi.
       - Capture ↔ server o'rtasida HTTP kontraktida (HEAD 200 / PUT media, 413, 507, health GET/POST) hech qanday kelishmovchilik topilmadi.
       - E2E testlarida e'tibor berilgan jihatlar: media yozib olish uchun `Capture:Media:PeerIds:0` sozlamasi talab qilinishi, TDLib yangilanishlari asinxron kelganligi sababli `GetNextDuePendingMedia` kutish zarurligi, va xotiradagi test bazasi tozaligi uchun xabar va fayl identifikatorlarini har bir test yurishida unikal qilish.
+
+46. **Profile-photo va story activity signallari (tdesktop parity) (Plan 05 Task 4d)** — `(this commit)`.
+    - **Tavsif**: `src/CustomSync.Capture/Capture/ProfilePhotoLookup.cs` (alohida ko'rinmas fon xizmati), `CaptureUpdateHandler.cs` (`photo` va `story` maydonlari hamda `updateChatActiveStories` qayta ishlash), `MessageCache.cs` (sxema v6 migratsiyasi, `activity_history` durativ jadvali, A19 qoidasi, `HasActivityEntryAt` va `RecordActivityMoment`), `PeriodicCachePruner.cs` (31 kunlik tozalash), `TdRequestPolicy.cs` (`getUserProfilePhotos` allow-list tekshiruvi: faqat `user_id > 0`, `offset == 0`, `limit == 1`), `Worker.cs` va DI ro'yxatdan o'tkazish; `tests/CustomSync.Tests/CaptureProfilePhotoAndStoryTests.cs` (12 yangi chuqur test, jami 561 test, 0 warning).
+    - **Amalga oshirilgan mexanizmlar**:
+      1. `photo` maydoni: Unsigned `uint64` o'nlik qatori (tdesktop `PhotoId` bilan to'liq mos). Agar yo'q/null/0 bo'lsa `"empty"`. Birinchi kuzatuvda `"empty"` saqlanadi (`has_old_value = false`). Teng qiymatda hech narsa yozilmaydi; o'zgarganda avvalgi qiymat uzatiladi.
+      2. Retroaktiv online momenti: Yangi foto aniqlanganda `getUserProfilePhotos` orqali `added_date` olinadi va `status` `online:<date>` momenti yoziladi (`occurred_at = observed_at = date`). Skip qoidalari: foto boshqasiga o'zgargan bo'lsa; `date > now + 60`; `now - date > 2592000` (30 kun); bazada allaqachon shu sana bilan yozuv mavjud bo'lsa (`HasActivityEntryAt`).
+      3. `updateChatActiveStories`: Faqat foydalanuvchi chatlari (`chatId > 0`), faqat kontakt va scope'dagi foydalanuvchilar. Har bir faol story uchun (`date > 0`) `status` `online:<date>` momenti yoziladi (`HasActivityEntryAt` bilan dedup). Shuningdek `story` maydoni yangilanadi (`new_value = max(date)`, `observed_at = now`, oddiy maydon qoidasi: teng bo'lsa yozilmaydi).
+      4. A19 qoidasi: `activity_latest` jadvalini yangilash faqat `observed_at >= stored.observed_at` bo'lgandagina ruxsat etiladi (o'tmishdagi foto/story momentlari ayni vaqtdagi haqiqiy offline/online statusni ezib tashlamaydi).
+      5. Sxema v6: `activity_history (peer_id, field, observed_at, PRIMARY KEY (peer_id, field, observed_at))` va `observed_at` indeksi. Restartlar aro durativ saqlanadi; `PeriodicCachePruner` har 6 soatda 31 kundan eski yozuvlarni tozalaydi.
+      6. Oqimlar xavfsizligi va ko'rinmaslik: Update handler hech qachon tarmoq kutmaydi (bloklamaydi). Bounded navbat (1000 ta element), bir (peer, photoId) uchun yagona in-flight so'rov. `TdRequestPolicy` ruxsatnomasi faqat `{user_id: >0, offset: 0, limit: 1}` qat'iy tekshiradi; barcha taqiqlangan metodlar (`openStory`, `getStory`, `getChatActiveStories` va boshqalar) darhol rad etiladi.
+    - **14 ta ataylab buzish (a–n)** to'liq tekshirildi va ushlandi:
+      - a) Foto ID manfiy signed `int64` qilib formatlansa -> `Test01_Photo_values_formatting_and_changes` yiqildi (unsigned decimal o'rniga `-` chiqdi).
+      - b) Birinchi kuzatuvda `"empty"` yozilmasa -> `Test01_Photo_values_formatting_and_changes` yiqildi (Outbox row not found).
+      - c) Foto momenti `photoDate` o'rniga `now` ishlatsa -> `Test03_Photo_change_sends_getUserProfilePhotos_and_writes_online_moment` yiqildi (`occurred_at` farq qildi).
+      - d) 30 kunlik qoida `>` o'rniga `>=` ishlatsa -> `Test04_Photo_online_moment_skip_rules` yiqildi (aniq 30 kunlik moment o'tkazib yuborildi).
+      - e) `+ 60` kelajak qoidasi olib tashlansa -> `Test04_Photo_online_moment_skip_rules` yiqildi (`now + 60` momenti tashlab ketildi).
+      - f) Joriy foto ID tekshiruvi (parvozda o'zgarish) olib tashlansa -> `Test04_Photo_online_moment_skip_rules` yiqildi (eski foto uchun moment yozildi).
+      - g) Mavjud yozuv tekshiruvi faqat xotirada saqlansa -> `Test09_Persistence_v5_migration_and_pruner` yiqildi (restartdan keyin moment takrorlandi).
+      - h) Har bir moment `activity_latest` ni ezib tashlasa (A19 olib tashlansa) -> `Test08_A19_latest_value_replacement_rules` yiqildi (o'tmishdagi moment so'nggi statusni buzdi).
+      - i) Update handler foto sanasi javobini kutsa -> `Test06_Threading_nonblocking_dedup_and_queue_overflow` yiqildi (HandleUpdate 500ms dan ortiq vaqt oldi).
+      - j) Worker fon siklini ishga tushirmasa -> `Test11_Production_wiring_starts_photo_date_lookup_loop` yiqildi (moment qayd etilmadi).
+      - k) Faqat eng yangi story uchun moment yozilsa -> `Test07_Story_signals_and_story_field` yiqildi (D1 momenti outbox'da topilmadi).
+      - l) Story maydoni `observed_at` uchun story sanasini ishlatsa -> `Test07_Story_signals_and_story_field` yiqildi (`now` o'rniga story sanasi bilan qidirildi).
+      - m) Policy limit 100 ni qabul qilsa -> `Test10_TdRequestPolicy_getUserProfilePhotos_and_rejected_methods` yiqildi (istisno tashlanmadi).
+      - n) Story handler scope tekshiruvini o'tkazib yuborsa -> `Test07_Story_signals_and_story_field` yiqildi (scope tashqarisidagi foydalanuvchi outbox'ga yozildi).
+    - **TDLib xulosalari va dalillar (github.com/tdlib/td, commit 7e997f0 / v1.8.30)**:
+      - `getUserProfilePhotos` -> MTProto `photos.getUserPhotos#91cd32a8 flags:# user_id:InputUser offset:int max_id:long limit:int = photos.Photos` (`td/telegram/PhotosManager.cpp`). Bu mutlaqo passiv (read-only) so'rov bo'lib, target foydalanuvchiga hech qanday ko'rinish berilmaydi (onlayn status yoki chat action chaqirilmaydi). Oq ro'yxatda faqat `limit=1, offset=0` ruxsat etiladi.
+      - `chatPhoto.added_date` -> MTProto `photo#fb0d23c` sxemasidagi `date:int` maydoniga 100% teng (`td/telegram/PhotosManager.cpp` da `date` to'g'ridan-to'g'ri `added_date` ga o'tkaziladi).
+      - `updateChatActiveStories` -> `td/telegram/StoryManager.cpp`. Yangilanishlar ochiq chatlar va kontaktlar uchun Telegram server push'lari orqali avtomatik keladi (`loadActiveStories` chaqirmasdan ham).
+      - `tdesktop` bilan farqlar:
+        1. Shaxsiy rasm (`is_personal: true`): TDLib'da foydalanuvchi tomonidan alohida o'rnatilgan shaxsiy avatar bo'lsa, `profilePhoto.is_personal` belgilanadi. Capture'da `getUserProfilePhotos` serverdagi umumiy profillarni so'raydi.
+        2. Sonlar ifodalanishi: TDLib JSON interfeysida 64-bitli butun sonlar ba'zan string, ba'zan number sifatida kelishi mumkin; manfiy int64 stringlar unsigned `ulong` ga to'g'ri konvertatsiya qilindi.
+    - **Task 10 haqiqiy sessiya uchun tekshiruv ro'yxati**:
+      - Real sessiyada `updateChatActiveStories` yangilanishlari foydalanuvchi interfeysida chat ochilmaganda ham push orqali yetib kelishi.
+      - Haqiqiy hisoblarda `getUserProfilePhotos` yuborilganda foydalanuvchi faolligi/online ko'rsatkichiga ta'sir qilmasligi (invisibility).
+      - Telegram serveri yuboradigan `chatPhoto.added_date` sanalari vaqtinchalik xatolarsiz (`now + 60` va 30 kun oralig'ida) aniq tushishi.
 
 ---
 

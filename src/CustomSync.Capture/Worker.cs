@@ -104,6 +104,7 @@ public class Worker : BackgroundService
 
         _services.GetRequiredService<CustomSync.Capture.Media.MediaDownloader>().Start(stoppingToken);
         _services.GetRequiredService<CustomSync.Capture.Maintenance.StorageMaintenance>().Start(stoppingToken);
+        _services.GetRequiredService<CustomSync.Capture.Capture.ProfilePhotoLookup>().Start(stoppingToken);
 
         _logger.LogInformation("Capture service authorized and running.");
 

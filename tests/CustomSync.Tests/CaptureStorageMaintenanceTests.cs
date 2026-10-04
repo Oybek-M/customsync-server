@@ -805,7 +805,7 @@ public class CaptureStorageMaintenanceTests
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "PRAGMA user_version;";
-            Assert.Equal(5, Convert.ToInt32(cmd.ExecuteScalar()));
+            Assert.Equal(6, Convert.ToInt32(cmd.ExecuteScalar()));
         }
 
         // Upgrade from v4 database
@@ -876,7 +876,7 @@ public class CaptureStorageMaintenanceTests
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "PRAGMA user_version;";
-            Assert.Equal(5, Convert.ToInt32(cmd.ExecuteScalar()));
+            Assert.Equal(6, Convert.ToInt32(cmd.ExecuteScalar()));
 
             cmd.CommandText = "SELECT created_at FROM captured_media WHERE peer_id = '123' AND msg_id = 456;";
             var createdAt = Convert.ToInt64(cmd.ExecuteScalar());

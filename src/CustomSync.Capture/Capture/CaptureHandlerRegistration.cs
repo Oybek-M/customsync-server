@@ -89,6 +89,15 @@ public static class CaptureHandlerRegistration
                 reporter: sp.GetRequiredService<ICaptureHealthReporter>());
         });
 
+        services.TryAddSingleton<ProfilePhotoLookup>(sp =>
+        {
+            return new ProfilePhotoLookup(
+                client: null,
+                sp.GetRequiredService<MessageCache>(),
+                sp.GetService<TimeProvider>(),
+                sp.GetService<ILogger<ProfilePhotoLookup>>());
+        });
+
         services.AddSingleton(sp =>
         {
             var config = sp.GetService<IConfiguration>();
@@ -103,13 +112,15 @@ public static class CaptureHandlerRegistration
                 sp.GetService<TimeProvider>(),
                 sp.GetService<ILogger<CaptureUpdateHandler>>(),
                 editPairingTimeoutSeconds: pairingTimeout,
-                mediaConfig: sp.GetService<MediaCaptureConfig>());
+                mediaConfig: sp.GetService<MediaCaptureConfig>(),
+                photoLookup: sp.GetService<ProfilePhotoLookup>());
         });
 
         services.Remove(clientDescriptor);
         services.AddSingleton<ITdClient>(sp =>
         {
             var client = CreateInner(sp, clientDescriptor);
+            sp.GetRequiredService<ProfilePhotoLookup>().SetClient(client);
             sp.GetRequiredService<CaptureUpdateHandler>().Attach(client);
             return client;
         });

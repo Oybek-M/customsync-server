@@ -32,6 +32,7 @@ public class CaptureUpdateHandler
     private long _errorCount;
     private readonly int _editPairingTimeoutSeconds;
     private long _lastSweepAt = long.MinValue;
+    private readonly ProfilePhotoLookup? _photoLookup;
 
     public string? AccountId => _accountId;
     public long UncachedDeleteCount => Interlocked.Read(ref _uncachedDeleteCount);
@@ -47,7 +48,7 @@ public class CaptureUpdateHandler
         string? accountId = null,
         int editPairingTimeoutSeconds = 60,
         MediaCaptureConfig? mediaConfig = null)
-        : this(cache, scope, activityScope: null, timeProvider, logger, accountId, editPairingTimeoutSeconds, mediaConfig)
+        : this(cache, scope, activityScope: null, timeProvider, logger, accountId, editPairingTimeoutSeconds, mediaConfig, photoLookup: null)
     {
     }
 
@@ -59,7 +60,8 @@ public class CaptureUpdateHandler
         ILogger<CaptureUpdateHandler>? logger = null,
         string? accountId = null,
         int editPairingTimeoutSeconds = 60,
-        MediaCaptureConfig? mediaConfig = null)
+        MediaCaptureConfig? mediaConfig = null,
+        ProfilePhotoLookup? photoLookup = null)
     {
         _cache = cache;
         // Scope berilmasa — hech narsa ushlanmaydi (fail-closed). null'ni
@@ -71,6 +73,7 @@ public class CaptureUpdateHandler
         _accountId = accountId;
         _editPairingTimeoutSeconds = editPairingTimeoutSeconds > 0 ? editPairingTimeoutSeconds : 60;
         _mediaConfig = mediaConfig ?? new MediaCaptureConfig();
+        _photoLookup = photoLookup;
     }
 
     /// <summary>
@@ -89,6 +92,7 @@ public class CaptureUpdateHandler
         lock (_lock)
         {
             _accountId = accountId;
+            _photoLookup?.SetAccountId(accountId);
             while (_earlyQueue.Count > 0)
             {
                 var queuedRaw = _earlyQueue.Dequeue();
@@ -191,7 +195,7 @@ public class CaptureUpdateHandler
     }
 
     private static bool IsCapturedType(string? type) =>
-        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent" or "updateMessageEdited" or "updateUser" or "updateUserStatus";
+        type is "updateNewMessage" or "updateDeleteMessages" or "updateMessageContent" or "updateMessageEdited" or "updateUser" or "updateUserStatus" or "updateChatActiveStories";
 
     // Zaxira yo'l: my_id odatda updateOption bilan keladi, lekin u kelmasa
     // yoki obunadan oldin kelib qolsa, bufer cheksiz o'sadi va hech narsa
@@ -267,6 +271,9 @@ public class CaptureUpdateHandler
                 break;
             case "updateUserStatus":
                 HandleUpdateUserStatus(root);
+                break;
+            case "updateChatActiveStories":
+                HandleUpdateChatActiveStories(root);
                 break;
         }
     }
@@ -592,6 +599,48 @@ public class CaptureUpdateHandler
             string status = ActivityMapper.MapStatus(statusProp, now);
             _cache.RecordActivity(_accountId, peerId, "status", status, now);
         }
+
+        // 4. Photo: absent / null / 0 -> "empty"
+        string photoValue = "empty";
+        if (user.TryGetProperty("profile_photo", out var photoProp) && photoProp.ValueKind == JsonValueKind.Object)
+        {
+            if (photoProp.TryGetProperty("id", out var photoIdProp))
+            {
+                if (photoIdProp.ValueKind == JsonValueKind.Number)
+                {
+                    long signedId = photoIdProp.GetInt64();
+                    ulong unsignedId = unchecked((ulong)signedId);
+                    photoValue = unsignedId == 0 ? "empty" : unsignedId.ToString(CultureInfo.InvariantCulture);
+                }
+                else if (photoIdProp.ValueKind == JsonValueKind.String)
+                {
+                    string rawStr = photoIdProp.GetString() ?? "";
+                    if (string.IsNullOrEmpty(rawStr) || rawStr == "0" || rawStr == "empty")
+                    {
+                        photoValue = "empty";
+                    }
+                    else if (long.TryParse(rawStr, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out long parsedSigned))
+                    {
+                        ulong unsignedId = unchecked((ulong)parsedSigned);
+                        photoValue = unsignedId == 0 ? "empty" : unsignedId.ToString(CultureInfo.InvariantCulture);
+                    }
+                    else if (ulong.TryParse(rawStr, NumberStyles.None, CultureInfo.InvariantCulture, out ulong parsedUnsigned))
+                    {
+                        photoValue = parsedUnsigned == 0 ? "empty" : parsedUnsigned.ToString(CultureInfo.InvariantCulture);
+                    }
+                }
+            }
+        }
+
+        var latestPhoto = _cache.GetLatestActivity(peerId, "photo");
+        if (!latestPhoto.Exists || latestPhoto.Value != photoValue)
+        {
+            _cache.RecordActivity(_accountId, peerId, "photo", photoValue, now);
+            if (photoValue != "empty")
+            {
+                _photoLookup?.Enqueue(peerId, photoValue, _accountId);
+            }
+        }
     }
 
     private void HandleUpdateUserStatus(JsonElement root)
@@ -623,6 +672,52 @@ public class CaptureUpdateHandler
         long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
         string status = ActivityMapper.MapStatus(statusProp, now);
         _cache.RecordActivity(_accountId, peerId, "status", status, now);
+    }
+
+    private void HandleUpdateChatActiveStories(JsonElement root)
+    {
+        if (!root.TryGetProperty("chat_id", out var chatProp) || !root.TryGetProperty("active_stories", out var storiesObj))
+            return;
+
+        long chatId = chatProp.GetInt64();
+        if (chatId <= 0)
+            return; // only user chats
+
+        string peerId = chatId.ToString(CultureInfo.InvariantCulture);
+        bool isContact = _contactMap.TryGetValue(peerId, out var c) && c;
+        if (!_activityScope.ShouldTrackActivity(peerId, isContact))
+            return;
+
+        if (string.IsNullOrEmpty(_accountId))
+            return;
+
+        if (!storiesObj.TryGetProperty("stories", out var storiesArr) || storiesArr.ValueKind != JsonValueKind.Array || storiesArr.GetArrayLength() == 0)
+            return;
+
+        long maxDate = 0;
+        foreach (var story in storiesArr.EnumerateArray())
+        {
+            if (story.TryGetProperty("date", out var dateProp))
+            {
+                long storyDate = dateProp.GetInt64();
+                if (storyDate > 0)
+                {
+                    if (storyDate > maxDate)
+                        maxDate = storyDate;
+
+                    if (!_cache.HasActivityEntryAt(peerId, "status", storyDate))
+                    {
+                        _cache.RecordActivityMoment(_accountId, peerId, "status", $"online:{storyDate}", storyDate);
+                    }
+                }
+            }
+        }
+
+        if (maxDate > 0)
+        {
+            long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
+            _cache.RecordActivity(_accountId, peerId, "story", maxDate.ToString(CultureInfo.InvariantCulture), now);
+        }
     }
 
     public static (string Text, bool IsMedia) ExtractTextAndMedia(JsonElement content)

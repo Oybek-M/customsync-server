@@ -125,7 +125,7 @@ public abstract class CaptureContractTestBase : IDisposable
         public void Dispose() { }
     }
 
-    protected static async Task<bool> WaitAsync(Func<bool> condition, int timeoutMs = 4000)
+    public static async Task<bool> WaitAsync(Func<bool> condition, int timeoutMs = 4000)
     {
         for (var waited = 0; waited < timeoutMs; waited += 25)
         {
@@ -291,7 +291,7 @@ public abstract class CaptureContractTestBase : IDisposable
         return await db.Records.MaxAsync(r => (long?)r.Seq) ?? 0;
     }
 
-    protected static (byte[] MasterKey, string Passphrase, string WrongPassphrase, int Iterations, string Salt, string Nonce, string WrappedKey, string MasterHex, string Fingerprint) LoadVectorCase1()
+    public static (byte[] MasterKey, string Passphrase, string WrongPassphrase, int Iterations, string Salt, string Nonce, string WrappedKey, string MasterHex, string Fingerprint) LoadVectorCase1()
     {
         var cases = TestVectors.Get("key_wrap").GetProperty("cases");
         var vector = cases.EnumerateArray().First(c => c.GetProperty("iterations").GetInt32() == 1000);

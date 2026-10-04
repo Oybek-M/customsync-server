@@ -89,6 +89,13 @@ public class MessageCache
                     observed_at INTEGER NOT NULL,
                     PRIMARY KEY (peer_id, field)
                 );
+                CREATE TABLE IF NOT EXISTS activity_history (
+                    peer_id TEXT NOT NULL,
+                    field TEXT NOT NULL,
+                    observed_at INTEGER NOT NULL,
+                    PRIMARY KEY (peer_id, field, observed_at)
+                );
+                CREATE INDEX IF NOT EXISTS idx_activity_history_observed_at ON activity_history (observed_at);
                 CREATE TABLE IF NOT EXISTS pending_edits (
                     chat_id INTEGER NOT NULL,
                     message_id INTEGER NOT NULL,
@@ -138,7 +145,7 @@ public class MessageCache
             if (version == 0)
             {
                 using var setVersionCmd = conn.CreateCommand();
-                setVersionCmd.CommandText = "PRAGMA user_version = 5;";
+                setVersionCmd.CommandText = "PRAGMA user_version = 6;";
                 setVersionCmd.ExecuteNonQuery();
             }
             else
@@ -261,6 +268,26 @@ public class MessageCache
 
                     upgradeTx4.Commit();
                     version = 5;
+                }
+
+                if (version == 5)
+                {
+                    using var upgradeTx5 = conn.BeginTransaction();
+                    using var upgradeCmd5 = conn.CreateCommand();
+                    upgradeCmd5.Transaction = upgradeTx5;
+                    upgradeCmd5.CommandText = @"
+                        CREATE TABLE IF NOT EXISTS activity_history (
+                            peer_id TEXT NOT NULL,
+                            field TEXT NOT NULL,
+                            observed_at INTEGER NOT NULL,
+                            PRIMARY KEY (peer_id, field, observed_at)
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_activity_history_observed_at ON activity_history (observed_at);
+                        PRAGMA user_version = 6;
+                    ";
+                    upgradeCmd5.ExecuteNonQuery();
+                    upgradeTx5.Commit();
+                    version = 6;
                 }
             }
 
@@ -1022,11 +1049,12 @@ public class MessageCache
             {
                 bool hadPrevious = false;
                 string? oldValue = null;
+                long storedObservedAt = 0;
 
                 using (var selCmd = conn.CreateCommand())
                 {
                     selCmd.Transaction = tx;
-                    selCmd.CommandText = "SELECT value FROM activity_latest WHERE peer_id = @peer_id AND field = @field;";
+                    selCmd.CommandText = "SELECT value, observed_at FROM activity_latest WHERE peer_id = @peer_id AND field = @field;";
                     selCmd.Parameters.AddWithValue("@peer_id", peerId);
                     selCmd.Parameters.AddWithValue("@field", field);
                     using var reader = selCmd.ExecuteReader();
@@ -1034,6 +1062,7 @@ public class MessageCache
                     {
                         hadPrevious = true;
                         oldValue = reader.GetString(0);
+                        storedObservedAt = reader.GetInt64(1);
                     }
                 }
 
@@ -1060,20 +1089,39 @@ public class MessageCache
                     }
                 }
 
-                using (var upsertCmd = conn.CreateCommand())
+                // A19 rule: update activity_latest only if !hadPrevious || now >= storedObservedAt
+                if (!hadPrevious || now >= storedObservedAt)
                 {
-                    upsertCmd.Transaction = tx;
-                    upsertCmd.CommandText = @"
-                        INSERT INTO activity_latest (peer_id, field, value, observed_at)
-                        VALUES (@peer_id, @field, @value, @observed_at)
-                        ON CONFLICT(peer_id, field) DO UPDATE SET
-                            value = excluded.value,
-                            observed_at = excluded.observed_at;";
-                    upsertCmd.Parameters.AddWithValue("@peer_id", peerId);
-                    upsertCmd.Parameters.AddWithValue("@field", field);
-                    upsertCmd.Parameters.AddWithValue("@value", newValue);
-                    upsertCmd.Parameters.AddWithValue("@observed_at", now);
-                    upsertCmd.ExecuteNonQuery();
+                    using (var upsertCmd = conn.CreateCommand())
+                    {
+                        upsertCmd.Transaction = tx;
+                        upsertCmd.CommandText = @"
+                            INSERT INTO activity_latest (peer_id, field, value, observed_at)
+                            VALUES (@peer_id, @field, @value, @observed_at)
+                            ON CONFLICT(peer_id, field) DO UPDATE SET
+                                value = excluded.value,
+                                observed_at = excluded.observed_at;";
+                        upsertCmd.Parameters.AddWithValue("@peer_id", peerId);
+                        upsertCmd.Parameters.AddWithValue("@field", field);
+                        upsertCmd.Parameters.AddWithValue("@value", newValue);
+                        upsertCmd.Parameters.AddWithValue("@observed_at", now);
+                        upsertCmd.ExecuteNonQuery();
+                    }
+                }
+
+                // Insert into activity_history for status entries
+                if (field == "status")
+                {
+                    using var histCmd = conn.CreateCommand();
+                    histCmd.Transaction = tx;
+                    histCmd.CommandText = @"
+                        INSERT INTO activity_history (peer_id, field, observed_at)
+                        VALUES (@peer_id, @field, @observed_at)
+                        ON CONFLICT(peer_id, field, observed_at) DO NOTHING;";
+                    histCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    histCmd.Parameters.AddWithValue("@field", field);
+                    histCmd.Parameters.AddWithValue("@observed_at", now);
+                    histCmd.ExecuteNonQuery();
                 }
 
                 var payloadJson = PayloadBuilder.BuildActivity(accountId, peerId, field, hadPrevious, oldValue, newValue);
@@ -1137,6 +1185,165 @@ public class MessageCache
         catch (Exception ex) when (ex is not MessageCacheException)
         {
             throw new MessageCacheException("Failed to get latest activity.", ex);
+        }
+    }
+
+    public virtual bool HasActivityEntryAt(string peerId, string field, long observedAt)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT 1 FROM activity_history WHERE peer_id = @peer_id AND field = @field AND observed_at = @observed_at LIMIT 1;";
+            cmd.Parameters.AddWithValue("@peer_id", peerId);
+            cmd.Parameters.AddWithValue("@field", field);
+            cmd.Parameters.AddWithValue("@observed_at", observedAt);
+            return cmd.ExecuteScalar() is not null;
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to check activity history in cache.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to check activity history in cache.", ex);
+        }
+    }
+
+    public virtual bool RecordActivityMoment(string accountId, string peerId, string field, string newValue, long momentTime)
+    {
+        try
+        {
+            using var conn = OpenConnection();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                // Check if already in activity_history
+                using (var checkCmd = conn.CreateCommand())
+                {
+                    checkCmd.Transaction = tx;
+                    checkCmd.CommandText = "SELECT 1 FROM activity_history WHERE peer_id = @peer_id AND field = @field AND observed_at = @observed_at LIMIT 1;";
+                    checkCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    checkCmd.Parameters.AddWithValue("@field", field);
+                    checkCmd.Parameters.AddWithValue("@observed_at", momentTime);
+                    if (checkCmd.ExecuteScalar() is not null)
+                    {
+                        tx.Rollback();
+                        return false;
+                    }
+                }
+
+                // Insert into activity_history
+                using (var histCmd = conn.CreateCommand())
+                {
+                    histCmd.Transaction = tx;
+                    histCmd.CommandText = @"
+                        INSERT INTO activity_history (peer_id, field, observed_at)
+                        VALUES (@peer_id, @field, @observed_at)
+                        ON CONFLICT(peer_id, field, observed_at) DO NOTHING;";
+                    histCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    histCmd.Parameters.AddWithValue("@field", field);
+                    histCmd.Parameters.AddWithValue("@observed_at", momentTime);
+                    histCmd.ExecuteNonQuery();
+                }
+
+                // A19 rule for activity_latest:
+                // Check current observed_at in activity_latest
+                bool shouldUpdateLatest = true;
+                using (var latestCheckCmd = conn.CreateCommand())
+                {
+                    latestCheckCmd.Transaction = tx;
+                    latestCheckCmd.CommandText = "SELECT observed_at FROM activity_latest WHERE peer_id = @peer_id AND field = @field;";
+                    latestCheckCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    latestCheckCmd.Parameters.AddWithValue("@field", field);
+                    var storedObs = latestCheckCmd.ExecuteScalar();
+                    if (storedObs is not null && storedObs != DBNull.Value)
+                    {
+                        long storedObservedAt = Convert.ToInt64(storedObs);
+                        if (momentTime < storedObservedAt)
+                        {
+                            shouldUpdateLatest = false;
+                        }
+                    }
+                }
+
+                if (shouldUpdateLatest)
+                {
+                    using (var upsertCmd = conn.CreateCommand())
+                    {
+                        upsertCmd.Transaction = tx;
+                        upsertCmd.CommandText = @"
+                            INSERT INTO activity_latest (peer_id, field, value, observed_at)
+                            VALUES (@peer_id, @field, @value, @observed_at)
+                            ON CONFLICT(peer_id, field) DO UPDATE SET
+                                value = excluded.value,
+                                observed_at = excluded.observed_at;";
+                        upsertCmd.Parameters.AddWithValue("@peer_id", peerId);
+                        upsertCmd.Parameters.AddWithValue("@field", field);
+                        upsertCmd.Parameters.AddWithValue("@value", newValue);
+                        upsertCmd.Parameters.AddWithValue("@observed_at", momentTime);
+                        upsertCmd.ExecuteNonQuery();
+                    }
+                }
+
+                // Insert into capture_outbox
+                var payloadJson = PayloadBuilder.BuildActivity(accountId, peerId, field, hasOldValue: false, oldValue: null, newValue: newValue);
+                long msgId = ActivityMapper.DiscriminatorFor(field);
+
+                using (var insCmd = conn.CreateCommand())
+                {
+                    insCmd.Transaction = tx;
+                    insCmd.CommandText = @"
+                        INSERT OR REPLACE INTO capture_outbox (kind, account_id, peer_id, msg_id, occurred_at, observed_at, payload_json, created_at)
+                        VALUES ('activity', @account_id, @peer_id, @msg_id, @occurred_at, @observed_at, @payload_json, @created_at);";
+                    insCmd.Parameters.AddWithValue("@account_id", accountId);
+                    insCmd.Parameters.AddWithValue("@peer_id", peerId);
+                    insCmd.Parameters.AddWithValue("@msg_id", msgId);
+                    insCmd.Parameters.AddWithValue("@occurred_at", momentTime);
+                    insCmd.Parameters.AddWithValue("@observed_at", momentTime);
+                    insCmd.Parameters.AddWithValue("@payload_json", payloadJson);
+                    insCmd.Parameters.AddWithValue("@created_at", momentTime);
+                    insCmd.ExecuteNonQuery();
+                }
+
+                tx.Commit();
+                return true;
+            }
+            catch
+            {
+                try { tx.Rollback(); } catch { }
+                throw;
+            }
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to record activity moment in cache.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to record activity moment in cache.", ex);
+        }
+    }
+
+    public virtual int PruneActivityHistory(int olderThanDays = 31)
+    {
+        try
+        {
+            long now = (_timeProvider ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
+            long cutoff = now - (olderThanDays * 86400L);
+            using var conn = OpenConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "DELETE FROM activity_history WHERE observed_at < @cutoff;";
+            cmd.Parameters.AddWithValue("@cutoff", cutoff);
+            return cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException ex)
+        {
+            throw new MessageCacheException("Failed to prune activity history.", ex);
+        }
+        catch (Exception ex) when (ex is not MessageCacheException)
+        {
+            throw new MessageCacheException("Failed to prune activity history.", ex);
         }
     }
 

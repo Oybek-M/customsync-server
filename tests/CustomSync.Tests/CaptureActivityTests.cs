@@ -164,8 +164,8 @@ public class CaptureActivityTests : IDisposable
         handler.HandleUpdate(userUpdate1);
 
         var rows = cache.GetOutboxRows("activity");
-        // name, username, status -> 3 rows
-        Assert.Equal(3, rows.Count);
+        // name, username, status, photo -> 4 rows
+        Assert.Equal(4, rows.Count);
 
         var nameRow = rows.First(r => r.MsgId == ActivityMapper.DiscriminatorFor("name"));
         var namePayload = JsonNode.Parse(nameRow.PayloadJson)!.AsObject();
@@ -206,10 +206,11 @@ public class CaptureActivityTests : IDisposable
 
         handler.HandleUpdate(userUpdate2);
 
-        // Only name row must be emitted for User 2; empty username must NOT emit an outbox row
+        // Name and photo="empty" emitted for User 2; empty username must NOT emit an outbox row
         var user2Rows = cache.GetOutboxRows("activity").Where(r => r.PeerId == "222").ToList();
-        Assert.Single(user2Rows);
-        Assert.Equal(ActivityMapper.DiscriminatorFor("name"), user2Rows[0].MsgId);
+        Assert.Equal(2, user2Rows.Count);
+        Assert.Contains(user2Rows, r => r.MsgId == ActivityMapper.DiscriminatorFor("name"));
+        Assert.Contains(user2Rows, r => r.MsgId == ActivityMapper.DiscriminatorFor("photo"));
     }
 
     [Fact]
@@ -248,9 +249,10 @@ public class CaptureActivityTests : IDisposable
         }");
 
         var rows = cache.GetOutboxRows("activity");
-        Assert.Equal(2, rows.Count);
+        // initial name, initial photo, changed name -> 3 rows
+        Assert.Equal(3, rows.Count);
 
-        var secondRow = rows[1];
+        var secondRow = rows.Last(r => r.MsgId == ActivityMapper.DiscriminatorFor("name"));
         Assert.Equal(1787000010, secondRow.OccurredAt);
         Assert.Equal(1787000010, secondRow.ObservedAt);
         Assert.Equal(ActivityMapper.DiscriminatorFor("name"), secondRow.MsgId);
@@ -413,7 +415,7 @@ public class CaptureActivityTests : IDisposable
         handler.HandleUpdate(updateJson);
         handler.HandleUpdate(updateJson);
 
-        Assert.Single(cache.GetOutboxRows("activity"));
+        Assert.Equal(2, cache.GetOutboxRows("activity").Count); // 1 name + 1 photo on first observation, replay adds nothing
     }
 
     [Fact]
@@ -440,7 +442,7 @@ public class CaptureActivityTests : IDisposable
 
         // Clear outbox to test exact simultaneous change
         var rowsInitial = cache.GetOutboxRows("activity");
-        Assert.Equal(2, rowsInitial.Count); // initial name and status
+        Assert.Equal(3, rowsInitial.Count); // initial name, status and photo
 
         // Same second: now = 1787000050
         timeProvider.SetUtcNow(DateTimeOffset.FromUnixTimeSeconds(1787000050));
@@ -461,8 +463,8 @@ public class CaptureActivityTests : IDisposable
         }");
 
         var allRows = cache.GetOutboxRows("activity");
-        // 2 initial + 2 new = 4 total rows
-        Assert.Equal(4, allRows.Count);
+        // 3 initial (name, status, photo) + 2 new = 5 total rows
+        Assert.Equal(5, allRows.Count);
 
         var newNameRow = allRows.First(r => r.MsgId == ActivityMapper.DiscriminatorFor("name") && r.OccurredAt == 1787000050);
         var newStatusRow = allRows.First(r => r.MsgId == ActivityMapper.DiscriminatorFor("status") && r.OccurredAt == 1787000050);
@@ -619,9 +621,14 @@ public class CaptureActivityTests : IDisposable
         Thread.Sleep(200);
 
         var rows = cache.GetOutboxRows("activity");
-        Assert.Single(rows);
-        Assert.Equal("888", rows[0].PeerId);
-        Assert.Equal("7053823996", rows[0].AccountId);
+        Assert.Equal(2, rows.Count); // name and photo
+        Assert.All(rows, r =>
+        {
+            Assert.Equal("888", r.PeerId);
+            Assert.Equal("7053823996", r.AccountId);
+        });
+        Assert.Contains(rows, r => r.MsgId == ActivityMapper.DiscriminatorFor("name"));
+        Assert.Contains(rows, r => r.MsgId == ActivityMapper.DiscriminatorFor("photo"));
     }
 
     [Fact]
@@ -657,10 +664,11 @@ public class CaptureActivityTests : IDisposable
         }");
 
         var rows = cache.GetOutboxRows("activity");
-        Assert.Single(rows);
-        Assert.Equal("7053823996", rows[0].AccountId);
-        Assert.Equal("999", rows[0].PeerId);
-        Assert.Contains("EarlyUser", rows[0].PayloadJson);
+        Assert.Equal(2, rows.Count); // name and photo
+        var nameRow = Assert.Single(rows, r => r.MsgId == ActivityMapper.DiscriminatorFor("name"));
+        Assert.Equal("7053823996", nameRow.AccountId);
+        Assert.Equal("999", nameRow.PeerId);
+        Assert.Contains("EarlyUser", nameRow.PayloadJson);
     }
 
     [Fact]

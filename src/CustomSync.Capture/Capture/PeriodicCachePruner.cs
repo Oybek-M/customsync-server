@@ -38,6 +38,7 @@ public class PeriodicCachePruner
             _logger?.LogInformation("Pruned {Count} expired messages from cache (retention: {RetentionDays} days).", count, _retentionDays);
             long now = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
             _cache.SweepPendingEdits(now, _editPairingTimeoutSeconds);
+            _cache.PruneActivityHistory(31);
             return count;
         }
         catch (Exception ex)

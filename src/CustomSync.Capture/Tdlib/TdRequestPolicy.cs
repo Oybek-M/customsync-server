@@ -35,7 +35,9 @@ public static class TdRequestPolicy
         // mark nothing as read or viewed and do not change the online status.
         "optimizeStorage",
         "getStorageStatisticsFast",
-        "setLogVerbosityLevel"
+        "setLogVerbosityLevel",
+        // Parity lookup for profile photo added_date (maps to photos.getUserPhotos; does not alter read state or presence)
+        "getUserProfilePhotos"
     };
 
     public static JsonObject ValidateAndNormalize(string requestJson, ILogger? logger = null)
@@ -167,8 +169,65 @@ public static class TdRequestPolicy
         {
             ValidateSetLogVerbosityLevel(obj, logger);
         }
+        else if (requestType == "getUserProfilePhotos")
+        {
+            ValidateGetUserProfilePhotos(obj, logger);
+        }
 
         return obj;
+    }
+
+    private static readonly HashSet<string> GetUserProfilePhotosAllowedKeys = new(StringComparer.Ordinal)
+    {
+        "@type", "@extra", "user_id", "offset", "limit"
+    };
+
+    private static void ValidateGetUserProfilePhotos(JsonObject obj, ILogger? logger)
+    {
+        foreach (var property in obj)
+        {
+            if (!GetUserProfilePhotosAllowedKeys.Contains(property.Key))
+            {
+                logger?.LogWarning("TDLib getUserProfilePhotos request contains disallowed key '{PropertyName}'.", property.Key);
+                throw new TdRequestNotAllowedException($"getUserProfilePhotos does not allow key '{property.Key}'.");
+            }
+        }
+
+        // user_id: must be JSON Number > 0
+        if (!obj.TryGetPropertyValue("user_id", out var userIdNode) ||
+            userIdNode is null ||
+            userIdNode is not JsonValue userIdVal ||
+            userIdVal.GetValueKind() != JsonValueKind.Number ||
+            !userIdVal.TryGetValue<long>(out var userId) ||
+            userId <= 0)
+        {
+            logger?.LogWarning("TDLib getUserProfilePhotos requires positive integer user_id.");
+            throw new TdRequestNotAllowedException("getUserProfilePhotos requires positive integer user_id.");
+        }
+
+        // offset: must be JSON Number == 0
+        if (!obj.TryGetPropertyValue("offset", out var offsetNode) ||
+            offsetNode is null ||
+            offsetNode is not JsonValue offsetVal ||
+            offsetVal.GetValueKind() != JsonValueKind.Number ||
+            !offsetVal.TryGetValue<int>(out var offset) ||
+            offset != 0)
+        {
+            logger?.LogWarning("TDLib getUserProfilePhotos requires offset == 0.");
+            throw new TdRequestNotAllowedException("getUserProfilePhotos requires offset == 0.");
+        }
+
+        // limit: must be JSON Number == 1
+        if (!obj.TryGetPropertyValue("limit", out var limitNode) ||
+            limitNode is null ||
+            limitNode is not JsonValue limitVal ||
+            limitVal.GetValueKind() != JsonValueKind.Number ||
+            !limitVal.TryGetValue<int>(out var limit) ||
+            limit != 1)
+        {
+            logger?.LogWarning("TDLib getUserProfilePhotos requires limit == 1.");
+            throw new TdRequestNotAllowedException("getUserProfilePhotos requires limit == 1.");
+        }
     }
 
     private static readonly HashSet<string> OptimizeStorageAllowedKeys = new(StringComparer.Ordinal)
