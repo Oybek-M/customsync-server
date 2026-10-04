@@ -32,12 +32,18 @@ public class TestPosixFileSystem : IPosixFileSystem
     public uint CurrentUserId { get; set; } = 1000;
     public Dictionary<string, (uint OwnerUid, UnixFileMode Mode)> PathPermissions { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    // Paths not in PathPermissions behave like Windows unless a test asks
+    // for an unreadable owner/mode.
+    public PathPermissionProbe UnknownPathResult { get; set; } = PathPermissionProbe.NotApplicable;
+    public Exception? SetUmaskFailure { get; set; }
+
     public void SetUmask(int mask)
     {
         lock (UmaskCalls)
         {
             UmaskCalls.Add(mask);
         }
+        if (SetUmaskFailure != null) throw SetUmaskFailure;
     }
 
     public void CreateDirectory0700(string path)
@@ -52,20 +58,22 @@ public class TestPosixFileSystem : IPosixFileSystem
         }
     }
 
-    public uint GetCurrentUserId() => CurrentUserId;
+    public Exception? GetCurrentUserIdFailure { get; set; }
 
-    public bool TryGetPathPermissions(string path, out uint ownerUid, out UnixFileMode mode)
+    public uint GetCurrentUserId() => GetCurrentUserIdFailure != null ? throw GetCurrentUserIdFailure : CurrentUserId;
+
+    public PathPermissionProbe ProbePathPermissions(string path, out uint ownerUid, out UnixFileMode mode)
     {
         var full = Path.GetFullPath(path);
         if (PathPermissions.TryGetValue(full, out var perm))
         {
             ownerUid = perm.OwnerUid;
             mode = perm.Mode;
-            return true;
+            return PathPermissionProbe.Read;
         }
         ownerUid = 0;
         mode = 0;
-        return false;
+        return UnknownPathResult;
     }
 }
 

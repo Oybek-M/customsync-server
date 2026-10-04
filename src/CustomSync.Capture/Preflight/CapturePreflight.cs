@@ -533,18 +533,37 @@ public static class CapturePreflight
         if (string.IsNullOrWhiteSpace(dirPath)) return;
         if (!Directory.Exists(dirPath)) return;
 
-        if (PosixSandbox.Current.TryGetPathPermissions(dirPath, out var ownerUid, out var mode))
-        {
-            var currentUid = PosixSandbox.Current.GetCurrentUserId();
-            if (ownerUid != currentUid)
-            {
-                errors.Add($"{settingName} directory '{dirPath}' is owned by user ID {ownerUid}, but current process user ID is {currentUid}. Directory must be owned by current user.");
-            }
+        var probe = PosixSandbox.Current.ProbePathPermissions(dirPath, out var ownerUid, out var mode);
+        if (probe == PathPermissionProbe.NotApplicable) return;
 
-            if (((int)mode & 0x3F) != 0)
+        uint currentUid = 0;
+        var currentUidKnown = false;
+        if (probe == PathPermissionProbe.Read)
+        {
+            try
             {
-                errors.Add($"{settingName} directory '{dirPath}' has permissions {mode}. Group and other bits are not allowed (expected 0700).");
+                currentUid = PosixSandbox.Current.GetCurrentUserId();
+                currentUidKnown = true;
             }
+            catch (Exception)
+            {
+            }
+        }
+
+        if (!currentUidKnown)
+        {
+            errors.Add($"{settingName} directory '{dirPath}': its owner and permissions cannot be verified (expected 0700, owned by the current user).");
+            return;
+        }
+
+        if (ownerUid != currentUid)
+        {
+            errors.Add($"{settingName} directory '{dirPath}' is owned by user ID {ownerUid}, but current process user ID is {currentUid}. Directory must be owned by current user.");
+        }
+
+        if (((int)mode & 0x3F) != 0)
+        {
+            errors.Add($"{settingName} directory '{dirPath}' has permissions {mode}. Group and other bits are not allowed (expected 0700).");
         }
     }
 
@@ -561,7 +580,12 @@ public static class CapturePreflight
             var configFilePath = Path.Combine(root, fileName);
             if (File.Exists(configFilePath))
             {
-                if (PosixSandbox.Current.TryGetPathPermissions(configFilePath, out _, out var mode))
+                var probe = PosixSandbox.Current.ProbePathPermissions(configFilePath, out _, out var mode);
+                if (probe == PathPermissionProbe.Unreadable)
+                {
+                    errors.Add($"Configuration file '{configFilePath}': its permissions cannot be verified (expected <= 0640).");
+                }
+                else if (probe == PathPermissionProbe.Read)
                 {
                     var forbidden = UnixFileMode.OtherRead | UnixFileMode.OtherWrite | UnixFileMode.OtherExecute | UnixFileMode.GroupWrite;
                     if ((mode & forbidden) != 0)

@@ -16,7 +16,18 @@ public static class CaptureProgram
     public static async Task<int> RunAsync(string[] args, Action<IServiceCollection>? configureServices = null)
     {
         Environment.ExitCode = 0;
-        CustomSync.Capture.Preflight.PosixSandbox.SetUmask0077();
+        try
+        {
+            CustomSync.Capture.Preflight.PosixSandbox.SetUmask0077();
+        }
+        catch (Exception ex)
+        {
+            // umask qo'yilmasa sessiya fayllari boshqalarga o'qiladigan bo'lib
+            // yaratiladi. Ishlamasdan to'xtaymiz: 78 — systemd qayta
+            // ishga tushirmaydi (qayta urinish buni tuzatmaydi).
+            Console.Error.WriteLine($"Cannot set umask 0077 ({ex.GetType().Name}); refusing to start.");
+            return 78;
+        }
         var builder = Host.CreateApplicationBuilder(args);
 
         // Configure native library resolution if specified

@@ -40,13 +40,18 @@ public static class DatabaseEncryptionKey
 
         // Permission check on Unix: if outside $CREDENTIALS_DIRECTORY, group/other bits must not be set
         var credDir = Environment.GetEnvironmentVariable("CREDENTIALS_DIRECTORY");
-        bool isInCredentialsDir = !string.IsNullOrWhiteSpace(credDir) &&
-            path.StartsWith(credDir, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        bool isInCredentialsDir = !string.IsNullOrWhiteSpace(credDir) && IsInsideDirectory(path, credDir);
 
-        if (!isInCredentialsDir && PosixSandbox.Current.TryGetPathPermissions(path, out var ownerUid, out var mode))
+        if (!isInCredentialsDir)
         {
+            var probe = PosixSandbox.Current.ProbePathPermissions(path, out _, out var mode);
+            if (probe == PathPermissionProbe.Unreadable)
+            {
+                return (false, null, $"Telegram:DatabaseEncryptionKeyFile '{path}': its permissions cannot be verified (expected <= 0600).");
+            }
+
             // Group or other bits check (octal 0077 is 0x3F)
-            if ((mode & (UnixFileMode)0x03F) != 0)
+            if (probe == PathPermissionProbe.Read && (mode & (UnixFileMode)0x03F) != 0)
             {
                 return (false, null, $"Telegram:DatabaseEncryptionKeyFile '{path}' has permissions {mode}. Group and other bits must not be set (expected <= 0600).");
             }
@@ -83,5 +88,14 @@ public static class DatabaseEncryptionKey
         }
 
         return (true, content, null);
+    }
+
+    // A plain prefix test let `/run/credentials/x-evil/key` and
+    // `$CREDENTIALS_DIRECTORY/../key` skip the mode check.
+    private static bool IsInsideDirectory(string path, string directory)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var fullDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory)) + Path.DirectorySeparatorChar;
+        return Path.GetFullPath(path).StartsWith(fullDirectory, comparison);
     }
 }

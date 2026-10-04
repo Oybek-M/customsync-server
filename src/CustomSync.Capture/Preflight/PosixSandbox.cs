@@ -2,12 +2,22 @@ using System.Runtime.InteropServices;
 
 namespace CustomSync.Capture.Preflight;
 
+public enum PathPermissionProbe
+{
+    // The platform has no POSIX owner/mode (Windows): nothing to check.
+    NotApplicable,
+    Read,
+    // A POSIX platform, but the owner or mode could not be read. Callers
+    // must treat this as a failed check, never as "nothing to check".
+    Unreadable,
+}
+
 public interface IPosixFileSystem
 {
     void SetUmask(int mask);
     void CreateDirectory0700(string path);
     uint GetCurrentUserId();
-    bool TryGetPathPermissions(string path, out uint ownerUid, out UnixFileMode mode);
+    PathPermissionProbe ProbePathPermissions(string path, out uint ownerUid, out UnixFileMode mode);
 }
 
 public class SystemPosixFileSystem : IPosixFileSystem
@@ -33,16 +43,11 @@ public class SystemPosixFileSystem : IPosixFileSystem
 
     public void SetUmask(int mask)
     {
+        // No catch: a umask that silently failed to apply leaves every file
+        // the session writes readable by others. The entry point reports it.
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
         {
-            try
-            {
-                umask(mask);
-            }
-            catch
-            {
-                // Fallback / ignore if P/Invoke is unavailable
-            }
+            umask(mask);
         }
     }
 
@@ -65,63 +70,50 @@ public class SystemPosixFileSystem : IPosixFileSystem
 
     public uint GetCurrentUserId()
     {
+        // No fallback to 0 on failure: that is root's id and would make a
+        // root-owned directory pass the owner check.
         if (OperatingSystem.IsLinux())
         {
-            try
-            {
-                return geteuid();
-            }
-            catch
-            {
-                return 0;
-            }
+            return geteuid();
         }
         return 0;
     }
 
-    public bool TryGetPathPermissions(string path, out uint ownerUid, out UnixFileMode mode)
+    public PathPermissionProbe ProbePathPermissions(string path, out uint ownerUid, out UnixFileMode mode)
     {
         ownerUid = 0;
         mode = (UnixFileMode)0;
 
         if (OperatingSystem.IsWindows())
         {
-            return false;
+            return PathPermissionProbe.NotApplicable;
+        }
+
+        // Only Linux has the owner read below; elsewhere the owner would be
+        // a guess, so the check cannot pass.
+        if (!OperatingSystem.IsLinux())
+        {
+            return PathPermissionProbe.Unreadable;
         }
 
         try
         {
-            if (File.Exists(path) || Directory.Exists(path))
+            mode = File.GetUnixFileMode(path);
+
+            // AT_FDCWD = -100, STATX_BASIC_STATS = 0x7FF. No fallback to the
+            // process's own id when statx fails: that made the owner check
+            // pass by construction.
+            if (statx(-100, path, 0, 0x7FF, out var stx) != 0)
             {
-                mode = File.GetUnixFileMode(path);
-            }
-            else
-            {
-                return false;
+                return PathPermissionProbe.Unreadable;
             }
 
-            if (OperatingSystem.IsLinux())
-            {
-                // AT_FDCWD = -100, STATX_BASIC_STATS = 0x7FF
-                if (statx(-100, path, 0, 0x7FF, out var stx) == 0)
-                {
-                    ownerUid = stx.stx_uid;
-                }
-                else
-                {
-                    ownerUid = geteuid();
-                }
-            }
-            else
-            {
-                ownerUid = 0;
-            }
-
-            return true;
+            ownerUid = stx.stx_uid;
+            return PathPermissionProbe.Read;
         }
-        catch
+        catch (Exception)
         {
-            return false;
+            return PathPermissionProbe.Unreadable;
         }
     }
 }

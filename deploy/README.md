@@ -251,6 +251,7 @@ systemd-run --pty --same-dir \
     --property=UMask=0077 \
     --property=LoadCredential=tdlib-db-key:/etc/customsync-capture/tdlib-db-key \
     --property=Environment=DOTNET_ENVIRONMENT=Production \
+    --property=Environment=LD_LIBRARY_PATH=/var/www/customsync-capture \
     /usr/bin/dotnet /var/www/customsync-capture/CustomSync.Capture.dll --login
 
 # 2. Sinxronizatsiya qurilmasi sifatida ro'yxatdan o'tish (kod so'raladi):
@@ -313,8 +314,9 @@ Agar sessiyani to'xtatish kerak bo'lsa:
 4. **Eski sessiya qoldiqlarini tozalash:**
    ```bash
    # not yet run — verify during the audit
-   sudo rm -rf /var/lib/customsync-capture/tdlib /var/lib/customsync-capture/files /var/lib/customsync-capture/message-cache.db
+   sudo rm -rf /var/lib/customsync-capture/tdlib /var/lib/customsync-capture/files
    ```
+   `message-cache.db` o'chirilmaydi: unda hali serverga yetmagan yozuvlar bo'lishi mumkin, xuddi shu akkauntga qayta kirilganda u yaroqli qoladi. Uni faqat 7-bo'limdagi buzilish holatida (butun tizim bilan birga) yo'q qiling.
 5. **Qayta kirish:**
    Yuqoridagi 4-banddagi `systemd-run ... --login` buyrug'i orqali yangi sessiya yaratiladi.
 
