@@ -174,6 +174,13 @@ public class CaptureEndToEndTests : CaptureContractTestBase
         }
         """);
 
+        // Update'lar kelish tartibida ketma-ket qayta ishlanadi: oxirgi
+        // (sentinel) xabar keshda ko'rinsa, B, C va D ham qayta ishlangan.
+        // Aks holda A ning qatori paydo bo'lishi bilan quyidagi "yozilmadi"
+        // tekshiruvlari B/C/D hali qayta ishlanmay turib o'tib ketishi mumkin.
+        FeedMessage(1001, 15);
+        Assert.True(await WaitAsync(() => harness.Cache.Get(1001, 15) != null));
+
         // Exactly 1 deleted row in outbox (chat A) and 0 edited rows
         Assert.True(await WaitAsync(() => harness.Cache.GetOutboxRows("deleted").Count == 1));
         Assert.Empty(harness.Cache.GetOutboxRows("edited"));
@@ -844,6 +851,22 @@ public class CaptureEndToEndTests : CaptureContractTestBase
         var v = LoadVectorCase1();
         await using var harness = await CreateCaptureHarnessAsync(masterKey: v.MasterKey);
 
+        // Maintenance TDLib'dan `optimizeStorage` (120 s timeout) va
+        // `getStorageStatisticsFast` (30 s) so'raydi. Javobsiz test ikkala
+        // timeout'ni kutib 2.5 daqiqa yurardi va TDLib hajmlari hisobotga
+        // yetishini umuman tekshirmasdi.
+        harness.Transport.Reply = req => req["@type"]?.GetValue<string>() switch
+        {
+            "optimizeStorage" => new JsonObject { ["@type"] = "storageStatistics", ["size"] = 0, ["count"] = 0 },
+            "getStorageStatisticsFast" => new JsonObject
+            {
+                ["@type"] = "storageStatisticsFast",
+                ["files_size"] = 7340032,
+                ["database_size"] = 1048576
+            },
+            _ => null
+        };
+
         var maintenance = harness.Provider.GetRequiredService<StorageMaintenance>();
         await maintenance.RunOnceAsync();
         var snapshot = maintenance.LatestSnapshot;
@@ -863,5 +886,7 @@ public class CaptureEndToEndTests : CaptureContractTestBase
         Assert.Equal(snapshot.CacheDatabaseBytes, item.GetProperty("cache_db_bytes").GetInt64());
         Assert.Equal(snapshot.MediaStoreBytes, item.GetProperty("media_store_bytes").GetInt64());
         Assert.Equal(snapshot.MediaStoreFiles, item.GetProperty("media_store_files").GetInt32());
+        Assert.Equal(7340032, item.GetProperty("tdlib_files_bytes").GetInt64());
+        Assert.Equal(1048576, item.GetProperty("tdlib_database_bytes").GetInt64());
     }
 }
