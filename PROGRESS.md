@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-05** (laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-06** (PC `DESKTOP-5CAUS66`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -14,6 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 11** — Telegram sessiyasi himoyasi (`5dec700` + tekshiruv `1be6134`, 592 test). 🔴 Tekshiruvda: Linux'da egasi/rejimi o'qilmasa ruxsat tekshiruvlari jim o'tib ketardi (4 ta fail-open) — pastdagi "Plan 05 Task 11 tekshiruvi" |
 | **Keyingi bajariladigan** | VPS tozalash va birgalikdagi xavfsizlik auditi — egasining alohida sessiyasida (loyihaga oid qismlarda TeamLead yordam beradi; VPS buyruqlari faqat ruxsat bilan). Audit tugagach — Task 10 qo'lda tekshiruv ro'yxati (§2 dagi bandlar) |
+| 🟡 VPS auditi (2026-10-05/06, PC) | Read-only audit (3 bosqich) tugadi; kirish yo'li va qoldiqlar aniqlandi, serverda hali hech narsa o'zgartirilmagan. Keyingisi: SSH kalitlar → 0-bosqich hardening (skript tayyor, `plan`/`apply` + avto-rollback). **Tafsilotlar ataylab public repo'ga yozilmaydi** (yopilmagan zaifliklar, sizib chiqqan sir) — faqat PC'dagi `.vps-audit/README.md` (git'dan chiqarilgan) va agent xotirasida |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
