@@ -493,3 +493,6 @@ src/CustomSync.Capture/appsettings.Production.json
 # Linux'da katta-kichik harf farq qiladi, shuning uchun aniq yozamiz.
 backups/
 *.dump
+
+# VPS audit va hardening natijalari (sizib chiqqan sirlar, server tuzilishi) — faqat lokal, hech qachon commit qilinmaydi
+.vps-audit/
