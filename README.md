@@ -47,7 +47,7 @@ undan **ustun turadi** — 11 ta qaror bor.
 
 | Qism | Texnologiya |
 |---|---|
-| `server-backend` | .NET 8 + PostgreSQL |
+| `server-backend` | .NET 10 LTS + PostgreSQL |
 | `server-controller` | Vue 3 + Vite |
 | Deployment | Contabo VPS (Ubuntu), systemd + Nginx |
 

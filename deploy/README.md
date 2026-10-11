@@ -15,6 +15,22 @@ almashtiring.
 
 ## Birinchi o'rnatish
 
+### 0. .NET 10 Runtime
+
+VPS da .NET 10 LTS runtime'lari talab qilinadi (API uchun ASP.NET Core Runtime 10.0, capture uchun .NET Runtime 10.0):
+
+```bash
+# not yet run — decided at deploy
+sudo apt-get update
+sudo apt-get install -y dotnet-runtime-10.0 aspnetcore-runtime-10.0
+```
+
+Yoki Microsoft rasmiy paket repositoriyasi orqali:
+```bash
+# not yet run — decided at deploy
+# https://learn.microsoft.com/dotnet/core/install/linux-ubuntu
+```
+
 ### 1. Foydalanuvchi va kataloglar
 
 ```bash

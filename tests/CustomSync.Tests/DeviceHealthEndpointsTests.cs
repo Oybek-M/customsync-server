@@ -262,7 +262,7 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
         Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
         var list = await getResp.Content.ReadFromJsonAsync<List<JsonElement>>(TestJson.Options);
         Assert.NotNull(list);
-        var entry = Assert.Single(list.Where(e => e.GetProperty("device_id").GetString() == devId));
+        var entry = Assert.Single(list, e => e.GetProperty("device_id").GetString() == devId);
         Assert.False(entry.GetProperty("stale").GetBoolean());
         Assert.Equal(80_000_000L, entry.GetProperty("rss_bytes").GetInt64());
         Assert.Equal(25, entry.GetProperty("media_store_files").GetInt64());
@@ -281,7 +281,7 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
         getResp = await adminClient.GetAsync("/api/v1/devices/health");
         Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
         list = await getResp.Content.ReadFromJsonAsync<List<JsonElement>>(TestJson.Options);
-        entry = Assert.Single(list!.Where(e => e.GetProperty("device_id").GetString() == devId));
+        entry = Assert.Single(list!, e => e.GetProperty("device_id").GetString() == devId);
         Assert.True(entry.GetProperty("stale").GetBoolean());
 
         // Now change setting to 3600 seconds -> stale becomes false again!
@@ -296,7 +296,7 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
             getResp = await adminClient.GetAsync("/api/v1/devices/health");
             Assert.Equal(HttpStatusCode.OK, getResp.StatusCode);
             list = await getResp.Content.ReadFromJsonAsync<List<JsonElement>>(TestJson.Options);
-            entry = Assert.Single(list!.Where(e => e.GetProperty("device_id").GetString() == devId));
+            entry = Assert.Single(list!, e => e.GetProperty("device_id").GetString() == devId);
             Assert.False(entry.GetProperty("stale").GetBoolean(), "With 3600s setting, 2000s age is not stale");
         }
         finally
@@ -322,7 +322,7 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
     public void Test09_Setting_health_stale_after_seconds_exists_with_default_1800()
     {
         var defaults = SettingsService.CreateDefaults();
-        var setting = Assert.Single(defaults.Where(s => s.Key == "health.stale_after_seconds"));
+        var setting = Assert.Single(defaults, s => s.Key == "health.stale_after_seconds");
         Assert.Equal("1800", setting.Value);
         Assert.Equal("int", setting.ValueType);
         Assert.Equal("health", setting.Category);

@@ -525,7 +525,7 @@ public class CaptureProfilePhotoAndStoryTests : IDisposable
             handler.HandleUpdate("""{"@type":"updateUser","user":{"id":2005,"is_contact":true,"profile_photo":{"id":"501"}}}""");
             using var conn = new SqliteConnection($"Data Source={dbPath}");
             conn.Open();
-            Assert.Empty(GetAllOutboxRows(conn, "2005").Where(r => r.MsgId == ActivityMapper.DiscriminatorFor("status")));
+            Assert.DoesNotContain(GetAllOutboxRows(conn, "2005"), r => r.MsgId == ActivityMapper.DiscriminatorFor("status"));
         }
 
         // Rule F: Existing entry at D (both normal status entry and moment before restart) -> skipped

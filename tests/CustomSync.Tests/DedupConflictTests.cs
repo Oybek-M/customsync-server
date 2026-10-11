@@ -50,7 +50,7 @@ public class DedupConflictTests : IClassFixture<DatabaseFixture>
     {
         await using var db = _fixture.CreateContext();
         var page = await new SyncService(db).PullAsync(0, 500);
-        return Assert.Single(page.Records.Where(r => r.PeerHash == peerHash));
+        return Assert.Single(page.Records, r => r.PeerHash == peerHash);
     }
 
     [Fact]

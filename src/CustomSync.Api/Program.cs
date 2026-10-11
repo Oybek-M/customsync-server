@@ -46,8 +46,7 @@ builder.Host.UseSerilog();
 // qo'shtirnoq talab qilardi ("PeerHash"). Bitta unutilgan qo'shtirnoq —
 // runtime xato.
 builder.Services.AddDbContext<SyncDbContext>(o =>
-    o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres"))
-     .UseSnakeCaseNamingConvention());
+    o.ConfigureSyncDb(builder.Configuration.GetConnectionString("Postgres")));
 // HTTP JSON ham snake_case -- spec, .cmx almashuv formati va tdesktop
 // agenti (plan 02) hammasi shu shaklni ishlatadi. Standart camelCase'da
 // qolsa, klient yuborgan "record_id" serverga null bo'lib yetib borardi

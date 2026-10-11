@@ -67,8 +67,7 @@ public class DatabaseFixture : IAsyncLifetime
         // Program.cs bilan AYNAN bir xil bo'lishi shart -- aks holda
         // testlar boshqa sxemaga qarshi ishlaydi.
         var options = new DbContextOptionsBuilder<SyncDbContext>()
-            .UseNpgsql(ConnectionString)
-            .UseSnakeCaseNamingConvention()
+            .ConfigureSyncDb(ConnectionString)
             .Options;
         return new SyncDbContext(options);
     }

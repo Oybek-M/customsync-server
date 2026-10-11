@@ -332,7 +332,7 @@ public class CaptureContractTests : CaptureContractTestBase
         var peerKey = SyncCrypto.DerivePeerKey(v.MasterKey);
 
         // deleted tekshiruvi
-        var delRec = Assert.Single(serverRecords.Where(r => r.Kind == "deleted"));
+        var delRec = Assert.Single(serverRecords, r => r.Kind == "deleted");
         Assert.Equal(101, delRec.MsgId);
         Assert.Equal(now, delRec.OccurredAt);
         Assert.Equal(CryptoPrimitives.ComputePeerHash(peerKey, peerId), delRec.PeerHash);
@@ -343,7 +343,7 @@ public class CaptureContractTests : CaptureContractTestBase
         Assert.Equal("111", delDoc.RootElement.GetProperty("peer_id").GetString());
 
         // edited tekshiruvi
-        var editRec = Assert.Single(serverRecords.Where(r => r.Kind == "edited"));
+        var editRec = Assert.Single(serverRecords, r => r.Kind == "edited");
         Assert.Equal(102, editRec.MsgId);
         Assert.Equal(now + 5, editRec.OccurredAt);
         Assert.Equal(CryptoPrimitives.ComputePeerHash(peerKey, peerId), editRec.PeerHash);
@@ -355,7 +355,7 @@ public class CaptureContractTests : CaptureContractTestBase
         Assert.Equal("111", editDoc.RootElement.GetProperty("peer_id").GetString());
 
         // activity tekshiruvi (§0.12 account_hash bo'sh, §3.2.2 status online)
-        var actRec = Assert.Single(serverRecords.Where(r => r.Kind == "activity"));
+        var actRec = Assert.Single(serverRecords, r => r.Kind == "activity");
         Assert.Equal("", actRec.AccountHash);
         Assert.Equal(CryptoPrimitives.ComputePeerHash(peerKey, "222"), actRec.PeerHash);
         Assert.Equal(ActivityMapper.DiscriminatorFor("status"), actRec.MsgId);

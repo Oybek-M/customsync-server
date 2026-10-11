@@ -357,7 +357,7 @@ public class CaptureStorageMaintenanceTests
         Assert.Equal(1000 + 300, r1.NextAttemptAt);
 
         // Warning logged
-        Assert.Single(logger.Logs.Where(l => l.Level == LogLevel.Warning));
+        Assert.Single(logger.Logs, l => l.Level == LogLevel.Warning);
 
         // Process second row within 10 minutes -> no second warning
         timeProvider.Advance(TimeSpan.FromMinutes(2));
@@ -370,7 +370,7 @@ public class CaptureStorageMaintenanceTests
         Assert.Equal(0, r2.Attempts);
 
         // Still only 1 warning!
-        Assert.Single(logger.Logs.Where(l => l.Level == LogLevel.Warning));
+        Assert.Single(logger.Logs, l => l.Level == LogLevel.Warning);
     }
 
     // 6. Disk guard, budget: existing downloaded sizes + row size > MaxTotalBytes -> deferred, no attempt spent

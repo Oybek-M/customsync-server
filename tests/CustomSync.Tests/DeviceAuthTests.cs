@@ -95,13 +95,13 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
 
         var results = await Task.WhenAll(Attempt("birinchi"), Attempt("ikkinchi"));
 
-        Assert.Single(results.Where(r => r is not null));
+        Assert.Single(results, r => r is not null);
 
         // Fixture bazasi shu klassdagi barcha testlarga umumiy, shuning
         // uchun faqat SHU testning qurilmalari sanaladi.
         await using var check = _fixture.CreateContext();
         var devices = await new DeviceService(check, new SettingsService(check), new DeviceRevocationCache()).ListAsync();
-        Assert.Single(devices.Where(d => d.Name is "birinchi" or "ikkinchi"));
+        Assert.Single(devices, d => d.Name is "birinchi" or "ikkinchi");
     }
 
     /// <summary>
