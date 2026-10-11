@@ -8,17 +8,17 @@ Oxirgi yangilanish: **2026-10-11** (laptop `DESKTOP-L2J53IK`)
 **Hozir:** `dotnet test` → **592 test, hammasi o'tadi** (2 Linux-only skip, jami 594; bitta ma'lum beqaror server testi — §5). `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-10-05, laptop `DESKTOP-L2J53IK`)
+### ▶️ Qayerda to'xtadik (2026-10-11, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 11** — Telegram sessiyasi himoyasi (`5dec700` + tekshiruv `1be6134`, 592 test). 🔴 Tekshiruvda: Linux'da egasi/rejimi o'qilmasa ruxsat tekshiruvlari jim o'tib ketardi (4 ta fail-open) — pastdagi "Plan 05 Task 11 tekshiruvi" |
-| **Keyingi bajariladigan** | VPS hardening'ning keyingi bosqichi (egasi bilan, ro'yxat lokal `.vps-audit/README.md` da); parallel — customsync deploy tayyorgarligi. 🔴 **Qaror kerak (egasi bilan):** .NET 8 qo'llab-quvvatlashi 2026-11-10 da tugaydi — customsync'ni .NET 10 ga o'tkazish. Keyin Task 10 qo'lda tekshiruv ro'yxati (§2 dagi bandlar) |
+| **Keyingi bajariladigan** | **Plan 05 Task 12** — butun solution'ni .NET 10 LTS ga o'tkazish (deploy'dan oldin; .NET 8 qo'llab-quvvatlashi 2026-11-10 da tugaydi, egasi 2026-10-11 da qaror qildi). Prompt tayyor: `docs/05-task12-prompt.md` (Gemini). Parallel — VPS hardening'ning keyingi bosqichi (egasi bilan, ro'yxat lokal `.vps-audit/README.md` da). Keyin customsync deploy tayyorgarligi va Task 10 qo'lda tekshiruv ro'yxati (§2 dagi bandlar) |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
-| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 ✅, 10 ⏸ (bloklangan) |
+| Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 ✅, 12 📝 (prompt tayyor), 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
 | ⚠️ PC muhiti | NuGet fallback papkasi E: da yo'qolgan — build yiqilsa §7 dagi aylanib o'tish |
 | ⚠️ Laptop muhiti (2026-10-01) | Laptop'dagi tdesktop nusxasi `origin` dan 18 commit orqada, ya'ni `test-vectors.json` da `key_wrap`/`fingerprint`/`discriminator` yo'q va 17 test yiqiladi (kod emas). tdesktop'ga bu sessiyadan tegilmaydi: `git -C C:\TBuild\tdesktop show origin/Oybek:docs/sync-protocol/test-vectors.json > <repo tashqarisi>` va `CUSTOMSYNC_TEST_VECTORS` — shunda hammasi o'tadi. Doimiy yechim: tdesktop o'z sessiyasida pull qilinsin. Eski test yurishlari qoldirgan papkalar (repo'ga aloqasiz, egasi o'chirishi mumkin): `C:\var\lib\customsync-capture` (`message-cache.db` 2026-09-26, bo'sh `media` 2026-10-02) va `C:\var\lib\customsync\media` (server testlari 2026-10-03 dan beri yozmaydi — §8 band 43) |
