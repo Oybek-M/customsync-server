@@ -52,7 +52,7 @@ Sabab: nusxa eskiradi va ikki loyiha sezdirmay uzoqlashadi.
   shuning uchun bu papka endi bo'sh konteyner — maxfiy kalitlar
   bilan bir joyda emas)
 - **tdesktop repo:** `C:\TBuild\tdesktop`, branch `Oybek`
-- **Stack:** .NET 8 + PostgreSQL, Vue 3 + Vite
+- **Stack:** .NET 10 LTS + PostgreSQL, Vue 3 + Vite (2026-10-12 dan; plan 05 Task 12)
 - **VPS:** Contabo (Ubuntu), `/var/www/`, systemd, Nginx
 
 ## Buzilmaydigan qoidalar
