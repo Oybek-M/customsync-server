@@ -1,22 +1,23 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-11** (laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-13** (laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
 
-**Hozir:** `dotnet test` → **600 test, hammasi o'tadi** (2 Linux-only skip, jami 602; bitta ma'lum beqaror server testi — §5). `dotnet build` → 0 warning.
+**Hozir:** `dotnet test` → **602 test, hammasi o'tadi** (2 Linux-only skip, jami 604; bitta ma'lum beqaror server testi — §5). `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-10-12, laptop `DESKTOP-L2J53IK`)
+### ▶️ Qayerda to'xtadik (2026-10-13, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
+| **Oxirgi TeamLead tuzatishi** | `3d90e45` — interaktiv `--login` ga 15 daqiqa (avval hamma rejimda 2 daqiqa edi: sekin kiritilgan kod yarim yo'lda kesilardi, qayta urinish yangi kod so'rardi → FLOOD_WAIT xavfi). §8, 49-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | VPS hardening'ning keyingi bosqichi (egasi bilan, ro'yxat lokal `.vps-audit/README.md` da). Keyin customsync deploy tayyorgarligi (VPS'ga .NET 10 runtime 8.0 yonida — `deploy/README.md`, 0-band) va Task 10 qo'lda tekshiruv ro'yxati (§2 dagi bandlar) |
+| **Keyingi bajariladigan** | **Capture deploy (egasi bilan, 2026-10-13 kechqurun).** Egasi qarori: capture zudlik bilan kerak. Kit va qadamma-qadam tartib lokal `.vps-audit/` da (public repo'ga kirmaydi). Birinchi deploy self-contained linux-x64 (VPS'dagi boshqa .NET ilovalarning paketlariga tegmaslik uchun), TDLib 1.8.67 (`bc9c263`) — egasi o'zi build qiladi. Sync hozircha o'chiq: enroll va `--set-key` tdesktop serverga ulangach (domen + TLS). Undan keyin VPS hardening'ning keyingi bosqichlari |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
-| 🔴 DEPLOY TO'XTATILGAN | VPS 2026-09 da buzilgan (miner). Birgalikdagi to'liq xavfsizlik auditisiz VPS'ga hech narsa deploy qilinmaydi va ishga tushirilmaydi — pastdagi "Deploy oldidan xavfsizlik auditi" bo'limi |
+| 🟡 DEPLOY — shartli ruxsat (2026-10-13) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi. Shart: hosting paneli 2FA, root paroli, Telegram 2FA — `telegram` qadami shuni so'raydi va tasdiqsiz to'xtaydi. Qolgan sirlarni almashtirish deploy'dan keyin davom etadi (lokal `.vps-audit/`) |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 ✅, 12 ✅, 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
@@ -2001,6 +2002,16 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - API: `ArchiveJobService` har iteratsiyada istisnoni o'zi ushlaydi, `customsync.service` da `Restart=always` — muammo yo'q (hisobotda bu savolga javob berilmagan edi).
       - Hujjatlar: delegate Task 11 ning ochiq VPS bandini (`RestartPreventExitStatus=78`) o'chirib yuborgan edi — tiklandi; yana o'zini "12 ✅" deb belgilagan; `deploy/README.md` ga 10.0 runtime 8.0 yonida o'rnatilishi sharti qo'shildi.
       - Hisobot noaniqliklari: paketlar jadvalidagi "eski versiya" ustuni noto'g'ri (`8.0.*`/`17.8.0`/`2.5.3` o'rniga `8.0.8`…), test raqamlari aralashgan, breaking-change jadvali URL'lar bilan berilmagan. Analyzer tuzatishlari (`Assert.Single(x, p)`, `Assert.DoesNotContain`) ma'noni o'zgartirmagan — tekshirildi.
+
+49. **Capture deploy tayyorgarligi (TeamLead, 2026-10-13)** — `3d90e45`.
+    - **`--login` muddati:** `AuthorizationGate` barcha rejimda 2 daqiqa kutardi. `--login` da egasi raqam, kod va 2FA parolni qo'lda kiritadi — sekin kiritish yarim yo'lda kesilib, qayta urinish Telegram'dan yangi kod so'rardi (ketma-ket so'rov → FLOOD_WAIT). Endi interaktiv rejimda 15 daqiqa, fon rejimida 2 daqiqa (`AuthorizationTimeouts`). Gate qancha kutishini o'zi logga yozadi; `CaptureProgramTests.Test05` (ikki holat) shu logni o'qiydi.
+      - Mutatsiyalar (hammasi ushlandi): Worker `For(false)` bersa; `IsInteractive` doim `false` bo'lsa; Worker gate'ga doimiy 2 daqiqa bersa; `Interactive` 2 daqiqa bo'lsa. Birinchi variantda log Worker'da edi va uchinchi mutatsiya o'tib ketdi — shuning uchun log gate'ning o'ziga ko'chirildi.
+    - 🔴 **TDLib dalillaridagi commit mavjud emas:** 46-banddagi `github.com/tdlib/td, commit 7e997f0 / v1.8.30` — GitHub API: `No commit found for SHA: 7e997f0` (422). Haqiqiy "Update version to 1.8.30." = `fab354a` (2024-05-27). Delegate keltirgan TDLib xulosalari shu sabab tasdiqlanmagan deb hisoblanadi; ularni birinchi haqiqiy ishga tushirish ko'rsatadi.
+    - **TDLib versiyasi:** deploy uchun 1.8.67 (`bc9c263e2bfee06aaab41e82db51a103376030bc`, 2026-08-24). Sabab: 2024 yilgi build bilan hozirgi Telegram serverlariga login qilish xavfli. `setTdlibParameters` da ishlatiladigan maydonlar (`database_directory` … `use_secret_chats`, `database_encryption_key`) ikkala versiyada ham bor. Eng yangi 1.8.68 olinmadi — 5 kunlik.
+    - **Login holat mashinasi:** `WaitTdlibParameters/PhoneNumber/Code/Password/Ready/Closed` qo'llanadi. `authorizationStateWaitEmailAddress` / `WaitEmailCode` (Telegram login uchun email talab qilsa) kelsa — `Unsupported authorization state` bilan to'xtaydi. Odatiy holatda (faol sessiyalar bor) kod ilovaga keladi; email talab qilinsa kod o'zgarishi kerak (ochiq).
+    - **Self-contained publish:** birinchi deploy `-r linux-x64 --self-contained` (.NET 10.0.12). Unit'lar o'zgarmadi, drop-in faqat `ExecStart` ni apphost'ga almashtiradi. Runtime yamoqlari uchun qayta publish kerak (framework-dependent'ga keyin qaytish mumkin). Arxivga `appsettings.Development.json` kirmaydi.
+    - **Sync'siz capture:** scope `DefaultEnabled=true` (synced snapshot bo'lmasa hech narsa ushlanmasdi). Media faqat `Capture:Media:PeerIds` dagi chatlar uchun, bitta fayl ≤ 25 MiB. O'chirish yozuvlari `capture_outbox` da sync'gacha qoladi: retention ularga va ularning media'siga tegmaydi (`ApplyMediaRetention`, Rule 4).
+    - Ochiq: haqiqiy `libtdjson.so` bilan birinchi ishga tushirish (47-banddagi band shu bilan yopiladi); email-login holatlari; `PeerIds` siz "barcha shaxsiy chatlar media'si" rejimi (egasi xohlasa — alohida vazifa).
 
 ---
 

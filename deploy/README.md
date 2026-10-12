@@ -34,6 +34,30 @@ Yoki Microsoft rasmiy paket repositoriyasi orqali:
 # https://learn.microsoft.com/dotnet/core/install/linux-ubuntu
 ```
 
+#### 0a. Muqobil: self-contained publish (birinchi deploy shu yo'l bilan)
+
+Agar VPS paketlariga tegish istalmasa (boshqa .NET ilovalar bor, paket manbai
+hali tartibga keltirilmagan), runtime ilova ichida yetkaziladi va `/usr/bin/dotnet`
+kerak bo'lmaydi:
+
+```bash
+dotnet publish src/CustomSync.Api -c Release -r linux-x64 --self-contained true -o ./publish/api
+dotnet publish src/CustomSync.Capture -c Release -r linux-x64 --self-contained true -o ./publish/capture
+```
+
+`appsettings.Development.json` VPS'ga ko'chirilmaydi. Unit fayllar o'zgarmaydi — faqat drop-in qo'shiladi
+(`/etc/systemd/system/customsync.service.d/20-self-contained.conf`):
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/var/www/customsync/CustomSync.Api
+```
+
+Capture uchun ham xuddi shunday (`/var/www/customsync-capture/CustomSync.Capture`); pastdagi
+`systemd-run` buyruqlarida ham `/usr/bin/dotnet ….dll` o'rniga shu fayl yoziladi.
+Kamchiligi: runtime xavfsizlik yamoqlari apt orqali kelmaydi — ular uchun qayta publish kerak.
+
 ### 1. Foydalanuvchi va kataloglar
 
 ```bash
@@ -199,7 +223,7 @@ avtomatlashtiradi.
 
 ## Capture xizmati (customsync-capture)
 
-⚠️ **OGOHLANTIRISH: Birgalikdagi xavfsizlik auditi (joint security audit) yakunlanmaguncha VPS ga deploy qilish TO'XTATILGAN.** Capture xizmati egasining Telegram akkauntiga to'liq kirish huquqiga va master kalitga ega.
+⚠️ **OGOHLANTIRISH:** capture xizmati egasining Telegram akkauntiga to'liq kirish huquqiga va master kalitga ega. Deploy faqat shartli: xavfsizlik auditi va hardening'dan keyin, hosting paneli 2FA, VPS root paroli va Telegram 2FA tayyor bo'lgach (egasi qarori, 2026-10-13).
 Quyidagi barcha buyruqlar hali jonli tizimda bajarilmagan — ularni audit davomida tekshiring.
 
 ---
@@ -250,6 +274,10 @@ Agar 2FA yoqilgan bo'lsa, TDLib telefon va SMS koddan so'ng bulutli parolni ham 
 ---
 
 ### 4. Xavfsiz login va sozlash buyruqlari (`systemd-run --pty`)
+
+`--login` da raqam, kod va 2FA parolni kiritish uchun 15 daqiqa beriladi (fon rejimida 2 daqiqa).
+`--login` buyruqning **oxirida** tursin: qiymatsiz kalit o'zidan keyingi argumentni qiymat qilib yutadi.
+Login tugab, `Capture service authorized and running.` chiqqach, Ctrl+C bilan to'xtatib, xizmatni yoqing.
 
 `--login` buyrug'i oddiy terminalda `sudo -u` bilan bajarilsa, umask (odatda 0022) ochiq qolishi, `StateDirectory` va systemd `LoadCredential` sozlamalari ishlamay qolishi mumkin.
 Shu sababli, CLI buyruqlarini xizmatning o'zi bilan **bir xil sandbox muhitida** ishga tushirish uchun `systemd-run --pty` dan foydalaning:
