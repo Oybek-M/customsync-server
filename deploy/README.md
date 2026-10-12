@@ -17,12 +17,15 @@ almashtiring.
 
 ### 0. .NET 10 Runtime
 
-VPS da .NET 10 LTS runtime'lari talab qilinadi (API uchun ASP.NET Core Runtime 10.0, capture uchun .NET Runtime 10.0):
+VPS da .NET 10 LTS runtime'lari talab qilinadi (`customsync.service` — ASP.NET Core Runtime 10.0, `customsync-capture.service` — .NET Runtime 10.0).
+
+⚠️ VPS da boshqa .NET 8 ilovalar ishlaydi: 10.0 runtime 8.0 **yonida** o'rnatiladi, 8.0 o'chirilmaydi va almashtirilmaydi. O'rnatishdan keyin `dotnet --list-runtimes` da 8.0.x ham, 10.0.x ham ko'rinishi kerak. Paket manbai (Ubuntu arxivi yoki Microsoft repo'si) deploy paytida hal qilinadi — quyidagi buyruqlar hali sinalmagan:
 
 ```bash
 # not yet run — decided at deploy
 sudo apt-get update
 sudo apt-get install -y dotnet-runtime-10.0 aspnetcore-runtime-10.0
+dotnet --list-runtimes
 ```
 
 Yoki Microsoft rasmiy paket repositoriyasi orqali:

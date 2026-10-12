@@ -34,11 +34,25 @@ public class PlatformUpgradeTests
     [Fact]
     public void Test02_SyncDbContext_Has_No_Pending_Model_Changes()
     {
-        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<CustomSync.Data.SyncDbContext>()
-            .ConfigureSyncDb()
-            .Options;
+        // Production'dagi `AddDbContext` generic bo'lmagan builder beradi — test
+        // aynan o'sha overload orqali sozlaydi (ulanish ochilmaydi). Ilgari test
+        // generic nusxani tekshirardi: production nusxasidan snake_case olib
+        // tashlansa ham bu test o'tib ketardi.
+        var builder = new DbContextOptionsBuilder<SyncDbContext>();
+        ((DbContextOptionsBuilder)builder).ConfigureSyncDb("Host=unused");
 
-        using var db = new CustomSync.Data.SyncDbContext(options);
+        using var db = new SyncDbContext(builder.Options);
         Assert.False(db.Database.HasPendingModelChanges());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Test03_Missing_connection_string_fails_instead_of_using_a_default(string? connectionString)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new DbContextOptionsBuilder<SyncDbContext>().ConfigureSyncDb(connectionString));
+        Assert.Contains("ConnectionStrings:Postgres", ex.Message);
     }
 }

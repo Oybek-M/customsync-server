@@ -79,7 +79,7 @@ public class CaptureProgramTests
     }
 
     [Fact]
-    public async Task Test02_Unexpected_exception_before_first_await_exits_nonzero_or_throws()
+    public async Task Test02_Unexpected_exception_before_first_await_exits_with_1()
     {
         var originalExitCode = Environment.ExitCode;
         Environment.ExitCode = 0;
@@ -91,25 +91,16 @@ public class CaptureProgramTests
             File.WriteAllText(keyPath, Convert.ToBase64String(new byte[32]));
             var args = BuildValidArgs(tempDir, keyPath);
 
-            int exitCode;
-            try
+            // .NET 10 da `Worker` dan chiqqan istisnoni xostning o'zi ushlaydi va
+            // jarayon 0 bilan tugaydi; `Worker` uni 1 ga aylantiradi. Har qanday
+            // istisnoni "o'tdi" deb qabul qilish test tayyorgarligidagi xatoni ham
+            // yashirardi — shuning uchun aniq kod tekshiriladi.
+            var exitCode = await CaptureProgram.RunAsync(args, services =>
             {
-                exitCode = await CaptureProgram.RunAsync(args, services =>
-                {
-                    services.AddSingleton<INativeLibraryProbe>(new CrashingProbe());
-                }).WaitAsync(TimeSpan.FromSeconds(10));
-            }
-            catch (TimeoutException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                // Throwing is also allowed ("RunAsync must return non-zero or throw — never 0")
-                return;
-            }
+                services.AddSingleton<INativeLibraryProbe>(new CrashingProbe());
+            }).WaitAsync(TimeSpan.FromSeconds(10));
 
-            Assert.NotEqual(0, exitCode);
+            Assert.Equal(1, exitCode);
         }
         finally
         {
@@ -132,7 +123,7 @@ public class CaptureProgramTests
     }
 
     [Fact]
-    public async Task Test03_Unexpected_exception_after_startup_exits_nonzero_or_throws()
+    public async Task Test03_Unexpected_exception_after_startup_exits_with_1()
     {
         var originalExitCode = Environment.ExitCode;
         Environment.ExitCode = 0;
@@ -166,30 +157,15 @@ public class CaptureProgramTests
                 ["authorization_state"] = new JsonObject { ["@type"] = "authorizationStateReady" }
             }.ToJsonString());
 
-            int exitCode;
-            try
+            var exitCode = await CaptureProgram.RunAsync(args, services =>
             {
-                var runTask = CaptureProgram.RunAsync(args, services =>
-                {
-                    services.AddSingleton<INativeLibraryProbe>(new FixedProbe(true));
-                    services.AddSingleton<ITdTransport>(transport);
-                    services.AddSingleton<CustomSync.Capture.Capture.ProfilePhotoLookup>(sp =>
-                        new CrashingProfilePhotoLookup(sp.GetRequiredService<CustomSync.Capture.Capture.MessageCache>()));
-                });
+                services.AddSingleton<INativeLibraryProbe>(new FixedProbe(true));
+                services.AddSingleton<ITdTransport>(transport);
+                services.AddSingleton<CustomSync.Capture.Capture.ProfilePhotoLookup>(sp =>
+                    new CrashingProfilePhotoLookup(sp.GetRequiredService<CustomSync.Capture.Capture.MessageCache>()));
+            }).WaitAsync(TimeSpan.FromSeconds(10));
 
-                exitCode = await runTask.WaitAsync(TimeSpan.FromSeconds(10));
-            }
-            catch (TimeoutException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                // Throwing is also allowed ("RunAsync must return non-zero or throw — never 0")
-                return;
-            }
-
-            Assert.NotEqual(0, exitCode);
+            Assert.Equal(1, exitCode);
         }
         finally
         {
