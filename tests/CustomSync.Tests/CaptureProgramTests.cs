@@ -5,6 +5,7 @@ using CustomSync.Capture.Preflight;
 using CustomSync.Capture.Tdlib;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Xunit;
 
 namespace CustomSync.Tests;
@@ -222,6 +223,94 @@ public class CaptureProgramTests
         {
             Environment.ExitCode = originalExitCode;
             try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    // `--login` da egasi telefon raqami, kod va 2FA parolini qo'lda kiritadi.
+    // Fon rejimining 2 daqiqalik chegarasi bu yerda ham amal qilsa, sekin
+    // kiritish yarim yo'lda kesiladi, qayta urinish esa Telegram'dan yangi
+    // kod so'raydi (ketma-ket so'rovlar FLOOD_WAIT ga olib keladi).
+    // Muddat `AuthorizationGate` ning o'z logidan olinadi: u haqiqatda
+    // kutadigan qiymatni yozadi, ya'ni `Worker` boshqa qiymat bersa ham,
+    // umuman bermasa ham test yiqiladi.
+    [Theory]
+    [InlineData(true, 900)]
+    [InlineData(false, 120)]
+    public async Task Test05_Authorization_wait_is_long_only_for_interactive_login(bool interactive, int expectedSeconds)
+    {
+        var originalExitCode = Environment.ExitCode;
+        Environment.ExitCode = 0;
+        var tempDir = Path.Combine(Path.GetTempPath(), "cs-program-authwait-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var keyPath = Path.Combine(tempDir, "key.txt");
+            File.WriteAllText(keyPath, Convert.ToBase64String(new byte[32]));
+            var args = BuildValidArgs(tempDir, keyPath);
+            if (interactive)
+            {
+                // Oxirida turishi shart: qiymatsiz kalit keyingi argumentni
+                // o'z qiymati qilib yutib yuboradi.
+                args = [.. args, "--login"];
+            }
+
+            var transport = new FakeRecordingTdTransport { AutoRepeatReadyState = true };
+            transport.OnSend = (clientId, reqJson) =>
+            {
+                using var doc = JsonDocument.Parse(reqJson);
+                var root = doc.RootElement;
+                var type = root.GetProperty("@type").GetString();
+                var extra = root.TryGetProperty("@extra", out var ex) ? ex.GetString() : null;
+
+                if (type == "getOption")
+                    return new JsonObject { ["@type"] = "optionValueBoolean", ["value"] = false, ["@extra"] = extra }.ToJsonString();
+
+                return new JsonObject { ["@type"] = "ok", ["@extra"] = extra }.ToJsonString();
+            };
+
+            transport.IncomingQueue.Enqueue(new JsonObject
+            {
+                ["@type"] = "updateAuthorizationState",
+                ["authorization_state"] = new JsonObject { ["@type"] = "authorizationStateReady" }
+            }.ToJsonString());
+
+            var logs = new RecordingLoggerProvider();
+            var exitCode = await CaptureProgram.RunAsync(args, services =>
+            {
+                services.AddSingleton<INativeLibraryProbe>(new FixedProbe(true));
+                services.AddSingleton<ITdTransport>(transport);
+                services.AddSingleton<ILoggerProvider>(logs);
+                services.AddHostedService<StoppingService>();
+            }).WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains($"Waiting up to {expectedSeconds} seconds for Telegram authorization.", logs.Messages);
+        }
+        finally
+        {
+            Environment.ExitCode = originalExitCode;
+            try { Directory.Delete(tempDir, recursive: true); } catch { }
+        }
+    }
+
+    private sealed class RecordingLoggerProvider : ILoggerProvider
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _messages = new();
+
+        public IReadOnlyCollection<string> Messages => _messages.ToArray();
+
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(_messages);
+
+        public void Dispose() { }
+
+        private sealed class RecordingLogger(System.Collections.Concurrent.ConcurrentQueue<string> messages) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+                => messages.Enqueue(formatter(state, exception));
         }
     }
 

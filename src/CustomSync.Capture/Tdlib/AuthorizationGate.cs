@@ -22,6 +22,10 @@ public class AuthorizationGate(
 {
     public async Task<AuthorizationOutcome> RunAsync(TimeSpan timeout, CancellationToken ct = default)
     {
+        // Qancha kutilishini kutadigan joyning o'zi aytadi: `--login` da egasi
+        // muddatni ko'radi, testlar esa aynan shu qiymatni tekshiradi.
+        logger?.LogInformation("Waiting up to {Seconds} seconds for Telegram authorization.", (int)timeout.TotalSeconds);
+
         var completion = new TaskCompletionSource<AuthorizationOutcome>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 

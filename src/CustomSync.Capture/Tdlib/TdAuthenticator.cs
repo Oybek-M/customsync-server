@@ -19,6 +19,7 @@ public class TdAuthenticator
 
     public bool IsReady { get; private set; }
     public bool IsClosed { get; private set; }
+    public bool IsInteractive => _isInteractive;
 
     public TdAuthenticator(
         ITdClient client,

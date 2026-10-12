@@ -87,7 +87,7 @@ public class Worker : BackgroundService
             var gate = new AuthorizationGate(client, authenticator,
                 _services.GetService<ILogger<AuthorizationGate>>());
 
-            var outcome = await gate.RunAsync(TimeSpan.FromMinutes(2), stoppingToken);
+            var outcome = await gate.RunAsync(AuthorizationTimeouts.For(authenticator.IsInteractive), stoppingToken);
             if (!outcome.Ready)
             {
                 _logger.LogError(
