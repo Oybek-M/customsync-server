@@ -200,6 +200,12 @@ tail -f /var/www/customsync/logs/customsync-*.log   # Serilog
 Serilog oxirgi 14 ta kunlik faylni saqlaydi (`RetainedFileCountLimit`),
 ya'ni alohida logrotate sozlash shart emas.
 
+Yangi bazada birinchi startda bitta `ERR Failed executing DbCommand … FROM "__EFMigrationsHistory"`
+chiqadi — bu normal: EF Core tarix jadvalini o'qiy olmagach uni yaratadi va migratsiyalarni qo'llaydi
+(ortidan `Applying migration '…_InitialSchema'`). Keyingi startlarda takrorlanmaydi.
+Hozircha har SQL buyrug'i `INF Executed DbCommand` sifatida ham yoziladi (parametr qiymatlarisiz);
+darajani pasaytirish ochiq — `PROGRESS.md` §8, 51-band.
+
 ---
 
 ## Zaxira
@@ -282,7 +288,7 @@ U `--login` ni ko'rsatib `78` bilan to'xtaydi; buning uchun tarmoq kerak emas.
 TDLib ma'lumotlar bazasi diskda shifrlangan holda saqlanishi shart. Kalit kamida 32 baytlik tasodifiy ma'lumotning base64 satridan iborat bo'lishi kerak:
 
 ```bash
-# not yet run — verify during the audit
+# 2026-10-14: birinchi deploy'da shu natija deploy skripti bilan yaratildi (papka 0700, kalit 0400 root:root)
 sudo mkdir -p /etc/customsync-capture
 sudo chmod 0700 /etc/customsync-capture
 openssl rand -base64 32 | sudo tee /etc/customsync-capture/tdlib-db-key > /dev/null
@@ -319,7 +325,9 @@ Shu sababli, CLI buyruqlarini xizmatning o'zi bilan **bir xil sandbox muhitida**
 cd /var/www/customsync-capture
 
 # 1. Telegram sessiyasiga kirish (telefon, kod, 2FA parol so'raladi):
-# not yet run — verify during the audit
+# 2026-10-15: birinchi login deploy skripti orqali bajarildi — shu xususiyatlar va unit'ning
+# qolgan [Service] cheklovlari bilan; self-contained'da oxirgi qator:
+# /var/www/customsync-capture/CustomSync.Capture --login
 systemd-run --pty --same-dir \
     --unit=customsync-capture-login \
     --service-type=exec \

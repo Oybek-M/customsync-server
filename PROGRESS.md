@@ -1,6 +1,6 @@
 # Implement holati — bu fayldan boshlang
 
-Oxirgi yangilanish: **2026-10-14** (laptop `DESKTOP-L2J53IK`)
+Oxirgi yangilanish: **2026-10-15** (laptop `DESKTOP-L2J53IK`)
 
 > Bu fayl `customsync-server` ichidagi ish holatini kuzatadi.
 > Protokol holati (barcha loyihalar bo'ylab) — `tdesktop/docs/sync-protocol/STATUS.md`.
@@ -8,16 +8,16 @@ Oxirgi yangilanish: **2026-10-14** (laptop `DESKTOP-L2J53IK`)
 **Hozir:** `dotnet test` → **617 test, hammasi o'tadi** (2 Linux-only skip, jami 619; bitta ma'lum beqaror server testi — §5). `dotnet build` → 0 warning.
 Branch `Oybek`, ish daraxti toza.
 
-### ▶️ Qayerda to'xtadik (2026-10-14, laptop `DESKTOP-L2J53IK`)
+### ▶️ Qayerda to'xtadik (2026-10-15, laptop `DESKTOP-L2J53IK`)
 
 | | |
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | **Capture deploy — navbat egasida.** TDLib 1.8.67 (`bc9c263`) build qilindi va tekshirildi (TeamLead, egasi topshirig'i bilan, 2026-10-14), kit `87f24c2` bilan qayta yig'ildi va haqiqiy kutubxona bilan sinaldi. Egasi: VPS'da plan → apply → telegram (interaktiv) → status; fayllar va tartib lokal `.vps-audit/` da (public repo'ga kirmaydi). Birinchi deploy self-contained linux-x64. Sync hozircha o'chiq: enroll va `--set-key` tdesktop serverga ulangach (domen + TLS). Undan keyin VPS hardening'ning keyingi bosqichlari |
+| **Keyingi bajariladigan** | ✅ **Deploy bajarildi (2026-10-14/15): API va capture VPS'da ishlayapti, xabarlar ushlanmoqda** (self-contained linux-x64, TDLib 1.8.67, Telegram login egasi tomonidan; §8, 51-band). Navbatda: (1) VPS hardening'ning keyingi bosqichlari va qolgan sirlarni almashtirish — lokal `.vps-audit/`; (2) EF Core SQL log darajasi (51-band kuzatuvi) — sync yoqilishidan oldin; (3) domen + TLS → tdesktop enroll, capture `--enroll`/`--set-key`, sync yoqiladi |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
-| 🟡 DEPLOY — shartli ruxsat (2026-10-13) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi. Shart: hosting paneli 2FA, root paroli, Telegram 2FA — `telegram` qadami shuni so'raydi va tasdiqsiz to'xtaydi. **Shartlarni egasi 2026-10-13 kunduzi bajardi.** Qolgan sirlarni almashtirish deploy'dan keyin davom etadi (lokal `.vps-audit/`) |
+| ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
 | ✅ tdesktop javoblari (2026-09-29, `7db70efae8`) | (1) scope `setting` lar tdesktop'da GLOBAL, har startda har akkaunt nomidan qayta yuboriladi (spec §3.2.1a) → **6b qarori:** `account_hash` bo'yicha FILTRLANMAYDI, har kalit uchun eng katta `occurred_at` (teng bo'lsa `record_id`) g'olib; (2) master kalit faqat parol o'ramidan (spec §4.4.0) — vektorlarni 2026-09-30 da o'zim mustaqil tekshirdim (FP 3/3, unwrap 2/2, noto'g'ri parol rad etiladi) |
 | Plan 05 holati | 1–2 ✅, 3 ✅, 4a ✅, 4b ✅, 5 ✅, 4c ✅, 6a ✅, 6a-2 ✅, 6b ✅, 7 ✅, 8 ✅, 9a ✅, 9b ✅, 10a ✅, 10b ✅, 4d ✅, 11 ✅, 12 ✅, 10 ⏸ (bloklangan) |
 | Kelishilgan umumiy tartib | `04 → 05 → 03 → read_at → TO'LIQ DEPLOY` |
@@ -1102,9 +1102,12 @@ Auditda hal qilinadigan savollar:
   TDLib sig'adimi, `StateDirectory` egasi; CLI buyruqlari
   (`--login`/`--enroll`/`--set-key`) `cd /var/www/customsync-capture`
   dan va kod/parol faqat interaktiv (README).
+  *(2026-10-15: birinchi start muvaffaqiyatli — `NRestarts=0`, jurnalda
+  xato yo'q, ~37 MiB, TDLib `StateDirectory` ga yozdi; `--login`
+  bajarildi, `--enroll`/`--set-key` hali yo'q — §8, 51-band.)*
 - Task 11 qo'shgan sessiya himoyasi elementlari (hali haqiqiy VPS'da yurgizilmagan, auditda tekshirilishi kerak — OCHIQ):
   - `systemd-run --pty` yordamida CLI buyruqlari (`--login`, `--enroll`, `--set-key`) `umask 0077` bilan to'g'ri ishlashi va yaratilgan TDLib fayllari/kesh/kalitlar boshqa foydalanuvchilarga ko'rinmasligi (0700/0600).
-  - `LoadCredential=tdlib-db-key:...` orqali `$CREDENTIALS_DIRECTORY/tdlib-db-key` systemd xizmati tomonidan to'g'ri yuklanishi va TDLib unga muvaffaqiyatli ulanishi.
+  - `LoadCredential=tdlib-db-key:...` orqali `$CREDENTIALS_DIRECTORY/tdlib-db-key` systemd xizmati tomonidan to'g'ri yuklanishi va TDLib unga muvaffaqiyatli ulanishi. *(2026-10-15: tasdiqlandi — §8, 51-band.)*
   - Telefon yoki boshqa Telegram sessiyasidan "Terminate all other sessions" qilinganda, capture xizmati `RestartPreventExitStatus=78` sababli qayta aylanib ketmasdan (restart storm bo'lmasdan) bir marta baland xato bilan to'xtashi.
 
 ### Integratsiya auditi uchun yig'ilayotgan ro'yxat
@@ -2021,7 +2024,25 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **Login chidamliligi:** avval kod yoki 2FA parol bir marta xato terilsa butun login yiqilardi (qayta boshlash → yangi kod → FLOOD xavfi). Endi Telegram `…INVALID` (400) deb rad etgan qiymat yoki bo'sh qator sababi bilan qayta so'raladi, 3 martagacha. FLOOD (429), eskirgan kod, `PHONE_NUMBER_FLOOD` va 400 bo'lmagan xatolar qayta urinilmaydi; yopiq kiritish darhol to'xtaydi. `authorizationStateWaitEmailAddress` / `WaitEmailCode` qo'llanadi (ikki so'rov ruxsat ro'yxatiga qo'shildi; redaktor ichma-ich `code` obyektini ham yashiradi — test bilan).
     - Testlar: 15 ta yangi (jami 617, 2 Linux skip). RED avval ko'rildi. Mutatsiyalar (12 ta, hammasi ushlandi): har 400 ni qayta urinish; har qanday kodni qayta urinish; chegarasiz urinish; bo'sh kiritish chegarasiz; sabab ko'rsatilmasa; yopiq kiritish qayta so'ralsa; email kodi tekis satr bo'lsa; ruxsat ro'yxatidan olib tashlansa; email holati `--login` siz so'rasa; uyg'otish yo'q; uyg'otish xatosi fatal; ko'rinmaslik tekshiruvi soxtalashtirilsa. `CaptureInvisibilityTests.Test12` birinchi `getOption` ni qidirardi — endi `setOption` dan keyingisini (aks holda uyg'otish so'rovi tekshiruv yo'qligini yashirardi).
     - Kit (lokal `.vps-audit/p3`): capture `87f24c2` dan qayta publish qilindi (binary versiyasi shu commit'ni ko'rsatadi), API arxivi ichi o'zgarmagan, SHA256SUMS ga `libtdjson.so` qo'shildi — scp'dagi buzilishni apply'ning kit tekshiruvi ushlaydi.
-    - Ochiq: haqiqiy Telegram login'i (egasi, interaktiv); `--login` rejimida ham oxirgi xatoda "Run it once with --login" maslahati chiqadi (kosmetik).
+    - Ochiq: haqiqiy Telegram login'i (egasi, interaktiv); `--login` rejimida ham oxirgi xatoda "Run it once with --login" maslahati chiqadi (kosmetik). *(51-band: login bajarildi.)*
+
+51. **Birinchi deploy: API va capture VPS'da ishlayapti (egasi + TeamLead, 2026-10-14/15)** — kod o'zgarmadi; binary'lar: API `3d90e45`, capture `87f24c2`.
+    - **Tartib:** egasi lokal kit'dan plan → apply → telegram (interaktiv) → status qadamlarini o'zi yurgizdi (kalit paroli faqat egasida). TeamLead har qadam chiqishini o'qib, keyingisiga ruxsat berdi. Skriptlar va VPS tafsilotlari lokal `.vps-audit/` da.
+    - **Apply (2026-10-14 23:56):** kit'ning 5 fayli sha256 bo'yicha mos keldi. `customsync` va `customsync-capture` foydalanuvchilari yaratildi, PostgreSQL roli va bazasi tayyorlandi. Sozlama fayllari `root:<xizmat> 0640`, `tdlib-db-key` `0400 root`. API birinchi startda `InitialSchema` migratsiyasini qo'lladi, health `200`.
+    - **Telegram login (2026-10-15 00:04):** raqam → kod → 2FA parol, xatosiz o'tdi. `--login` `systemd-run --pty` da capture unit'ining `[Service]` cheklovlari bilan bajarildi. Keyin xizmat o'z unit'i bilan o'sha TDLib bazasini `LoadCredential` kaliti bilan ochdi va `Capture service authorized and running.` yozdi — deploy oldidan audit ro'yxatidagi "LoadCredential → TDLib" bandi yopildi.
+    - **Status (00:06):**
+      - Ikkala xizmat `active/running`, `enabled`, `NRestarts=0`. API ~94 MiB, capture ~37 MiB (`MemoryMax=1200M` ichida).
+      - Capture jurnalida 2 soatda 0 ta ogohlantirish yoki xato. `RestrictAddressFamilies` (`AF_NETLINK` siz), `ProtectHome` va `StateDirectory` startni buzmadi; TDLib 4.2 MB yozdi.
+      - Birinchi daqiqalarda `message_cache` da 2 ta yozuv; `capture_outbox` 0, `captured_media` 0.
+      - Media 3 ta chat uchun yoqilgan, sync o'chiq.
+    - **API jurnalidagi yagona ERR zararsiz:** `Failed executing DbCommand … SELECT migration_id, product_version FROM "__EFMigrationsHistory"`. Bo'sh bazada EF Core avval tarix jadvalini o'qiydi; o'qiy olmagach `CREATE TABLE IF NOT EXISTS "__EFMigrationsHistory"`, `LOCK TABLE` va `InitialSchema` ni bajaradi. Jadval endi bor, shuning uchun keyingi startlarda bu xato takrorlanmaydi. Status'dagi `last_error text,` va `error text,` qatorlari xato emas: grep `CREATE TABLE` ustunlarini ushlagan.
+    - **Kuzatuv (tuzatish sync yoqilishidan oldin):** Serilog'ning minimal darajasi `Information`, `Microsoft.EntityFrameworkCore.Database.Command` uchun override yo'q. Natijada har bir SQL buyrug'i jurnalga va fayl logiga yoziladi. Parametr qiymatlari yozilmaydi (`EnableSensitiveDataLogging` ishlatilmaydi), ya'ni sir chiqmaydi; hozir trafik ham deyarli yo'q. `appsettings.json` dagi `Logging:LogLevel` `UseSerilog()` bilan ta'sir qilmaydi — Hosting va Routing shuning uchun kodda override qilingan. EF uchun ham kodda `Warning` override kerak.
+    - Ochiq:
+      - login'dan keyingi TDLib fayllari va kesh ruxsatlari (0700/0600) VPS'da hali ko'rilmagan;
+      - "Terminate all other sessions" holatida restart bo'ronisiz `78` bilan to'xtash sinalmagan;
+      - media chatlari ro'yxati telegram qadamini qayta yurgizib o'zgartiriladi;
+      - `--enroll` va `--set-key` domen + TLS dan keyin;
+      - kosmetik: TDLib'ning `setLogVerbosityLevel` dan oldingi log qatorlari va 50-banddagi maslahat.
 
 ---
 
