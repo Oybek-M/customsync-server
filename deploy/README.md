@@ -223,8 +223,8 @@ avtomatlashtiradi.
 
 ## Capture xizmati (customsync-capture)
 
-⚠️ **OGOHLANTIRISH:** capture xizmati egasining Telegram akkauntiga to'liq kirish huquqiga va master kalitga ega. Deploy faqat shartli: xavfsizlik auditi va hardening'dan keyin, hosting paneli 2FA, VPS root paroli va Telegram 2FA tayyor bo'lgach (egasi qarori, 2026-10-13).
-Quyidagi barcha buyruqlar hali jonli tizimda bajarilmagan — ularni audit davomida tekshiring.
+⚠️ **OGOHLANTIRISH:** capture xizmati egasining Telegram akkauntiga to'liq kirish huquqiga va master kalitga ega. Deploy faqat shartli: xavfsizlik auditi va hardening'dan keyin, hosting paneli 2FA, VPS root paroli va Telegram 2FA tayyor bo'lgach (egasi qarori, 2026-10-13; shartlarni egasi 2026-10-13 da bajardi).
+Quyidagi buyruqlar hali jonli tizimda bajarilmagan — ularni audit davomida tekshiring. Capture'ning haqiqiy `libtdjson.so` bilan ishga tushishi tarmoqsiz konteynerda tekshirilgan (2026-10-14, `PROGRESS.md` §8, 50-band).
 
 ---
 
@@ -238,11 +238,42 @@ Quyidagi barcha buyruqlar hali jonli tizimda bajarilmagan — ularni audit davom
 | `/var/lib/customsync-capture/media` | Yuklab olingan medialar katalogi | `customsync-capture:customsync-capture` `0700` | **YO'Q** |
 | `/var/lib/customsync-capture/device-state.json`, `master.key` | Sinxronizatsiya qurilma holati va master kalit fayllari | `customsync-capture:customsync-capture` `<= 0600` (katalog `0700`) | **YO'Q** |
 | `/etc/customsync-capture/tdlib-db-key` | TDLib bazasini shifrlash kaliti (32 bayt base64) | `root:root` `0400` (yoki `customsync-capture:customsync-capture` `0400`) | **YO'Q** (hech qachon zaxiraga kiritilmaydi) |
-| `/var/www/customsync-capture/appsettings.Production.json` | Konfiguratsiya (api_id, api_hash, server manzili) | `customsync-capture:customsync-capture` `<= 0640` | **YO'Q** (repo'ga ham kiritilmaydi) |
+| `/var/www/customsync-capture/appsettings.Production.json` | Konfiguratsiya (api_id, api_hash, server manzili) | `root:customsync-capture` `0640` (xizmat o'qiydi, o'zgartira olmaydi; preflight `0640` dan kengini rad etadi) | **YO'Q** (repo'ga ham kiritilmaydi) |
+| `/var/www/customsync-capture/libtdjson.so` | TDLib kutubxonasi (1.8.67, quyidagi 1a-band) | `root:root` `0644` | Kerak emas (qayta build qilinadi) |
 
 > [!CAUTION]
 > **Zaxira qoidasi:** Capture holati (sessiya, kesh, kalitlar) hech qachon zaxira nusxalariga (backups) kiritilmaydi. Agar VPS yo'qolsa yoki buzilsa, yagona xavfsiz tiklash yo'li — toza tizimda yangidan `--login` va `--enroll` qilishdir.
 > **Contabo snapshot'lari:** Virtual server snapshot'lari butun fayl tizimini (shu jumladan shifrlanmagan kesh va kalitlarni) to'liq o'z ichiga oladi. Snapshot'larni o'ta maxfiy deb biling va audit/testdan so'ng darhol o'chirib tashlang.
+
+---
+
+### 1a. TDLib kutubxonasi (`libtdjson.so`)
+
+Capture TDLib'ning JSON interfeysi (`td_create_client_id`, `td_send`, `td_receive`, `td_execute`) bilan ishlaydi.
+Birinchi deploy versiyasi: **TDLib 1.8.67**, commit `bc9c263e2bfee06aaab41e82db51a103376030bc` ("Update version to 1.8.67.", 2026-08-24).
+Kutubxona maqsad tizim bilan bir xil distributivda build qilinadi (Ubuntu 24.04 uchun `ubuntu:24.04` konteyneri).
+Natija GLIBC 2.38+ va OpenSSL 3 ni talab qiladi.
+
+1. Paketlar: `ca-certificates git cmake g++ make zlib1g-dev libssl-dev gperf php-cli`.
+2. Manba aniq commit bo'yicha olinadi: `git fetch --depth 1 https://github.com/tdlib/td.git <commit>`, so'ng `CMakeLists.txt` da `project(TDLib VERSION 1.8.67` borligi tekshiriladi.
+3. `build/` da `cmake -DCMAKE_BUILD_TYPE=Release ..` va `cmake --build . --target prepare_cross_compiling`.
+4. **1.8.67 dagi upstream xatosi:** `SplitSource.php` da `'MessageContentUploadId' => 'MessageContentUploadId'` qatoridan keyin vergul tushib qolgan (PHP parse error).
+   Upstream'da `58ce288687` ("Fix SplitSource.", 2026-09-21) aynan shu vergulni qo'shadi. Uni qo'shing, `php -l SplitSource.php` bilan tekshiring, keyin `php SplitSource.php`.
+   Bu faqat build yordamchisi, kutubxona kodiga tegmaydi.
+5. `cmake --build . --target tdjson -- -j3`. Laptop'da 3 job va 6 GB xotira limiti bilan ~27 daqiqa.
+6. `ldd libtdjson.so` da `not found` bo'lmasin. `sha256sum` ni yozib qo'ying va VPS'ga ko'chirilgandan keyin solishtiring.
+
+O'rnatish va sozlama:
+
+```bash
+sudo install -m 0644 -o root -g root libtdjson.so /var/www/customsync-capture/libtdjson.so
+```
+
+`appsettings.Production.json` da: `"Telegram": { "TdJsonPath": "/var/www/customsync-capture/libtdjson.so" }`.
+
+Tekshiruv: avtorizatsiya qilinmagan sessiyada capture `--login` siz ishga tushirilsa, `setTdlibParameters` dan keyin `WaitPhoneNumber` gacha yetadi.
+U `--login` ni ko'rsatib `78` bilan to'xtaydi; buning uchun tarmoq kerak emas.
+`TDLib did not report an authorization state` chiqsa, TDLib nusxasi ishga tushmagan.
 
 ---
 

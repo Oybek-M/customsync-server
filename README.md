@@ -2,8 +2,9 @@
 
 Multi-device sync backend — CustomMod ekotizimining server qismi.
 
-**Holat:** ✅ plan **01a** (backend poydevori) va **01b** (sync yadrosi)
-tugadi — `dotnet test`: 105 test, hammasi o'tadi.
+**Holat (2026-10-14):** ✅ plan **01a** (backend poydevori), **01b** (sync yadrosi)
+va **05** (always-on capture; Task 10 bloklangan) tugadi, **04** (storage lifecycle) 5/6.
+`dotnet test`: 617 test, hammasi o'tadi. Capture'ning birinchi deploy'i jarayonda.
 Aniq holat va keyingi qadam: [`PROGRESS.md`](PROGRESS.md).
 
 ---
