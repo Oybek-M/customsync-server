@@ -25,6 +25,10 @@ public static class TdRequestPolicy
         "setAuthenticationPhoneNumber",
         "checkAuthenticationCode",
         "checkAuthenticationPassword",
+        // Login email step (authorizationStateWaitEmailAddress / WaitEmailCode): authentication only,
+        // like checkAuthenticationCode; touches no chat, read state or presence.
+        "setAuthenticationEmailAddress",
+        "checkAuthenticationEmailCode",
         "getMe",
         "getMessage",
         "setOption",

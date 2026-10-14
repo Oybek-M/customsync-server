@@ -11,6 +11,10 @@ namespace CustomSync.Capture.Tdlib;
 /// </summary>
 public class TdAuthenticator
 {
+    // Inputs allowed per state: a mistyped code or password does not end the login,
+    // yet Telegram never receives an unbounded series of attempts.
+    private const int MaxInputAttempts = 3;
+
     private readonly ITdClient _client;
     private readonly IConfiguration _config;
     private readonly IConsolePrompt _prompt;
@@ -70,6 +74,14 @@ public class TdAuthenticator
             case "WaitPassword":
                 EnsureInteractive("password");
                 return await HandleWaitPasswordAsync(ct);
+
+            case "WaitEmailAddress":
+                EnsureInteractive("email address");
+                return await HandleWaitEmailAddressAsync(ct);
+
+            case "WaitEmailCode":
+                EnsureInteractive("email code");
+                return await HandleWaitEmailCodeAsync(stateElement, ct);
 
             case "Ready":
                 IsReady = true;
@@ -141,55 +153,101 @@ public class TdAuthenticator
         }
     }
 
-    private async Task<string> HandleWaitPhoneNumberAsync(CancellationToken ct)
+    private Task<string> HandleWaitPhoneNumberAsync(CancellationToken ct) =>
+        SubmitInputAsync("Enter phone number: ", "Phone number", isSecret: false,
+            phone => new JsonObject
+            {
+                ["@type"] = "setAuthenticationPhoneNumber",
+                ["phone_number"] = phone.Trim()
+            }, ct);
+
+    private Task<string> HandleWaitCodeAsync(CancellationToken ct) =>
+        SubmitInputAsync("Enter authentication code: ", "Authentication code", isSecret: false,
+            code => new JsonObject
+            {
+                ["@type"] = "checkAuthenticationCode",
+                ["code"] = code.Trim()
+            }, ct);
+
+    private Task<string> HandleWaitPasswordAsync(CancellationToken ct) =>
+        SubmitInputAsync("Enter 2FA password: ", "Password", isSecret: true,
+            password => new JsonObject
+            {
+                ["@type"] = "checkAuthenticationPassword",
+                ["password"] = password
+            }, ct);
+
+    private Task<string> HandleWaitEmailAddressAsync(CancellationToken ct) =>
+        SubmitInputAsync("Enter login email address: ", "Email address", isSecret: false,
+            email => new JsonObject
+            {
+                ["@type"] = "setAuthenticationEmailAddress",
+                ["email_address"] = email.Trim()
+            }, ct);
+
+    private Task<string> HandleWaitEmailCodeAsync(JsonElement state, CancellationToken ct)
     {
-        var phone = _prompt.Prompt("Enter phone number: ");
-        if (string.IsNullOrWhiteSpace(phone))
-        {
-            throw new InvalidOperationException("Phone number cannot be empty.");
-        }
+        // Telegram reports where the code went with the address half hidden (m***@example.com).
+        var pattern = state.TryGetProperty("code_info", out var info)
+            && info.ValueKind == JsonValueKind.Object
+            && info.TryGetProperty("email_address_pattern", out var p)
+            ? p.GetString()
+            : null;
+        var promptText = string.IsNullOrWhiteSpace(pattern)
+            ? "Enter the code sent to your login email: "
+            : $"Enter the code sent to {pattern}: ";
 
-        var payload = new JsonObject
-        {
-            ["@type"] = "setAuthenticationPhoneNumber",
-            ["phone_number"] = phone.Trim()
-        }.ToJsonString();
-
-        return await _client.SendAsync(payload, ct: ct);
+        return SubmitInputAsync(promptText, "Email code", isSecret: false,
+            code => new JsonObject
+            {
+                ["@type"] = "checkAuthenticationEmailCode",
+                ["code"] = new JsonObject
+                {
+                    ["@type"] = "emailAddressAuthenticationCode",
+                    ["code"] = code.Trim()
+                }
+            }, ct);
     }
 
-    private async Task<string> HandleWaitCodeAsync(CancellationToken ct)
+    /// <summary>
+    /// Asks for one input and submits it. An empty input, or one Telegram rejects as
+    /// invalid (PHONE_CODE_INVALID, PASSWORD_HASH_INVALID, ...), is asked again with the
+    /// reason, up to <see cref="MaxInputAttempts"/> times. Errors that retyping cannot fix
+    /// (FLOOD, an expired code) propagate at once without contacting Telegram again.
+    /// </summary>
+    private async Task<string> SubmitInputAsync(
+        string promptText, string what, bool isSecret, Func<string, JsonObject> buildRequest, CancellationToken ct)
     {
-        var code = _prompt.Prompt("Enter authentication code: ");
-        if (string.IsNullOrWhiteSpace(code))
+        string? note = null;
+        for (var attempt = 1; ; attempt++)
         {
-            throw new InvalidOperationException("Authentication code cannot be empty.");
+            var input = _prompt.Prompt(note + promptText, isSecret);
+            if (input == null)
+            {
+                throw new InvalidOperationException($"{what} cannot be empty (input is closed).");
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                if (attempt >= MaxInputAttempts)
+                {
+                    throw new InvalidOperationException($"{what} cannot be empty.");
+                }
+                note = "Nothing was entered. ";
+                continue;
+            }
+
+            try
+            {
+                return await _client.SendAsync(buildRequest(input).ToJsonString(), ct: ct);
+            }
+            catch (TdException ex) when (ex.Code == 400
+                && ex.TdMessage.Contains("INVALID", StringComparison.OrdinalIgnoreCase)
+                && attempt < MaxInputAttempts)
+            {
+                note = $"Telegram rejected it ({ex.TdMessage}). ";
+            }
         }
-
-        var payload = new JsonObject
-        {
-            ["@type"] = "checkAuthenticationCode",
-            ["code"] = code.Trim()
-        }.ToJsonString();
-
-        return await _client.SendAsync(payload, ct: ct);
-    }
-
-    private async Task<string> HandleWaitPasswordAsync(CancellationToken ct)
-    {
-        var password = _prompt.Prompt("Enter 2FA password: ", isSecret: true);
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            throw new InvalidOperationException("Password cannot be empty.");
-        }
-
-        var payload = new JsonObject
-        {
-            ["@type"] = "checkAuthenticationPassword",
-            ["password"] = password
-        }.ToJsonString();
-
-        return await _client.SendAsync(payload, ct: ct);
     }
 
     private static string NormalizeState(string type)

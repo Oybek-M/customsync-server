@@ -277,6 +277,8 @@ Agar 2FA yoqilgan bo'lsa, TDLib telefon va SMS koddan so'ng bulutli parolni ham 
 
 `--login` da raqam, kod va 2FA parolni kiritish uchun 15 daqiqa beriladi (fon rejimida 2 daqiqa).
 `--login` buyruqning **oxirida** tursin: qiymatsiz kalit o'zidan keyingi argumentni qiymat qilib yutadi.
+Kod, parol yoki raqam xato terilsa (Telegram `..._INVALID` deb rad etsa) yoki bo'sh Enter bosilsa, o'sha qadam sababi bilan qayta so'raladi, 3 martagacha.
+FLOOD yoki eskirgan kod bo'lsa, qayta urinish Telegram'ga yuborilmaydi. Telegram login email talab qilsa, email va unga kelgan kod so'raladi.
 Login tugab, `Capture service authorized and running.` chiqqach, Ctrl+C bilan to'xtatib, xizmatni yoqing.
 
 `--login` buyrug'i oddiy terminalda `sudo -u` bilan bajarilsa, umask (odatda 0022) ochiq qolishi, `StateDirectory` va systemd `LoadCredential` sozlamalari ishlamay qolishi mumkin.

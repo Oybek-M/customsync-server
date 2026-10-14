@@ -56,6 +56,14 @@ public class AuthorizationGate(
         }
 
         client.UpdateReceived += OnUpdate;
+
+        // td_create_client_id bilan yaratilgan TDLib nusxasi birinchi so'rovni
+        // olmaguncha hech qanday update yubormaydi (td_json_client.h). Hech narsa
+        // yuborilmasa avtorizatsiya holati hech qachon kelmaydi va gate muddat
+        // tugaguncha bo'sh kutadi. Obuna yuqorida ulangan, shuning uchun birinchi
+        // update yo'qolmaydi.
+        _ = WakeAsync(ct);
+
         try
         {
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -74,6 +82,20 @@ public class AuthorizationGate(
         finally
         {
             client.UpdateReceived -= OnUpdate;
+        }
+    }
+
+    // Javob kerak emas: setTdlibParameters dan oldingi so'rovga TDLib xato bilan
+    // javob berishi mumkin, bu esa avtorizatsiyaning muvaffaqiyatsizligi emas.
+    private async Task WakeAsync(CancellationToken ct)
+    {
+        try
+        {
+            await client.SendAsync("{\"@type\":\"getOption\",\"name\":\"online\"}", ct: ct);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogDebug("TDLib wake-up request ended with {ExceptionType}.", ex.GetType().Name);
         }
     }
 

@@ -695,17 +695,19 @@ public class CaptureInvisibilityTests : IDisposable
             return d.RootElement.GetProperty("@type").GetString();
         }).ToList();
 
+        // The first getOption is AuthorizationGate's wake-up request that starts TDLib;
+        // the invisibility check is the setOption and the getOption read after it.
         var setOptionIndex = sentList.IndexOf("setOption");
-        var getOptionIndex = sentList.IndexOf("getOption");
         Assert.True(setOptionIndex >= 0, "setOption was never sent");
-        Assert.True(getOptionIndex >= 0, "getOption was never sent");
-        Assert.True(setOptionIndex < getOptionIndex, "setOption must precede getOption");
+        var getOptionIndex = sentList.IndexOf("getOption", setOptionIndex + 1);
+        Assert.True(getOptionIndex >= 0, "getOption was never sent after setOption");
 
         lock (syncRoot)
         {
-            var getOptionTimelineIdx = timeline.IndexOf("transport:getOption");
+            var setOptionTimelineIdx = timeline.IndexOf("transport:setOption");
+            var getOptionTimelineIdx = timeline.IndexOf("transport:getOption", setOptionTimelineIdx + 1);
             var logRunningTimelineIdx = timeline.IndexOf("log:running");
-            Assert.True(getOptionTimelineIdx >= 0, "getOption was not found in timeline");
+            Assert.True(getOptionTimelineIdx >= 0, "getOption after setOption was not found in timeline");
             Assert.True(logRunningTimelineIdx >= 0, "log:running was not found in timeline");
             Assert.True(getOptionTimelineIdx < logRunningTimelineIdx, "Invisibility check must complete before running is logged");
         }

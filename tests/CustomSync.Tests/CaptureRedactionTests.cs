@@ -92,4 +92,18 @@ public class CaptureRedactionTests
         Assert.Equal(TdRedactor.RedactedValue, arr[1]?["password"]?.ToString());
         Assert.Equal("safe_label", arr[1]?["label"]?.ToString());
     }
+
+    // Email login requests: here the code is a nested object, not a string.
+    [Fact]
+    public void Test14_Email_login_requests_do_not_leak_the_address_or_the_code()
+    {
+        var address = TdRedactor.Redact(
+            "{\"@type\":\"setAuthenticationEmailAddress\",\"email_address\":\"me@example.com\"}");
+        var code = TdRedactor.Redact(
+            "{\"@type\":\"checkAuthenticationEmailCode\",\"code\":{\"@type\":\"emailAddressAuthenticationCode\",\"code\":\"123456\"}}");
+
+        Assert.DoesNotContain("me@example.com", address);
+        Assert.DoesNotContain("123456", code);
+        Assert.Equal("checkAuthenticationEmailCode", JsonNode.Parse(code)!["@type"]?.ToString());
+    }
 }
