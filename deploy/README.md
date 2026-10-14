@@ -132,18 +132,50 @@ Tekshirish:
 curl http://127.0.0.1:5080/api/v1/health
 ```
 
-Keyin nginx:
+Keyin nginx va sertifikat. Sertifikat **webroot** bilan olinadi: certbot nginx
+fayllariga tegmaydi, boshqa saytlar bor serverda ham xavfsiz. Avval faqat
+80-port va ACME bilan vaqtinchalik sayt, sertifikatdan keyin esa to'liq sayt:
 
 ```bash
-sudo cp deploy/nginx-customsync.conf /etc/nginx/sites-available/customsync
+DOMAIN=sync.example.uz        # o'z domeningiz; A yozuv shu serverga
+sudo mkdir -p /var/www/letsencrypt/.well-known/acme-challenge
+sudo tee /etc/nginx/sites-available/customsync >/dev/null <<EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/letsencrypt; default_type text/plain; }
+    location / { return 404; }
+}
+EOF
 sudo ln -s /etc/nginx/sites-available/customsync /etc/nginx/sites-enabled/
-sudo certbot --nginx -d sync.example.uz
 sudo nginx -t && sudo systemctl reload nginx
+sudo certbot certonly --webroot -w /var/www/letsencrypt -d "$DOMAIN" \
+    --deploy-hook "systemctl reload nginx"
+
+sed "s/sync\.example\.uz/$DOMAIN/g" deploy/nginx-customsync.conf \
+    | sudo tee /etc/nginx/sites-available/customsync >/dev/null
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot renew --cert-name "$DOMAIN" --dry-run
 ```
 
-`certbot --nginx` sertifikat yo'llarini o'zi to'g'rilaydi. Agar
-sertifikat hali yo'q bo'lsa, `nginx -t` `ssl_certificate` topilmadi deb
-yiqiladi — bu kutilgan holat, certbot dan keyin qayta urinib ko'ring.
+`--deploy-hook` yangilangan sertifikatni nginx'ga yuklaydi (webroot
+installer'siz o'zi reload qilmaydi). `nginx-customsync.conf` dagi 80-port
+bloki ACME yo'lini ochiq qoldiradi — busiz 90 kundan keyingi yangilanish
+yiqiladi.
+
+Tekshirish: `curl https://$DOMAIN/api/v1/health` → `200`; WebSocket yo'li
+token'siz `401` qaytarishi kerak (`400` — Upgrade sarlavhasi backend'ga
+yetmagan):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+    -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://$DOMAIN/ws/notify
+```
+
+Sozlamadagi uch qaror sababi faylning o'zida yozilgan: noyob `map` nomi
+(boshqa saytning `$connection_upgrade` i bilan to'qnashmaslik), query'siz
+log formati (tdesktop WebSocket token'ini URL'da yuboradi) va `http2` yo'qligi
+(u port bo'yicha hamma saytlarga global yoqiladi).
 
 ### 6. Firewall
 
@@ -165,6 +197,19 @@ sudo -u customsync ASPNETCORE_ENVIRONMENT=Production \
 
 `cd` majburiy: `appsettings*.json` joriy papkadan o'qiladi (content root),
 boshqa papkadan `Jwt:SigningKey` va ulanish satri topilmaydi.
+
+Self-contained o'rnatishda (`/usr/bin/dotnet` yo'q) xizmat bilan bir xil
+sandbox'da:
+
+```bash
+sudo systemd-run --pipe --wait --quiet --collect --service-type=exec \
+    -p User=customsync -p Group=customsync -p WorkingDirectory=/var/www/customsync \
+    -p Environment=ASPNETCORE_ENVIRONMENT=Production \
+    /var/www/customsync/CustomSync.Api --create-enrollment-code --admin
+```
+
+Kod `XXXX-XXXX-XX` ko'rinishida, `auth.enroll_code_minutes` (standart 10)
+daqiqa amal qiladi va bir marta ishlatiladi — tdesktop'ni oldindan oching.
 
 Kod chop etiladi va jarayon darhol chiqadi — server ishga tushmaydi.
 `--admin` bo'lmasa oddiy `device` roli beriladi. Birinchi qurilma admin

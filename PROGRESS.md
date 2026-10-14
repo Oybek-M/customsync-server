@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | ✅ **Deploy bajarildi (2026-10-14/15): API va capture VPS'da ishlayapti, xabarlar ushlanmoqda** (self-contained linux-x64, TDLib 1.8.67, Telegram login egasi tomonidan; §8, 51-band). Navbatda: (1) VPS hardening'ning keyingi bosqichlari va qolgan sirlarni almashtirish — lokal `.vps-audit/`; (2) EF Core SQL log darajasi (51-band kuzatuvi) — sync yoqilishidan oldin; (3) domen + TLS → tdesktop enroll, capture `--enroll`/`--set-key`, sync yoqiladi |
+| **Keyingi bajariladigan** | ⏸ **Sync ulanishi (tdesktop ↔ server) — PAUZA, navbat egasida** (§8, 52-band). Deploy 2026-10-14/15 da bajarilgan (51-band). Sync subdomeni DNS'da tayyor. Lokal kit `.vps-audit/p4` tayyor (mock: 28 test, 14 mutatsiya). Tartib: egasi `p4-1-plan.cmd` → TeamLead `p4-plan.txt` ni tekshiradi → `p4-2-apply.cmd` (nginx + Let's Encrypt + tekshiruv, xatoda orqaga) → `p4-3-code.cmd` (admin kodi) → tdesktop: server URL + kod + arxiv paroli → `p4-4-capture.cmd` → `p4-5-status.cmd`. tdesktop sessiyasiga xabar yuborildi (WebSocket build, admin kodi, token sarlavhaga). A7: skript tuzatildi, egasining `a7-2-apply.cmd` i kutilmoqda. Keyin: EF SQL log darajasi, VPS hardening bosqichlari |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -1159,6 +1159,15 @@ audit bo'ladi. Shu vaqtgacha chegaradagi xavflar shu yerga yoziladi
   qilib tekshirishi shart (buzilgan server/qurilma `../` yuborishi mumkin).
 - capture `"true"`/`"false"` ni katta-kichik harfga qaramay qabul
   qiladi (`"TRUE"` ham), spec faqat kichik harfni aytadi.
+- (2026-10-15) Kestrel standart `MaxRequestBodySize` = 30 000 000 bayt,
+  `media.max_upload_bytes` esa 52 428 800. 28,6–50 MiB yuklama endpoint'ning
+  o'z 413 tekshiruvigacha Kestrel'ning 413 i bilan yiqiladi; media PUT butun
+  tanani xotiraga o'qiydi. Hozir zararsiz: capture yagona yuklovchi, fayl
+  ≤ 25 MiB. Chegarani endpoint'da sozlamadan berish kerak.
+- (2026-10-15) tdesktop WebSocket'da `access_token` ni URL query'da yuboradi.
+  nginx access log'i uni yozmaydi (52-band), lekin error log va oraliq
+  proksi'lar yozishi mumkin. Server sarlavhani ham qabul qiladi —
+  tdesktop'da `QWebSocket::open(QNetworkRequest)` bilan sarlavhaga o'tkazish.
 
 ### Plan 05 Task 4c tekshiruvi (2026-09-29) — qanday qabul qilindi
 
@@ -2043,6 +2052,27 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - media chatlari ro'yxati telegram qadamini qayta yurgizib o'zgartiriladi;
       - `--enroll` va `--set-key` domen + TLS dan keyin;
       - kosmetik: TDLib'ning `setLogVerbosityLevel` dan oldingi log qatorlari va 50-banddagi maslahat.
+
+52. **Sync ulanishiga tayyorgarlik (TeamLead, 2026-10-15)** — PAUZA, haqiqiy nginx'da hali yurgizilmagan.
+    - **`deploy/nginx-customsync.conf`:**
+      - `map` o'zgaruvchisi noyob nomli (`$customsync_connection_upgrade`): bir nginx'dagi boshqa sayt `$connection_upgrade` ni e'lon qilgan bo'lsa, ikkinchi e'lon nginx'ni ishga tushirmaydi.
+      - Query'siz log formati: tdesktop WebSocket token'ini URL'da yuboradi (`custom_sync_client.cpp:999`, `?access_token=`), standart format esa uni har ulanishda diskka yozardi.
+      - `http2` olib tashlandi: u manzil:port bo'yicha hamma saytlarga global yoqiladi, Qt klienti esa HTTP/1.1 ishlatadi.
+      - 80-port blokida ACME webroot yo'li qo'shildi, webroot bilan olingan sertifikat yangilanishi uchun.
+    - **`deploy/README.md`:**
+      - §5 webroot oqimiga o'tdi: certbot nginx fayllariga tegmaydi, `--deploy-hook` reload qiladi, `curl` bilan WebSocket tekshiruvi.
+      - §7 ga self-contained kod buyrug'i (`systemd-run`) va kod formati qo'shildi: `XXXX-XXXX-XX`, 10 daqiqa, bir martalik.
+    - **Lokal kit `.vps-audit/p4/p4-sync.py`:** `plan`, `apply`, `code`, `capture`, `status` rejimlari.
+      - Apply: vaqtinchalik ACME sayt → `certbot certonly --webroot` → to'liq sayt → tekshiruv.
+      - Tekshiruv HTTPS health'ni haqiqiy sertifikat bilan o'tkazadi. WebSocket yaroqsiz token bilan `401` qaytarishi kerak: `400` — Upgrade backend'ga yetmagan, `101` — XAVF.
+      - Probe token'i hech bir logda bo'lmasligi va `/ws/notify` qatori yozilganligi tekshiriladi. Log qatori yo'q bo'lsa — fail-closed.
+      - ACME yo'li va `renew --dry-run` ham tekshiriladi. Jiddiy xatoda nginx sayti avvalgi holatiga qaytariladi.
+      - `code` va `capture` CLI'ni unit'ning `[Service]` cheklovlari bilan `systemd-run` da yurgizadi. Kod faqat interaktiv ekranga chiqadi. Capture sync'i yiqilsa, `Enabled=false` ga qaytariladi, xabar ushlash to'xtamaydi.
+      - Mock testlar: 28 ta. Mutatsiyalar 14 ta, hammasi ushlandi; tirik qolgan bitta AAAA mutatsiyasi test kuchaytirilgach ushlandi.
+    - **Ochiq:**
+      - haqiqiy nginx'da `nginx -t` va tekshiruv — egasining `p4-1/p4-2` yurishi;
+      - tdesktop token'ni sarlavhaga o'tkazishi, chunki error.log (masalan, 502) to'liq so'rov qatorini yozadi;
+      - Kestrel `MaxRequestBodySize` (integratsiya ro'yxati).
 
 ---
 
