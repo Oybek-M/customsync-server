@@ -27,6 +27,10 @@ CPUQuota=150%
 # Qattiqlashtirish
 NoNewPrivileges=true
 PrivateTmp=true
+# Core dump yo'q: unda xizmat xotirasi (JWT kaliti, TDLib sessiyasi,
+# sync master key) diskka tushadi. 2026-10-15 da capture SIGBUS bilan
+# qulaganda aynan shunday dump qoldi.
+LimitCORE=0
 ProtectSystem=strict
 ProtectHome=true
 ProtectKernelTunables=true
