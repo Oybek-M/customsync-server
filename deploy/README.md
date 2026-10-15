@@ -211,9 +211,7 @@ sudo systemd-run --pipe --wait --quiet --collect --service-type=exec \
 Kod `XXXX-XXXX-XX` ko'rinishida, `auth.enroll_code_minutes` (standart 10)
 daqiqa amal qiladi va bir marta ishlatiladi — tdesktop'ni oldindan oching.
 Kod katta-kichik harf, defis va bo'shliqlarga qaramay qabul qilinadi
-(`PROGRESS.md` §8, 54-band) — lekin faqat shu o'zgarish deploy qilingandan
-keyin. Ungacha VPS'dagi versiya kodni aynan solishtiradi: katta harflar va
-ikkala defis bilan.
+(`PROGRESS.md` §8, 54-band; VPS'da 2026-10-15 dan).
 
 #### Sync'ni ulash tartibi (birinchi marta; 2026-10-15 da shunday qilindi)
 
@@ -269,8 +267,7 @@ Yangi bazada birinchi startda bitta `ERR Failed executing DbCommand … FROM "__
 chiqadi — bu normal: EF Core tarix jadvalini o'qiy olmagach uni yaratadi va migratsiyalarni qo'llaydi
 (ortidan `Applying migration '…_InitialSchema'`). Keyingi startlarda takrorlanmaydi.
 SQL buyruqlari (`INF Executed DbCommand`) yozilmaydi, EF ogohlantirish va xatolari esa qoladi
-(`PROGRESS.md` §8, 55-band). Bu faqat shu o'zgarish deploy qilingandan keyin amal qiladi; ungacha
-VPS'dagi versiya har SQL buyrug'ini yozadi (parametr qiymatlarisiz).
+(`PROGRESS.md` §8, 55-band; VPS'da 2026-10-15 dan).
 
 ---
 
