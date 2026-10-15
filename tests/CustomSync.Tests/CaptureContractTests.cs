@@ -106,6 +106,37 @@ public class CaptureContractTests : CaptureContractTestBase
         Assert.Equal(1, secondExitCode);
     }
 
+    /// <summary>
+    /// Kodni odam teradi. Yashirin kiritishda 12 belgidan biri tushib qolsa,
+    /// foydalanuvchi faqat `invalid_or_used_code` ni ko'radi (2026-10-15 VPS
+    /// enroll). Kod bir martalik va 10 daqiqada eskiradi, shuning uchun uni
+    /// ko'rsatish deyarli xavf qo'shmaydi, terish xatosi esa darhol ko'rinadi.
+    /// </summary>
+    [Fact]
+    public async Task Enroll_code_prompt_echoes_what_is_typed()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var devices = scope.ServiceProvider.GetRequiredService<DeviceService>();
+        var code = await devices.CreateEnrollmentCodeAsync(DeviceService.RoleDevice);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Capture:Sync:ServerUrl"] = "http://localhost",
+            ["Capture:Sync:StatePath"] = Path.Combine(TempDir(), "device-state.json"),
+        }).Build();
+
+        bool? codeIsSecret = null;
+        var prompt = new DynamicConsolePrompt((msg, isSecret) =>
+        {
+            if (msg.Contains("code")) { codeIsSecret = isSecret; return code; }
+            if (msg.Contains("Device name")) return $"cap-echo-{Guid.NewGuid():N}";
+            return null;
+        });
+
+        using var client = _factory.CreateClient();
+        Assert.Equal(0, await SyncCliCommands.EnrollAsync(config, prompt, client));
+        Assert.False(codeIsSecret);
+    }
+
     // =========================================================================
     // SCENARIO 2 — Key setup
     // =========================================================================

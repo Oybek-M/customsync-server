@@ -50,7 +50,7 @@ public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRev
     public async Task<EnrolledDevice?> RedeemAsync(
         string code, string name, string platform, CancellationToken ct = default)
     {
-        var hash = Sha256Hex(code);
+        var hash = Sha256Hex(NormalizeCode(code));
         var now  = DateTime.UtcNow;
 
         // Platform nomi faqat o'qishga qulaylik uchun -- u qisqartiriladi,
@@ -176,10 +176,25 @@ public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRev
     private static string Base32(byte[] bytes)
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        return Group(bytes.Select(b => alphabet[b >> 3]));
+    }
+
+    /// <summary>
+    /// Qo'lda terilgan kodni yaratilgandagi shaklga qaytaradi (katta harf,
+    /// 4 talik guruhlar), shunda hash bazadagisiga mos keladi. Guruhlash
+    /// `Base32` bilan bitta funksiyada -- ikkisi alohida o'zgarib ketsa,
+    /// hamma kod jimgina rad etila boshlardi.
+    /// </summary>
+    private static string NormalizeCode(string code)
+        => Group(code.Where(ch => ch != '-' && !char.IsWhiteSpace(ch))
+                     .Select(char.ToUpperInvariant));
+
+    private static string Group(IEnumerable<char> chars)
+    {
         var sb = new StringBuilder();
-        foreach (var b in bytes)
+        foreach (var ch in chars)
         {
-            sb.Append(alphabet[b >> 3]);
+            sb.Append(ch);
             if (sb.Length % 5 == 4) sb.Append('-');
         }
         return sb.ToString().TrimEnd('-');

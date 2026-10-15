@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | ✅ **Sync ulandi (2026-10-15 08:22): tdesktop + capture bitta arxivda** (§8, 53-band). Navbatda: (1) tdesktop'da pull va merge tasdig'i — `pull_cursor` ≥ 28, o'chirilgan xabarlar arxivda, `/ws/notify` 101; (2) EF SQL log darajasi — sync yoqilgani uchun endi har siklda log yoziladi; (3) ro'yxatdan o'tish kodini normallashtirish (katta-kichik harf, defis) va capture'da kodni yashirmaslik; (4) Kestrel tana chegarasi, refresh imtiyoz oynasi (integratsiya ro'yxati); (5) VPS hardening bosqichlari |
+| **Keyingi bajariladigan** | ⏸ **Pauza (2026-10-15). Server tuzatishlari partiyasining 1/4 qismi commit qilingan, hali deploy qilinmagan** (§8, 54-band: kod normallashtiriladi, capture kodni ko'rsatadi). Sync ishlayapti (53-band, tdesktop `pull_cursor` 93). Navbatda: (1) qolgan 3 ta tuzatish TDD bilan — EF SQL log darajasi, Kestrel media chegarasi, refresh imtiyoz oynasi (reja 54-bandda); (2) deploy kiti va bitta qayta deploy; (3) VPS hardening — 🔴 /secure htpasswd almashtirish, lekin tdesktop "tayyor" demaguncha emas (lokal `.vps-audit/README.md`); (4) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -2090,6 +2090,28 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - tdesktop'da ikkinchi bosish ham shu xatoni ko'rsatdi, lekin birinchisi o'tgan edi. Diagnostika bloki tab qayta ochilguncha eskirgan qoldi.
       - Status'dagi vaqtlar PostgreSQL sessiya zonasida chiqadi (kosmetik).
     - A7 (tdesktop reliz kanali): SFTP foydalanuvchisi yaratildi va tdesktop tomonidan kirish sinaldi. Tafsilot — lokal `.vps-audit/`.
+    - **Keyin (tdesktop tasdig'i):** `pull_cursor` 93. Arxivda o'chirilgan 22 ta va tahrirlangan 3 ta xabar ko'rinadi.
+
+54. **Server tuzatishlari partiyasi, 1-qism: ro'yxatdan o'tish kodi (TeamLead, 2026-10-15)** — 53-banddagi topilma. **Hali deploy qilinmagan.**
+    - **Server:**
+      - `DeviceService.RedeemAsync` kodni hash'lashdan oldin normallashtiradi: defis va bo'shliqlarni olib tashlaydi, harflarni kattalashtiradi, so'ng qayta guruhlaydi.
+      - Guruhlash `Base32` bilan bitta `Group` funksiyasida. Ikkalasi alohida o'zgarib ketsa, hamma kod jimgina rad etilardi.
+      - Bazadagi hash shakli o'zgarmadi, shuning uchun migratsiya kerak emas va eski kodlar ham ishlaydi.
+    - **Capture:** `--enroll` kodni ko'rinadigan qilib so'raydi (`isSecret: false`). Kod bir martalik va 10 daqiqalik; yashirin terishda tushib qolgan belgi faqat `invalid_or_used_code` bo'lib bilinardi.
+    - **Testlar:**
+      - `Enrollment_code_is_accepted_regardless_of_case_and_grouping`: kichik harf, defissiz va bo'shliqli variantlar. Normallashtirilgan kod ham bir martalik qoladi.
+      - `Truncated_code_is_rejected_and_does_not_consume_the_code`.
+      - `Enroll_code_prompt_echoes_what_is_typed`.
+      - Avval 4 tasi yiqildi, implementatsiyadan keyin o'tdi. 5 ta mutatsiyaning hammasi ushlandi: katta harf, bo'shliq, defis, normallashtirishsiz, yashirin prompt.
+      - To'liq to'plam 622/622 (2 skip).
+    - **Flaky test:** `CaptureUpdateHandlerTests.Test11_Two_edits_before_sending…` to'liq to'plamda 3 yurishdan birida yiqildi, alohida 3 marta o'tdi. Sababi hali tekshirilmagan; bu partiyaga aloqasi yo'q.
+    - **Qolgan 3 ta tuzatish** (hammasi bitta qayta deploy bilan):
+      1. **EF SQL log darajasi:** `Microsoft.EntityFrameworkCore.Database.Command` → Warning. `Program.cs` test qilinadigan `LoggingSetup.ApplyLevels(LoggerConfiguration)` ni ishlatadi. Test yig'uvchi `ILogEventSink` bilan: EF Information filtrlanadi, Warning va Error o'tadi.
+      2. **Kestrel media chegarasi:** `ContentLength > media.max_upload_bytes` bo'lsa, darhol 413. O'qishdan oldin `IHttpMaxRequestBodySizeFeature.MaxRequestBodySize = max` (feature read-only bo'lmasa). Kestrel standarti 30 000 000, sozlama esa 52 428 800: shu oraliqdagi yuklash hozir Kestrel'da uziladi.
+      3. **Refresh imtiyoz oynasi (replay):**
+         - Yangi ustunlar: `previous_refresh_hash`, `refresh_rotated_at`, `rotation_replay`. Oxirgisi = AES-GCM(kalit = HKDF-SHA256(eski token), yangi token).
+         - `auth.refresh_grace_seconds` (120) ichida eski token AYNAN o'sha yangi tokenni qaytaradi. Parallel so'rovda yutqazgan tomon qayta o'qib, shu tokenni oladi. Oynadan keyin eski token rad etiladi.
+         - `Refresh_rotates_the_token` va `Concurrent_refresh…` testlari shu semantikaga yangilanadi.
 
 ---
 

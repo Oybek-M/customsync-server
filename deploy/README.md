@@ -210,8 +210,10 @@ sudo systemd-run --pipe --wait --quiet --collect --service-type=exec \
 
 Kod `XXXX-XXXX-XX` ko'rinishida, `auth.enroll_code_minutes` (standart 10)
 daqiqa amal qiladi va bir marta ishlatiladi — tdesktop'ni oldindan oching.
-Hozircha kod aynan solishtiriladi: katta harflar va ikkala defis bilan
-(normallashtirish ochiq — `PROGRESS.md` §8, 53-band).
+Kod katta-kichik harf, defis va bo'shliqlarga qaramay qabul qilinadi
+(`PROGRESS.md` §8, 54-band) — lekin faqat shu o'zgarish deploy qilingandan
+keyin. Ungacha VPS'dagi versiya kodni aynan solishtiradi: katta harflar va
+ikkala defis bilan.
 
 #### Sync'ni ulash tartibi (birinchi marta; 2026-10-15 da shunday qilindi)
 

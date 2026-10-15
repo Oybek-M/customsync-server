@@ -43,6 +43,47 @@ public class DeviceAuthTests : IClassFixture<DatabaseFixture>
         Assert.Null(await service.RedeemAsync(code, "laptop", "desktop-win"));
     }
 
+    /// <summary>
+    /// Kodni odam teradi: kichik harf, chiziqchasiz yoki bo'shliq bilan
+    /// yozilgani ham o'sha kod. Aks holda to'g'ri kod ham
+    /// `invalid_or_used_code` bo'lib qaytadi va foydalanuvchi sababini
+    /// topa olmaydi. Normallashtirish kodni bir martalikligini buzmasligi kerak.
+    /// </summary>
+    [Theory]
+    [InlineData("lower")]
+    [InlineData("nodash")]
+    [InlineData("spaces")]
+    public async Task Enrollment_code_is_accepted_regardless_of_case_and_grouping(string variant)
+    {
+        await using var db = _fixture.CreateContext();
+        var service = await CreateServiceAsync(db);
+        var code = await service.CreateEnrollmentCodeAsync();
+        var typed = variant switch
+        {
+            "lower"  => code.ToLowerInvariant(),
+            "nodash" => code.Replace("-", ""),
+            _        => " " + code.Replace("-", " ") + "\t",
+        };
+
+        Assert.NotNull(await service.RedeemAsync(typed, "laptop", "desktop-win"));
+        Assert.Null(await service.RedeemAsync(code, "phone", "android"));
+    }
+
+    /// <summary>
+    /// Normallashtirish faqat yozilish shaklini tekislaydi: bitta belgisi
+    /// tushib qolgan kod rad etiladi va asl kodni band qilib qo'ymaydi.
+    /// </summary>
+    [Fact]
+    public async Task Truncated_code_is_rejected_and_does_not_consume_the_code()
+    {
+        await using var db = _fixture.CreateContext();
+        var service = await CreateServiceAsync(db);
+        var code = await service.CreateEnrollmentCodeAsync();
+
+        Assert.Null(await service.RedeemAsync(code[..^1], "laptop", "desktop-win"));
+        Assert.NotNull(await service.RedeemAsync(code, "laptop", "desktop-win"));
+    }
+
     [Fact]
     public async Task Revoked_device_cannot_refresh()
     {

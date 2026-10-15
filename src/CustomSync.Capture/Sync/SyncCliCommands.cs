@@ -284,7 +284,10 @@ public static class SyncCliCommands
         CancellationToken ct = default)
     {
         output ??= Console.Out;
-        var code = prompt.Prompt("Enrollment code: ", isSecret: true)?.Trim();
+        // Ko'rinadigan kiritish: kod bir martalik va 10 daqiqalik, yashirin
+        // terishda esa tushib qolgan belgi faqat `invalid_or_used_code`
+        // bo'lib bilinardi.
+        var code = prompt.Prompt("Enrollment code: ", isSecret: false)?.Trim();
         if (string.IsNullOrWhiteSpace(code))
         {
             output.WriteLine("Error: Enrollment code is required.");
