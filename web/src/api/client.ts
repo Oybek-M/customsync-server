@@ -221,6 +221,9 @@ export async function api<T>(
     })
   } catch (err) {
     if (err instanceof ApiError) throw err
+    // Bekor qilingan so'rov -- tarmoq xatosi emas: aks holda tez yozilgan
+    // qidiruvda UI "server bilan aloqa yo'q" deb ko'rsatardi.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
     throw new ApiError(0, 'network_error')
   }
 
