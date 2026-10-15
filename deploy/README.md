@@ -210,6 +210,24 @@ sudo systemd-run --pipe --wait --quiet --collect --service-type=exec \
 
 Kod `XXXX-XXXX-XX` ko'rinishida, `auth.enroll_code_minutes` (standart 10)
 daqiqa amal qiladi va bir marta ishlatiladi — tdesktop'ni oldindan oching.
+Hozircha kod aynan solishtiriladi: katta harflar va ikkala defis bilan
+(normallashtirish ochiq — `PROGRESS.md` §8, 53-band).
+
+#### Sync'ni ulash tartibi (birinchi marta; 2026-10-15 da shunday qilindi)
+
+1. **tdesktop:** Sozlamalar → Sinxronizatsiya → server URL va **admin** kodi →
+   ro'yxatdan o'tish → arxiv parolini yaratish. Birinchi qurilma master kalitni
+   yaratadi va uning o'ramini serverga yuklaydi (POST admin rolini talab qiladi).
+   Arxiv paroli kalitning yagona nusxasi.
+2. **Capture:** oddiy (`device`) kod bilan `--enroll`, so'ng `--set-key`: o'ram
+   tanlanadi, arxiv paroli kiritiladi va kalit barmoq izi (FP) tdesktop'dagi bilan
+   solishtiriladi. `Capture:Sync:ServerUrl` = `http://127.0.0.1:5080` — capture API
+   bilan bir serverda, so'rovlar tarmoqqa chiqmaydi.
+3. `Capture:Sync:Enabled=true` va capture restart. Birinchi siklda capture
+   navbatidagi (outbox) yozuvlar serverga ketadi.
+
+Keyingi qurilmalar (masalan, ikkinchi kompyuter) oddiy kod bilan ro'yxatdan o'tadi
+va arxivga parol orqali qo'shiladi.
 
 Kod chop etiladi va jarayon darhol chiqadi — server ishga tushmaydi.
 `--admin` bo'lmasa oddiy `device` roli beriladi. Birinchi qurilma admin
@@ -388,7 +406,7 @@ systemd-run --pty --same-dir \
     /usr/bin/dotnet /var/www/customsync-capture/CustomSync.Capture.dll --login
 
 # 2. Sinxronizatsiya qurilmasi sifatida ro'yxatdan o'tish (kod so'raladi):
-# not yet run — verify during the audit
+# 2026-10-15: deploy skripti orqali bajarildi (unit'ning [Service] cheklovlari bilan, self-contained)
 systemd-run --pty --same-dir \
     --unit=customsync-capture-enroll \
     --service-type=exec \
@@ -402,7 +420,7 @@ systemd-run --pty --same-dir \
     /usr/bin/dotnet /var/www/customsync-capture/CustomSync.Capture.dll --enroll
 
 # 3. Master kalitni o'rnatish (parol so'raladi):
-# not yet run — verify during the audit
+# 2026-10-15: deploy skripti orqali bajarildi; FP tdesktop bilan mos keldi
 systemd-run --pty --same-dir \
     --unit=customsync-capture-set-key \
     --service-type=exec \
