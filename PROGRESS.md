@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | ✅ **Server tuzatishlari deploy qilindi (2026-10-15 21:50, `fa742ba`)** — §8, 54–57-bandlar; sync ishlayapti. Navbatda: (1) deploy kitida capture SIGBUS tuzatishi (`libtdjson.so` joyida yozilmasin) va TDLib/EF log tekshiruvi (57-band); (2) VPS hardening — /secure: tdesktop canary #4 dan keyin eski loginni o'chirish (egasining buyrug'i bilan), so'ng qolgan bosqichlar (lokal `.vps-audit/README.md`); (3) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
+| **Keyingi bajariladigan** | ✅ **Server tuzatishlari deploy qilindi (2026-10-15 21:50, `fa742ba`)** — §8, 54–57-bandlar; sync ishlayapti. Navbatda: (1) deploy kitida capture SIGBUS tuzatishi (`libtdjson.so` joyida yozilmasin) va TDLib/EF log tekshiruvi (57-band); (2) VPS hardening — /secure: tdesktop canary #4 dan keyin eski loginni o'chirish (egasining buyrug'i bilan), so'ng qolgan bosqichlar (lokal `.vps-audit/README.md`); (3) Plan 03 Task 2 prompti (Task 1 qabul qilindi — `2ea6556`, 58-band) |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -2179,6 +2179,30 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - **Tuzatish (keyingi sessiya):** kitda `libtdjson.so` vaqtinchalik nomga nusxalanib, `os.replace` bilan almashtirilsin — eski jarayon eski inode'ni saqlab qoladi. Yoki capture fayllardan oldin to'xtatilsin.
       - **Tekshirish:** qayta ishga tushgandan keyin TDLib `authorizationStateReady` va yangi xabar ushlanishi; API jurnalida `Executed DbCommand` yo'qligi (55-band).
     - /secure (tdesktop yangilanish kanali) logini almashtirildi, o'tish davri bilan. Tafsilot — lokal `.vps-audit/`.
+
+58. **Plan 03 Task 1 — web scaffold + zich admin tartibi (Gemini; TeamLead tekshirdi, 2026-10-15)** — `2ea6556`, prompt `docs/plan03-task1-prompt.md`. **Qabul qilindi.**
+    - **Tarkibi:**
+      - `web/`: Vue 3.5.43, Vite 8.3.2, TypeScript 6.0.3, PrimeVue 5.0.2, Pinia 4.0.3, vue-router 5.3.1.
+      - `AppShell` (8 bo'lim), lazy route'lar, `vault` va `ui` store'lari.
+      - `useServerHealth`: 30 s polling, AbortController va 5 s timeout.
+      - `aapanel.css`.
+    - **Mustaqil tekshiruv:**
+      - Commit faqat `web/` ga tegadi (31 fayl), AI trailer yo'q. `node_modules` va `dist` kuzatilmaydi.
+      - Lockfile: hamma paket registry.npmjs.org dan, versiyalar aniq, registry sanasi bo'yicha har biri kamida 14 kunlik.
+      - Install skripti faqat `fsevents` da bor (faqat macOS uchun, Windows/Linux'da o'rnatilmaydi). Tekshiruv `npm ci --ignore-scripts` bilan o'tkazildi.
+      - `type-check` toza, testlar 11/11, `build` o'tdi, `npm audit --omit=dev` — 0 ta zaiflik.
+      - **Mutatsiyalar:** 10/10 ushlandi:
+        - localStorage xatosi;
+        - unmount'da polling to'xtashi;
+        - timeout, non-200 javob, tarmoq xatosi;
+        - router fallback;
+        - `.is-active`;
+        - qulf ikonkasi va yozuvi;
+        - mavzu saqlanishi.
+      - Unmount mutatsiyasi dastlab omon qoldi. Sabab mening skriptimda edi: bir faylga ikkinchi almashtirish birinchisini bekor qilgan. Tuzatilgach, mutatsiya ushlandi.
+    - **Eslatmalar (keyingi task'lar uchun):**
+      - `.cs-nav-item.is-active` da `box-shadow: inset 2px 0 0` bor. U xiralashtirishsiz, bitta elementda va ro'yxatda emas. Qoidaning harfiga moslash uchun `border-left` ga almashtirsa bo'ladi.
+      - `.cs-nav-item:focus { outline: none }` — fokus faqat fon rangi bilan ko'rinadi. Klaviatura uchun aniqroq fokus halqasi kerak.
 
 ---
 
