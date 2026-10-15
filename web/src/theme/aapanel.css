@@ -1,0 +1,267 @@
+/*
+ * aaPanel uslubidagi zich admin dizayni.
+ *
+ * Tamoyillar:
+ *  - Ko'p ma'lumot kam joyda: qator balandligi 34px, shrift 13px
+ *  - Animatsiya minimal: faqat hover va focus, 120ms
+ *  - Soya va gradient yo'q — ular chiroyli, lekin uzun ro'yxatlarda
+ *    har bir qator uchun qayta chiziladi va scroll'ni sekinlashtiradi
+ */
+
+:root {
+  --cs-sidebar-width: 220px;
+  --cs-topbar-height: 48px;
+  --cs-row-height: 34px;
+  --cs-radius: 4px;
+
+  --cs-bg:        #f4f6f8;
+  --cs-surface:   #ffffff;
+  --cs-border:    #e3e7ec;
+  --cs-text:      #1f2933;
+  --cs-text-dim:  #6b7784;
+  --cs-accent:    #1f7ae0;
+  --cs-danger:    #d9484c;
+  --cs-ok:        #2fa360;
+}
+
+:root[data-theme="dark"] {
+  --cs-bg:        #16191d;
+  --cs-surface:   #1e2227;
+  --cs-border:    #2b3138;
+  --cs-text:      #e6eaee;
+  --cs-text-dim:  #8b95a1;
+  --cs-accent:    #4a9bf0;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  font: 13px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.cs-shell {
+  display: grid;
+  grid-template-columns: var(--cs-sidebar-width) 1fr;
+  min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.cs-sidebar {
+  background: var(--cs-surface);
+  border-right: 1px solid var(--cs-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-sidebar-brand {
+  height: var(--cs-topbar-height);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid var(--cs-border);
+  color: var(--cs-text);
+}
+
+.cs-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+}
+
+.cs-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: 100%;
+}
+
+.cs-topbar {
+  height: var(--cs-topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--cs-surface);
+  border-bottom: 1px solid var(--cs-border);
+}
+
+.cs-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cs-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cs-content {
+  padding: 16px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cs-card {
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius);
+  padding: 14px;
+}
+
+.cs-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.cs-nav-item {
+  display: block;
+  padding: 8px 16px;
+  color: var(--cs-text-dim);
+  text-decoration: none;
+  line-height: calc(var(--cs-row-height) - 16px);
+  transition: background 120ms, color 120ms;
+}
+
+.cs-nav-item:hover,
+.cs-nav-item:focus {
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  outline: none;
+}
+
+.cs-nav-item.is-active {
+  color: var(--cs-accent);
+  box-shadow: inset 2px 0 0 var(--cs-accent);
+  background: var(--cs-bg);
+}
+
+/* Keng jadval o'z konteynerida gorizontal scroll qiladi — sahifa
+   tanasi hech qachon gorizontal scroll qilmasligi kerak. */
+.cs-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+/* Topbar elementlari */
+.cs-btn-icon {
+  background: transparent;
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius);
+  color: var(--cs-text);
+  padding: 6px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+
+.cs-btn-icon:hover,
+.cs-btn-icon:focus {
+  background: var(--cs-bg);
+  outline: none;
+}
+
+.cs-vault-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border);
+  background: var(--cs-bg);
+  color: var(--cs-text);
+}
+
+.cs-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--cs-text-dim);
+}
+
+.cs-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.cs-status-ok {
+  background-color: var(--cs-ok);
+}
+
+.cs-status-down {
+  background-color: var(--cs-danger);
+}
+
+.cs-status-unknown {
+  background-color: var(--cs-text-dim);
+}
+
+.cs-sidebar-toggle {
+  display: none;
+}
+
+.cs-sidebar-overlay {
+  display: none;
+}
+
+/* Narrow screens: under 768px the sidebar collapses behind a toggle;
+   no horizontal page scroll at 375px width. */
+@media (max-width: 768px) {
+  .cs-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .cs-sidebar-toggle {
+    display: inline-flex;
+  }
+
+  .cs-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--cs-sidebar-width);
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 120ms ease;
+    border-right: 1px solid var(--cs-border);
+  }
+
+  .cs-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .cs-sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 999;
+  }
+}
