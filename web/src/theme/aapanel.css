@@ -265,3 +265,119 @@ html, body {
     z-index: 999;
   }
 }
+
+/* Form elementlari (34px qator, 13px shrift, 120ms o'tish) */
+.cs-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.cs-label {
+  font-size: 12px;
+  color: var(--cs-text-dim);
+  font-weight: 500;
+}
+
+.cs-input {
+  height: var(--cs-row-height);
+  font: 13px/1.5 inherit;
+  background: var(--cs-surface);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius);
+  padding: 0 10px;
+  color: var(--cs-text);
+  outline: none;
+  transition: border-color 120ms;
+  width: 100%;
+}
+
+.cs-input:focus {
+  border-color: var(--cs-accent);
+}
+
+.cs-btn {
+  height: var(--cs-row-height);
+  font: 13px/1.5 inherit;
+  font-weight: 500;
+  padding: 0 16px;
+  border-radius: var(--cs-radius);
+  border: 1px solid var(--cs-border);
+  background: var(--cs-surface);
+  color: var(--cs-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 120ms, border-color 120ms, opacity 120ms;
+}
+
+.cs-btn:hover:not(:disabled) {
+  background: var(--cs-bg);
+}
+
+.cs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cs-btn-primary {
+  background: var(--cs-accent);
+  color: #ffffff;
+  border-color: var(--cs-accent);
+}
+
+.cs-btn-primary:hover:not(:disabled) {
+  background: #186ac7;
+  border-color: #186ac7;
+}
+
+.cs-btn-block {
+  width: 100%;
+}
+
+.cs-error-msg {
+  color: var(--cs-danger);
+  background: rgba(217, 72, 76, 0.08);
+  border: 1px solid var(--cs-danger);
+  border-radius: var(--cs-radius);
+  padding: 8px 12px;
+  font-size: 12px;
+  margin-top: 12px;
+  line-height: 1.4;
+}
+
+/* Enrollment sahifasi tartibi */
+.cs-enroll-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--cs-bg);
+}
+
+.cs-enroll-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.cs-enroll-header {
+  margin-bottom: 20px;
+}
+
+.cs-enroll-title {
+  margin: 0 0 6px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cs-text);
+}
+
+.cs-enroll-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cs-text-dim);
+}
+

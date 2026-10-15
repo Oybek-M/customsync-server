@@ -1,6 +1,18 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import {
+  createRouter,
+  createWebHistory,
+  type RouteRecordRaw,
+  type Router,
+} from 'vue-router'
+import { useAuthStore } from './stores/auth'
 
 export const routes: RouteRecordRaw[] = [
+  {
+    path: '/enroll',
+    name: 'enroll',
+    component: () => import('./views/EnrollView.vue'),
+    meta: { title: 'Ulanish' },
+  },
   {
     path: '/',
     name: 'dashboard',
@@ -56,7 +68,32 @@ export const routes: RouteRecordRaw[] = [
   },
 ]
 
+let activeRouterInstance: Router | null = null
+
+export function getActiveRouter(): Router | null {
+  return activeRouterInstance ?? router
+}
+
+export function setActiveRouter(r: Router | null): void {
+  activeRouterInstance = r
+}
+
+export function setupAuthGuard(r: Router): void {
+  setActiveRouter(r)
+  r.beforeEach((to) => {
+    const authStore = useAuthStore()
+    if (!authStore.isEnrolled && to.path !== '/enroll') {
+      return '/enroll'
+    }
+    if (authStore.isEnrolled && to.path === '/enroll') {
+      return '/'
+    }
+  })
+}
+
 export const router = createRouter({
   history: createWebHistory('/'),
   routes,
 })
+
+setupAuthGuard(router)

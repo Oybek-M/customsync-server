@@ -22,7 +22,10 @@ const navItems = [
 </script>
 
 <template>
-  <div class="cs-shell">
+  <div v-if="route.path === '/enroll'">
+    <router-view />
+  </div>
+  <div v-else class="cs-shell">
     <div
       v-if="uiStore.sidebarOpen"
       class="cs-sidebar-overlay"
