@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | ⏸ **Sync ulanishi (tdesktop ↔ server) — PAUZA, navbat egasida** (§8, 52-band). Deploy 2026-10-14/15 da bajarilgan (51-band). Sync subdomeni DNS'da tayyor. Lokal kit `.vps-audit/p4` tayyor (mock: 28 test, 14 mutatsiya). Tartib: egasi `p4-1-plan.cmd` → TeamLead `p4-plan.txt` ni tekshiradi → `p4-2-apply.cmd` (nginx + Let's Encrypt + tekshiruv, xatoda orqaga) → `p4-3-code.cmd` (admin kodi) → tdesktop: server URL + kod + arxiv paroli → `p4-4-capture.cmd` → `p4-5-status.cmd`. tdesktop sessiyasiga xabar yuborildi (WebSocket build, admin kodi, token sarlavhaga). A7: skript tuzatildi, egasining `a7-2-apply.cmd` i kutilmoqda. Keyin: EF SQL log darajasi, VPS hardening bosqichlari |
+| **Keyingi bajariladigan** | ✅ **Sync ulandi (2026-10-15 08:22): tdesktop + capture bitta arxivda** (§8, 53-band). Navbatda: (1) tdesktop'da pull va merge tasdig'i — `pull_cursor` ≥ 28, o'chirilgan xabarlar arxivda, `/ws/notify` 101; (2) EF SQL log darajasi — sync yoqilgani uchun endi har siklda log yoziladi; (3) ro'yxatdan o'tish kodini normallashtirish (katta-kichik harf, defis) va capture'da kodni yashirmaslik; (4) Kestrel tana chegarasi, refresh imtiyoz oynasi (integratsiya ro'yxati); (5) VPS hardening bosqichlari |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -2073,6 +2073,23 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - haqiqiy nginx'da `nginx -t` va tekshiruv — egasining `p4-1/p4-2` yurishi;
       - tdesktop token'ni sarlavhaga o'tkazishi, chunki error.log (masalan, 502) to'liq so'rov qatorini yozadi;
       - Kestrel `MaxRequestBodySize` (integratsiya ro'yxati).
+
+53. **Sync ulandi: tdesktop ↔ server ↔ capture (egasi + TeamLead, 2026-10-15)** — kod o'zgarmadi.
+    - **Egasining yurishlari:**
+      - 08:03 p4 plan: to'siq yo'q.
+      - 08:05 p4 apply: sertifikat 2027-01-13 gacha. HTTPS, WebSocket 401, log'da token yo'q, 301, ACME va `renew --dry-run` — hammasi OK. Tashqaridan tekshirildi: health 200, WebSocket 401.
+      - 08:14 tdesktop canary #1 admin kodi bilan ro'yxatdan o'tdi, arxiv parolini yaratdi; FP `48ea5c97…`.
+      - 08:22 capture `--enroll` va `--set-key` (FP mos) qilindi, `Sync:Enabled=true`. Outbox 25 → 0, serverdagi yozuvlar 2 → 28.
+    - **Status (08:24):**
+      - 2 qurilma faol (tdesktop admin, capture device), 1 passphrase o'ram.
+      - Yozuvlar: deleted 22, edited 3, activity 3.
+      - Ikkala xizmat jurnalida 2 soatda 0 ta ogohlantirish.
+      - Capture pull sikli har 30 s, `next cursor 0` — serverda `setting` yozuvi yo'q.
+    - **Topilganlar:**
+      - Kod defissiz terilsa (11/12 belgi), server `invalid_or_used_code` qaytaradi: `RedeemAsync` kirishni normallashtirmaydi, capture esa kodni yashirib so'raydi.
+      - tdesktop'da ikkinchi bosish ham shu xatoni ko'rsatdi, lekin birinchisi o'tgan edi. Diagnostika bloki tab qayta ochilguncha eskirgan qoldi.
+      - Status'dagi vaqtlar PostgreSQL sessiya zonasida chiqadi (kosmetik).
+    - A7 (tdesktop reliz kanali): SFTP foydalanuvchisi yaratildi va tdesktop tomonidan kirish sinaldi. Tafsilot — lokal `.vps-audit/`.
 
 ---
 
