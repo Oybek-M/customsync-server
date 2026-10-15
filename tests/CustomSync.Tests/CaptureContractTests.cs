@@ -225,7 +225,7 @@ public class CaptureContractTests : CaptureContractTestBase
     // SCENARIO 3 — Refresh and rotation
     // =========================================================================
     [Fact]
-    public async Task Scenario03_RefreshAndRotation_persists_rotated_token_and_old_token_is_refused()
+    public async Task Scenario03_RefreshAndRotation_persists_rotated_token_and_old_token_is_refused_after_grace()
     {
         var v = LoadVectorCase1();
         await using var harness = await CreateCaptureHarnessAsync(masterKey: v.MasterKey);
@@ -241,12 +241,22 @@ public class CaptureContractTests : CaptureContractTestBase
         var rotatedRefreshToken = state2.RefreshToken;
         Assert.NotEqual(oldRefreshToken, rotatedRefreshToken);
 
-        // Eski refresh token haqiqiy server tomonidan rad etiladi (RefreshTokenAsync null qaytaradi)
+        // Imtiyoz oynasida eski token yangi zanjir ochmaydi: saqlangan tokenning
+        // o'zini qaytaradi (javob yo'qolgan holat). Oyna tugagach rad etiladi.
         var httpClient = harness.Provider.GetRequiredService<HttpClient>();
         var syncClient = new CaptureSyncHttpClient(httpClient);
-        var oldRefreshResult = await syncClient.RefreshTokenAsync(
-            harness.Config["Capture:Sync:ServerUrl"]!, state1.DeviceId, oldRefreshToken);
-        Assert.Null(oldRefreshResult);
+        var serverUrl = harness.Config["Capture:Sync:ServerUrl"]!;
+        var replayed = await syncClient.RefreshTokenAsync(serverUrl, state1.DeviceId, oldRefreshToken);
+        Assert.Equal(rotatedRefreshToken, replayed?.RefreshToken);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var longAgo = DateTime.UtcNow.AddDays(-1);
+            await scope.ServiceProvider.GetRequiredService<SyncDbContext>().Devices
+                .Where(d => d.DeviceId == state1.DeviceId)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RefreshRotatedAt, longAgo));
+        }
+        Assert.Null(await syncClient.RefreshTokenAsync(serverUrl, state1.DeviceId, oldRefreshToken));
 
         // State fayldan qayta qurilgan runner (restart) yangi token bilan muvaffaqiyatli ishlaydi
         var restartedRunner = new CaptureSyncRunner(

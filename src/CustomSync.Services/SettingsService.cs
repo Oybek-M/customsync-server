@@ -48,6 +48,7 @@ public class SettingsService(SyncDbContext db)
         New("api.max_page_size",          "200",  "int",      "api",     "So'ralishi mumkin bo'lgan maksimal sahifa hajmi"),
         New("auth.jwt_lifetime_minutes",  "15",   "int",      "auth",    "JWT amal qilish muddati"),
         New("auth.enroll_code_minutes",   "10",   "int",      "auth",    "Ro'yxatdan o'tkazish kodining amal qilish muddati"),
+        New("auth.refresh_grace_seconds", "120",  "int",      "auth",    "Almashtirilgan refresh token yana necha soniya ishlaydi: shu vaqtda u AYNAN o'sha yangi tokenni qaytaradi, javob yo'qolsa ham qurilma bloklanmaydi. 0 = imtiyozsiz"),
         New("auth.wrap_rate_per_hour",    "5",    "int",      "auth",    "Kalit o'ramini yuklab olish urinishlari (soatiga, qurilma bo'yicha). DIQQAT: bu yerda 0 cheksiz DEGANI EMAS -- boshqa sozlamalardan farqli, nol yoki manfiy qiymat xavfsiz standartga (5) qaytadi, chunki bu brute-force himoyasi"),
         New("media.max_upload_bytes",     "52428800", "int",  "media",   "Bitta media faylning maksimal hajmi"),
 

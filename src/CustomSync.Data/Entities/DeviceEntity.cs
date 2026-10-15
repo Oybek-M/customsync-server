@@ -11,4 +11,10 @@ public class DeviceEntity
     public DateTime? RevokedAt    { get; set; }
     public string    RefreshHash  { get; set; } = null!;
     public string    Role         { get; set; } = "device";
+
+    // Refresh imtiyoz oynasi: oldingi token hash'i, almashtirilgan vaqt va
+    // yangi tokenning ESKI tokendan olingan kalit bilan shifrlangan nusxasi.
+    public string?   PreviousRefreshHash { get; set; }
+    public DateTime? RefreshRotatedAt    { get; set; }
+    public byte[]?   RotationReplay      { get; set; }
 }

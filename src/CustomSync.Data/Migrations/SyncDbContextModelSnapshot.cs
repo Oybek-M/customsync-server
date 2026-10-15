@@ -17,7 +17,7 @@ namespace CustomSync.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -193,10 +193,18 @@ namespace CustomSync.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("platform");
 
+                    b.Property<string>("PreviousRefreshHash")
+                        .HasColumnType("text")
+                        .HasColumnName("previous_refresh_hash");
+
                     b.Property<string>("RefreshHash")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("refresh_hash");
+
+                    b.Property<DateTime?>("RefreshRotatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("refresh_rotated_at");
 
                     b.Property<DateTime?>("RevokedAt")
                         .HasColumnType("timestamp with time zone")
@@ -206,6 +214,10 @@ namespace CustomSync.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("role");
+
+                    b.Property<byte[]>("RotationReplay")
+                        .HasColumnType("bytea")
+                        .HasColumnName("rotation_replay");
 
                     b.HasKey("DeviceId")
                         .HasName("pk_devices");

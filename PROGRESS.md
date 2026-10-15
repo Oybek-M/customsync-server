@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | 🔧 **Server tuzatishlari partiyasi (2026-10-15): 3/4 qismi commit qilingan, hali deploy qilinmagan.** §8, 54–55-bandlar: kod normallashtiriladi, capture kodni ko'rsatadi, EF log darajasi, media tana chegarasi. Sync ishlayapti (53-band, tdesktop `pull_cursor` 93). Navbatda: (1) refresh imtiyoz oynasi TDD bilan (reja 54-bandda); (2) deploy kiti va bitta qayta deploy; (3) VPS hardening — 🔴 /secure htpasswd almashtirish, lekin tdesktop "tayyor" demaguncha emas (lokal `.vps-audit/README.md`); (4) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
+| **Keyingi bajariladigan** | ✅ **Server tuzatishlari partiyasi tayyor (2026-10-15): 4/4 commit qilingan, hali deploy qilinmagan.** §8, 54–56-bandlar: kod normallashtiriladi, capture kodni ko'rsatadi, EF log darajasi, media tana chegarasi, refresh imtiyoz oynasi (yangi migratsiya). Sync ishlayapti (53-band, tdesktop `pull_cursor` 93). Navbatda: (1) deploy kiti (API + capture) va bitta qayta deploy; (2) VPS hardening — 🔴 /secure htpasswd almashtirish, lekin tdesktop "tayyor" demaguncha emas (lokal `.vps-audit/README.md`); (3) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -2108,7 +2108,7 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
     - **Qolgan 3 ta tuzatish** (hammasi bitta qayta deploy bilan):
       1. ✅ (55-band) **EF SQL log darajasi:** `Microsoft.EntityFrameworkCore.Database.Command` → Warning. `Program.cs` test qilinadigan `LoggingSetup.ApplyLevels(LoggerConfiguration)` ni ishlatadi. Test yig'uvchi `ILogEventSink` bilan: EF Information filtrlanadi, Warning va Error o'tadi.
       2. ✅ (55-band) **Kestrel media chegarasi:** `ContentLength > media.max_upload_bytes` bo'lsa, darhol 413. O'qishdan oldin `IHttpMaxRequestBodySizeFeature.MaxRequestBodySize = max` (feature read-only bo'lmasa). Kestrel standarti 30 000 000, sozlama esa 52 428 800: shu oraliqdagi yuklash hozir Kestrel'da uziladi.
-      3. **Refresh imtiyoz oynasi (replay):**
+      3. ✅ (56-band) **Refresh imtiyoz oynasi (replay):**
          - Yangi ustunlar: `previous_refresh_hash`, `refresh_rotated_at`, `rotation_replay`. Oxirgisi = AES-GCM(kalit = HKDF-SHA256(eski token), yangi token).
          - `auth.refresh_grace_seconds` (120) ichida eski token AYNAN o'sha yangi tokenni qaytaradi. Parallel so'rovda yutqazgan tomon qayta o'qib, shu tokenni oladi. Oynadan keyin eski token rad etiladi.
          - `Refresh_rotates_the_token` va `Concurrent_refresh…` testlari shu semantikaga yangilanadi.
@@ -2137,6 +2137,30 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - **RED:** 5 ta. Chegaradan oshish testi dastlab tuzatishsiz ham o'tdi, chunki Development exception page xatoni o'zi 413 qiladi; shuning uchun tana bo'shligi tekshiruvi qo'shildi. `Read_only…` — himoya testi, M2 mutatsiyasi bilan tekshirildi.
       - **Mutatsiyalar:** 6/6 ushlandi, jumladan Program.cs ulanishini olib tashlash.
       - **To'liq to'plam:** 628/628 (2 skip).
+
+56. **Server tuzatishlari partiyasi, 3-qism: refresh imtiyoz oynasi (TeamLead, 2026-10-15)** — 54-banddagi rejaning 3-bandi. **Hali deploy qilinmagan.**
+    - **Muammo:** refresh token bir martalik edi. Javob mijozga yetmasa (tarmoq uzildi, ilova yopildi), mijozda faqat eski token qolardi va qurilmani qayta ro'yxatdan o'tkazish kerak bo'lardi. Parallel refresh'da yutqazganlar ham null olardi.
+    - **Yechim:**
+      - Migratsiya `AddRefreshGraceWindow`: `devices` jadvaliga 3 ta nullable ustun qo'shildi — `previous_refresh_hash`, `refresh_rotated_at`, `rotation_replay`.
+      - Almashtirishda yangi token ESKI tokendan olingan kalit bilan shifrlab saqlanadi: AES-GCM, kalit = HKDF-SHA256(eski token, salt = device_id), AAD = device_id. Bazada token ochiq holda yo'q, shuning uchun baza o'g'irlansa ham undan ishlaydigan token olib bo'lmaydi.
+      - `auth.refresh_grace_seconds` (standart 120) ichida eski token AYNAN o'sha yangi tokenni qaytaradi, ya'ni ikkinchi yaroqli token paydo bo'lmaydi. Oyna tugagach yoki yangi token ishlatilgach eski token rad etiladi. 0 = imtiyozsiz.
+      - Parallel so'rovda yutqazgan tomon qatorni qayta o'qib, g'olib olgan tokenni oladi.
+      - Bekor qilingan qurilma tokenni qayta ham ololmaydi.
+    - **Testlar:**
+      - `DeviceAuthTests`:
+        - eski token qayta beriladi, yangi token ishlatilgach eng eski token o'ladi;
+        - oyna sozlamadan o'qiladi: 5 s da rad etiladi, 120 s da ishlaydi;
+        - bekor qilingan qurilma qayta ololmaydi;
+        - bazadagi nusxada yangi token ochiq holda yo'q;
+        - parallel 8 so'rovning hammasi bitta tokenni oladi.
+      - Shartnomaga moslab yangilandi:
+        - `DeviceEndpointsTests.Refresh_with_valid_token_rotates_refresh_token`: HTTP darajasida oynada 200 va o'sha token, oynadan keyin 401;
+        - capture `Scenario03_…_old_token_is_refused_after_grace`.
+      - **RED:** 4 ta. `Revoked_device_cannot_replay…` — himoya testi.
+      - **Mutatsiyalar:** 7 tadan 6 tasi ushlandi. Omon qolgani — oldingi hash tekshiruvini olib tashlash. U ekvivalent: noto'g'ri token bilan AES-GCM tegi baribir mos kelmaydi, ya'ni bu tekshiruv ikkinchi himoya qatlami.
+      - **To'liq to'plam:** 631/631 (2 skip).
+    - **Protokol:** "refresh token bir martalik" qoidasi yumshadi (orqaga mos). tdesktop sessiyasiga CHANGELOG qatori yuborildi.
+    - Snapshot'dagi `ProductVersion` 8.0.11 → 10.0.12: migratsiyani `dotnet ef` 9.0.1 yaratdi, runtime esa EF Core 10.0.12.
 
 ---
 

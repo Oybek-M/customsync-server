@@ -1,8 +1,10 @@
 using CustomSync.Tests.Fixtures;
 using System.Net;
 using System.Net.Http.Json;
+using CustomSync.Data;
 using CustomSync.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -94,13 +96,31 @@ public class DeviceEndpointsTests : IClassFixture<CustomSyncWebApplicationFactor
         Assert.NotNull(refreshed1);
         Assert.NotEqual(enrolled.RefreshToken, refreshed1.RefreshToken);
 
-        // Eski refresh token bilan qayta urinish (rad etilishi kerak)
+        // Eski token imtiyoz oynasida AYNAN o'sha yangi tokenni qaytaradi
+        // (javob mijozga yetmay qolgan holat), yangi zanjir ochilmaydi.
         var refreshResponse2 = await client.PostAsJsonAsync("/api/v1/devices/refresh", new
         {
             device_id = enrolled.DeviceId,
             refresh_token = enrolled.RefreshToken
         });
-        Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse2.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, refreshResponse2.StatusCode);
+        var replayed = await refreshResponse2.Content.ReadFromJsonAsync<RefreshResponse>(TestJson.Options);
+        Assert.Equal(refreshed1.RefreshToken, replayed?.RefreshToken);
+
+        // Oyna tugagach eski token rad etiladi.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var longAgo = DateTime.UtcNow.AddDays(-1);
+            await scope.ServiceProvider.GetRequiredService<SyncDbContext>().Devices
+                .Where(d => d.DeviceId == enrolled.DeviceId)
+                .ExecuteUpdateAsync(s => s.SetProperty(d => d.RefreshRotatedAt, longAgo));
+        }
+        var refreshResponse3 = await client.PostAsJsonAsync("/api/v1/devices/refresh", new
+        {
+            device_id = enrolled.DeviceId,
+            refresh_token = enrolled.RefreshToken
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshResponse3.StatusCode);
     }
 
     [Fact]

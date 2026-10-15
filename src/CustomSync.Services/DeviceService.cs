@@ -106,7 +106,9 @@ public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRev
 
     /// <summary>
     /// Refresh token har ishlatilganda almashtiriladi (rotation) — o'g'irlangan
-    /// eski token qayta ishlatilmasligi uchun.
+    /// eski token qayta ishlatilmasligi uchun. `auth.refresh_grace_seconds`
+    /// ichida eski token yangi zanjir ochmaydi, AYNAN o'sha yangi tokenni
+    /// qaytaradi: javob mijozga yetmasa ham qurilma bloklanmaydi.
     /// </summary>
     public async Task<EnrolledDevice?> RefreshAsync(
         string deviceId, string refreshToken, CancellationToken ct = default)
@@ -114,23 +116,93 @@ public class DeviceService(SyncDbContext db, SettingsService settings, DeviceRev
         var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
         if (device is null || device.RevokedAt is not null) return null;
         var oldHash = Sha256Hex(refreshToken);
-        if (!FixedTimeEquals(device.RefreshHash, oldHash)) return null;
+        if (!FixedTimeEquals(device.RefreshHash, oldHash))
+            return await ReplayAsync(device, refreshToken, oldHash, ct);
 
         // Shartli yozish (RedeemAsync kabi): o'qish-keyin-yozishda bitta
         // token bilan parallel so'rovlarning HAMMASI o'tardi, bazada esa
         // oxirgisi qolib, qolgan mijozlar bilmaydigan token bilan qolardi.
         var rotated = Base32(RandomNumberGenerator.GetBytes(32));
         var newHash = Sha256Hex(rotated);
+        var replay = SealReplay(refreshToken, deviceId, rotated);
         var now = DateTime.UtcNow;
         var updated = await db.Devices
             .Where(d => d.DeviceId == deviceId && d.RevokedAt == null && d.RefreshHash == oldHash)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(d => d.RefreshHash, newHash)
+                .SetProperty(d => d.PreviousRefreshHash, oldHash)
+                .SetProperty(d => d.RefreshRotatedAt, now)
+                .SetProperty(d => d.RotationReplay, replay)
                 .SetProperty(d => d.LastSeenAt, now), ct);
-        if (updated == 0) return null;
+        if (updated == 0)
+        {
+            // Parallel so'rov bizdan oldin almashtirdi: uning natijasini olamiz.
+            var current = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.DeviceId == deviceId, ct);
+            if (current is null || current.RevokedAt is not null) return null;
+            return await ReplayAsync(current, refreshToken, oldHash, ct);
+        }
 
         return new EnrolledDevice(device.DeviceId, rotated, device.Name, device.Platform, device.Role);
     }
+
+    private async Task<EnrolledDevice?> ReplayAsync(
+        DeviceEntity device, string refreshToken, string tokenHash, CancellationToken ct)
+    {
+        if (device.PreviousRefreshHash is null || device.RefreshRotatedAt is null || device.RotationReplay is null)
+            return null;
+        if (!FixedTimeEquals(device.PreviousRefreshHash, tokenHash)) return null;
+
+        var grace = await settings.GetIntAsync("auth.refresh_grace_seconds", ct);
+        if (DateTime.UtcNow - device.RefreshRotatedAt.Value > TimeSpan.FromSeconds(Math.Max(grace, 0)))
+            return null;
+
+        var token = OpenReplay(refreshToken, device.DeviceId, device.RotationReplay);
+        return token is null
+            ? null
+            : new EnrolledDevice(device.DeviceId, token, device.Name, device.Platform, device.Role);
+    }
+
+    /// <summary>
+    /// Yangi tokenni ESKI tokendan olingan kalit bilan shifrlaydi. Bazada faqat
+    /// hash'lar turadi, shuning uchun baza o'g'irlansa ham bu nusxani ochib
+    /// bo'lmaydi: kalit faqat eski tokenni bilgan mijozda bor.
+    /// </summary>
+    private static byte[] SealReplay(string oldToken, string deviceId, string newToken)
+    {
+        var plain = Encoding.UTF8.GetBytes(newToken);
+        var box = new byte[ReplayNonceSize + plain.Length + ReplayTagSize];
+        var nonce = box.AsSpan(0, ReplayNonceSize);
+        RandomNumberGenerator.Fill(nonce);
+        using var aes = new AesGcm(ReplayKey(oldToken, deviceId), ReplayTagSize);
+        aes.Encrypt(nonce, plain, box.AsSpan(ReplayNonceSize, plain.Length),
+                    box.AsSpan(ReplayNonceSize + plain.Length), Encoding.UTF8.GetBytes(deviceId));
+        return box;
+    }
+
+    private static string? OpenReplay(string oldToken, string deviceId, byte[] box)
+    {
+        if (box.Length < ReplayNonceSize + ReplayTagSize) return null;
+        var plain = new byte[box.Length - ReplayNonceSize - ReplayTagSize];
+        try
+        {
+            using var aes = new AesGcm(ReplayKey(oldToken, deviceId), ReplayTagSize);
+            aes.Decrypt(box.AsSpan(0, ReplayNonceSize), box.AsSpan(ReplayNonceSize, plain.Length),
+                        box.AsSpan(ReplayNonceSize + plain.Length), plain, Encoding.UTF8.GetBytes(deviceId));
+        }
+        catch (CryptographicException)
+        {
+            return null;
+        }
+        return Encoding.UTF8.GetString(plain);
+    }
+
+    private const int ReplayNonceSize = 12;
+    private const int ReplayTagSize   = 16;
+
+    private static byte[] ReplayKey(string oldToken, string deviceId)
+        => HKDF.DeriveKey(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(oldToken), 32,
+                          salt: Encoding.UTF8.GetBytes(deviceId),
+                          info: "customsync/refresh-replay/v1"u8.ToArray());
 
     /// <summary>
     /// Qurilmani bekor qilish.
