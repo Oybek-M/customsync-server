@@ -14,7 +14,7 @@ Branch `Oybek`, ish daraxti toza.
 |---|---|
 | **Oxirgi TeamLead tuzatishi** | `87f24c2` — 🔴 capture TDLib'ni hech qachon ishga tushirmasdi: `td_create_client_id` nusxasi birinchi so'rovgacha jim turadi, gate esa hech narsa yubormay kutardi (haqiqiy `libtdjson` 1.8.67 bilan oflayn konteynerda topildi; deploy'ni to'liq bloklardi). Login'da xato kod/parol/raqam sababi bilan qayta so'raladi (3 martagacha), email holatlari qo'llanadi. §8, 50-band |
 | **Oxirgi tekshirib qabul qilingan** | **Plan 05 Task 12** — butun solution .NET 10 LTS da (`5fd5788` + tekshiruv `9c5d1b7`, 600 test). 🔴 Tekshiruvda: ulanish satri bo'lmasa production kodga yozilgan parolli default bilan davom etardi; EF testi production ishlatmaydigan nusxani tekshirardi; exit-kod testlari har qanday istisnoni "o'tdi" derdi — §8, 48-band, "TeamLead tekshiruvi" |
-| **Keyingi bajariladigan** | ⏸ **Pauza (2026-10-15). Server tuzatishlari partiyasining 1/4 qismi commit qilingan, hali deploy qilinmagan** (§8, 54-band: kod normallashtiriladi, capture kodni ko'rsatadi). Sync ishlayapti (53-band, tdesktop `pull_cursor` 93). Navbatda: (1) qolgan 3 ta tuzatish TDD bilan — EF SQL log darajasi, Kestrel media chegarasi, refresh imtiyoz oynasi (reja 54-bandda); (2) deploy kiti va bitta qayta deploy; (3) VPS hardening — 🔴 /secure htpasswd almashtirish, lekin tdesktop "tayyor" demaguncha emas (lokal `.vps-audit/README.md`); (4) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
+| **Keyingi bajariladigan** | 🔧 **Server tuzatishlari partiyasi (2026-10-15): 3/4 qismi commit qilingan, hali deploy qilinmagan.** §8, 54–55-bandlar: kod normallashtiriladi, capture kodni ko'rsatadi, EF log darajasi, media tana chegarasi. Sync ishlayapti (53-band, tdesktop `pull_cursor` 93). Navbatda: (1) refresh imtiyoz oynasi TDD bilan (reja 54-bandda); (2) deploy kiti va bitta qayta deploy; (3) VPS hardening — 🔴 /secure htpasswd almashtirish, lekin tdesktop "tayyor" demaguncha emas (lokal `.vps-audit/README.md`); (4) Plan 03 Task 1 — Gemini prompti tayyor (`docs/plan03-task1-prompt.md`), natijani TeamLead tekshiradi |
 | 🟡 VPS xavfsizligi | Audit (2026-10-05/06, PC) tugadi. **2026-10-11 (laptop): 0-bosqich hardening (SSH, firewall, hujum qoldiqlari, host kalitlar), xavfsizlik yangilanishlari va reboot qo'llandi va tekshirildi** — barcha xizmatlar qaytdi, saytlar oldin va keyin bir xil. Keyingi bosqichlar ketma-ket. **Tafsilotlar ataylab public repo'ga yozilmaydi** — faqat lokal `.vps-audit/README.md` (git'dan chiqarilgan) |
 | Undan keyin | Plan 03 (web UI; health sahifasi shu `GET` dan o'qiydi), `read_at`, xavfsizlik auditi, deploy |
 | ✅ DEPLOY — ishlayapti (2026-10-14/15) | VPS 2026-09 da buzilgan (miner); audit (2026-10-05/06) va 0-bosqich hardening (2026-10-11) bajarildi. Egasi capture deploy'ini tezlashtirishga qaror qildi (shartli ruxsat 2026-10-13). Shart: hosting paneli 2FA, root paroli, Telegram 2FA — **egasi 2026-10-13 kunduzi bajardi.** Deploy egasi tomonidan lokal kit bilan qilindi: plan → apply → telegram → status, har qadam chiqishi tekshirildi (§8, 51-band). Qolgan sirlarni almashtirish davom etadi (lokal `.vps-audit/`) |
@@ -2106,12 +2106,37 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
       - To'liq to'plam 622/622 (2 skip).
     - **Flaky test:** `CaptureUpdateHandlerTests.Test11_Two_edits_before_sending…` to'liq to'plamda 3 yurishdan birida yiqildi, alohida 3 marta o'tdi. Sababi hali tekshirilmagan; bu partiyaga aloqasi yo'q.
     - **Qolgan 3 ta tuzatish** (hammasi bitta qayta deploy bilan):
-      1. **EF SQL log darajasi:** `Microsoft.EntityFrameworkCore.Database.Command` → Warning. `Program.cs` test qilinadigan `LoggingSetup.ApplyLevels(LoggerConfiguration)` ni ishlatadi. Test yig'uvchi `ILogEventSink` bilan: EF Information filtrlanadi, Warning va Error o'tadi.
-      2. **Kestrel media chegarasi:** `ContentLength > media.max_upload_bytes` bo'lsa, darhol 413. O'qishdan oldin `IHttpMaxRequestBodySizeFeature.MaxRequestBodySize = max` (feature read-only bo'lmasa). Kestrel standarti 30 000 000, sozlama esa 52 428 800: shu oraliqdagi yuklash hozir Kestrel'da uziladi.
+      1. ✅ (55-band) **EF SQL log darajasi:** `Microsoft.EntityFrameworkCore.Database.Command` → Warning. `Program.cs` test qilinadigan `LoggingSetup.ApplyLevels(LoggerConfiguration)` ni ishlatadi. Test yig'uvchi `ILogEventSink` bilan: EF Information filtrlanadi, Warning va Error o'tadi.
+      2. ✅ (55-band) **Kestrel media chegarasi:** `ContentLength > media.max_upload_bytes` bo'lsa, darhol 413. O'qishdan oldin `IHttpMaxRequestBodySizeFeature.MaxRequestBodySize = max` (feature read-only bo'lmasa). Kestrel standarti 30 000 000, sozlama esa 52 428 800: shu oraliqdagi yuklash hozir Kestrel'da uziladi.
       3. **Refresh imtiyoz oynasi (replay):**
          - Yangi ustunlar: `previous_refresh_hash`, `refresh_rotated_at`, `rotation_replay`. Oxirgisi = AES-GCM(kalit = HKDF-SHA256(eski token), yangi token).
          - `auth.refresh_grace_seconds` (120) ichida eski token AYNAN o'sha yangi tokenni qaytaradi. Parallel so'rovda yutqazgan tomon qayta o'qib, shu tokenni oladi. Oynadan keyin eski token rad etiladi.
          - `Refresh_rotates_the_token` va `Concurrent_refresh…` testlari shu semantikaga yangilanadi.
+
+55. **Server tuzatishlari partiyasi, 2-qism: EF log darajasi va media tana chegarasi (TeamLead, 2026-10-15)** — 54-banddagi rejaning 1–2-bandlari. **Hali deploy qilinmagan.**
+    - **Log darajalari:**
+      - `LoggingSetup.ApplyLevels()` (`src/CustomSync.Api/Logging/`) ni Program.cs ham, testlar ham ishlatadi.
+      - `Microsoft.EntityFrameworkCore.Database.Command` → Warning. SQL buyruqlari endi yozilmaydi, EF ogohlantirish va xatolari esa qoladi (masalan, birinchi ishga tushishdagi ERR).
+    - **Media PUT:**
+      - E'lon qilingan `Content-Length` `media.max_upload_bytes` dan katta bo'lsa — tana o'qilmasdan 413.
+      - O'qishdan oldin `IHttpMaxRequestBodySizeFeature.MaxRequestBodySize = max` (feature read-only bo'lmasa). 30 000 000 dan katta, lekin ruxsat etilgan blob endi uzilmaydi.
+      - Chunked tana chegaradan oshsa, Kestrel'ning 413 li `BadHttpRequestException` i endpoint'da ushlanadi va Error log yozilmaydi.
+    - **Testlar:**
+      - `LoggingSetupTests`:
+        - yig'uvchi sink bilan darajalar tekshiriladi;
+        - ilovaning `ILoggerFactory` si ham shu darajalarda ishlaydi, ya'ni Program.cs ga haqiqatan ulangan.
+      - `MediaEndpointsTests`: so'rov ilmog'i (`IStartupFilter`) TestServer'da yo'q Kestrel shartnomasini qo'yadi:
+        - chegara feature'i: read-only bo'lsa, o'rnatish xato beradi (Kestrel kabi);
+        - 413 tashlaydigan tana oqimi.
+      - `MediaEndpointsTests` dagi 4 ta yangi test:
+        - chegara sozlamaga tenglashadi;
+        - read-only chegaraga tegilmaydi;
+        - katta e'lon qilingan tana o'qilmaydi;
+        - chegaradan oshish endpoint'da ushlanadi (javob tanasi bo'sh).
+      - Baza umumiy, `CaptureEndToEndTests` esa sozlamani vaqtincha 10 ga o'zgartiradi. Shuning uchun chegara so'rovdan oldingi yoki keyingi sozlama qiymatiga tengligi tekshiriladi.
+      - **RED:** 5 ta. Chegaradan oshish testi dastlab tuzatishsiz ham o'tdi, chunki Development exception page xatoni o'zi 413 qiladi; shuning uchun tana bo'shligi tekshiruvi qo'shildi. `Read_only…` — himoya testi, M2 mutatsiyasi bilan tekshirildi.
+      - **Mutatsiyalar:** 6/6 ushlandi, jumladan Program.cs ulanishini olib tashlash.
+      - **To'liq to'plam:** 628/628 (2 skip).
 
 ---
 

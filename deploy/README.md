@@ -268,8 +268,9 @@ ya'ni alohida logrotate sozlash shart emas.
 Yangi bazada birinchi startda bitta `ERR Failed executing DbCommand … FROM "__EFMigrationsHistory"`
 chiqadi — bu normal: EF Core tarix jadvalini o'qiy olmagach uni yaratadi va migratsiyalarni qo'llaydi
 (ortidan `Applying migration '…_InitialSchema'`). Keyingi startlarda takrorlanmaydi.
-Hozircha har SQL buyrug'i `INF Executed DbCommand` sifatida ham yoziladi (parametr qiymatlarisiz);
-darajani pasaytirish ochiq — `PROGRESS.md` §8, 51-band.
+SQL buyruqlari (`INF Executed DbCommand`) yozilmaydi, EF ogohlantirish va xatolari esa qoladi
+(`PROGRESS.md` §8, 55-band). Bu faqat shu o'zgarish deploy qilingandan keyin amal qiladi; ungacha
+VPS'dagi versiya har SQL buyrug'ini yozadi (parametr qiymatlarisiz).
 
 ---
 

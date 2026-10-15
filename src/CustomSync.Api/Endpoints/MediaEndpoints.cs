@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using CustomSync.Services;
+using Microsoft.AspNetCore.Http.Features;
 
 namespace CustomSync.Api.Endpoints;
 
@@ -55,8 +56,28 @@ public static class MediaEndpoints
             var deviceId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
             var max = await settings.GetIntAsync("media.max_upload_bytes");
+
+            // Kestrel standarti (30 000 000) sozlamadan kichik: usiz 30 MB dan
+            // katta, lekin ruxsat etilgan blob o'qish paytida uzilardi. Chegara
+            // shu so'rov uchun sozlamaga tenglashtiriladi, e'lon qilingan uzunlik
+            // oshsa esa tana umuman o'qilmaydi.
+            if (request.ContentLength > max)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            var bodyLimit = request.HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (bodyLimit is { IsReadOnly: false })
+                bodyLimit.MaxRequestBodySize = max;
+
             using var buffer = new MemoryStream();
-            await request.Body.CopyToAsync(buffer, ct);
+            try
+            {
+                await request.Body.CopyToAsync(buffer, ct);
+            }
+            catch (BadHttpRequestException ex) when (ex.StatusCode == StatusCodes.Status413PayloadTooLarge)
+            {
+                // Chunked tana chegaradan oshdi. Ushlanmasa, Kestrel har bunday
+                // so'rov uchun Error log yozardi.
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            }
             if (buffer.Length > max)
                 return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
 

@@ -8,6 +8,10 @@ using CustomSync.Core;
 using CustomSync.Core.Contracts;
 using CustomSync.Services;
 using CustomSync.Data;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,12 +23,15 @@ public class MediaEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory
 {
     private readonly WebApplicationFactory<Program> _factory;
     private readonly string _tempMediaRoot;
+    private readonly RequestHook _hook = new();
 
     public MediaEndpointsTests(CustomSyncWebApplicationFactory factory)
     {
         _tempMediaRoot = Path.Combine(Path.GetTempPath(), $"cs-media-test-{Guid.NewGuid():N}");
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureServices(services =>
+                services.AddSingleton<IStartupFilter>(new RequestHookFilter(_hook)));
             builder.ConfigureAppConfiguration((ctx, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -571,5 +578,148 @@ public class MediaEndpointsTests : IClassFixture<CustomSyncWebApplicationFactory
             .Select(h => h.GetString()!)
             .ToList();
         Assert.Equal(2, mediaAgain.Count);
+    }
+
+    // =========================================================================
+    // Tana chegarasi. TestServer'da Kestrel yo'q, shuning uchun u beradigan
+    // narsalar (chegara feature'i, chegaradan oshgandagi xato) ilmoq orqali
+    // qo'yiladi. Ular Kestrel'dan aqlliroq emas: faqat o'sha shartnoma.
+    // =========================================================================
+
+    /// <summary>
+    /// Kestrel standarti (30 000 000) `media.max_upload_bytes` (50 MiB) dan
+    /// kichik: usiz 30 MB dan katta, lekin ruxsat etilgan blob o'qish paytida
+    /// uzilardi. Endpoint chegarani shu so'rov uchun sozlamaga tenglashtiradi.
+    /// </summary>
+    [Fact]
+    public async Task Upload_raises_the_server_body_limit_to_the_media_setting()
+    {
+        var (client, _, _) = await EnrolDeviceAsync();
+        var limit = new FakeBodyLimit(isReadOnly: false);
+        _hook.BodyLimit = limit;
+
+        // Baza umumiy: boshqa test sozlamani vaqtincha o'zgartiradi, shuning
+        // uchun so'rovdan oldingi va keyingi qiymat bilan solishtiriladi.
+        var before = await GetMaxUploadAsync();
+        var resp = await PutBlobAsync(client);
+        var after = await GetMaxUploadAsync();
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Contains(limit.MaxRequestBodySize, new long?[] { before, after });
+    }
+
+    /// <summary>Tana o'qila boshlagach chegara read-only, o'rnatish esa xato beradi.</summary>
+    [Fact]
+    public async Task Read_only_body_limit_is_left_alone()
+    {
+        var (client, _, _) = await EnrolDeviceAsync();
+        var limit = new FakeBodyLimit(isReadOnly: true);
+        _hook.BodyLimit = limit;
+
+        var resp = await PutBlobAsync(client);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal(FakeBodyLimit.KestrelDefault, limit.MaxRequestBodySize);
+    }
+
+    [Fact]
+    public async Task Declared_oversized_body_is_rejected_without_reading_it()
+    {
+        var (client, _, _) = await EnrolDeviceAsync();
+        _hook.ContentLength = int.MaxValue + 1L; // har qanday int sozlamadan katta
+        _hook.Body = () => new ThrowingStream(() => new InvalidOperationException("tana o'qilmasligi kerak"));
+
+        var resp = await PutBlobAsync(client);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, resp.StatusCode);
+    }
+
+    /// <summary>
+    /// Uzunligi e'lon qilinmagan (chunked) tana chegaradan oshsa, Kestrel o'qish
+    /// paytida 413 li `BadHttpRequestException` tashlaydi. Endpoint uni o'zi
+    /// ushlashi kerak: tashqariga chiqsa, Development'da exception page uning
+    /// matnini yozadi, production'da esa Kestrel har shunday so'rovga Error log.
+    /// </summary>
+    [Fact]
+    public async Task Body_over_the_server_limit_is_handled_by_the_endpoint()
+    {
+        var (client, _, _) = await EnrolDeviceAsync();
+        _hook.Body = () => new ThrowingStream(() =>
+            new BadHttpRequestException("Request body too large.", StatusCodes.Status413PayloadTooLarge));
+
+        var resp = await PutBlobAsync(client);
+
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, resp.StatusCode);
+        Assert.Empty(await resp.Content.ReadAsByteArrayAsync());
+    }
+
+    private static async Task<HttpResponseMessage> PutBlobAsync(HttpClient client)
+    {
+        using var put = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/media/{NewValidHash()}")
+        {
+            Content = new ByteArrayContent([1, 2, 3])
+        };
+        put.Headers.Add("X-Nonce", Convert.ToBase64String(new byte[12]));
+        return await client.SendAsync(put);
+    }
+
+    private async Task<int> GetMaxUploadAsync()
+    {
+        using var scope = _factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<SettingsService>()
+            .GetIntAsync("media.max_upload_bytes");
+    }
+
+    private sealed class RequestHook
+    {
+        public IHttpMaxRequestBodySizeFeature? BodyLimit;
+        public Func<Stream>? Body;
+        public long? ContentLength;
+    }
+
+    private sealed class RequestHookFilter(RequestHook hook) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use(async (ctx, nextMiddleware) =>
+            {
+                if (hook.BodyLimit is not null) ctx.Features.Set(hook.BodyLimit);
+                if (hook.ContentLength is { } length) ctx.Request.ContentLength = length;
+                if (hook.Body is not null) ctx.Request.Body = hook.Body();
+                await nextMiddleware();
+            });
+            next(app);
+        };
+    }
+
+    /// <summary>Kestrel'niki kabi: read-only bo'lganda qiymat o'rnatish xato.</summary>
+    private sealed class FakeBodyLimit(bool isReadOnly) : IHttpMaxRequestBodySizeFeature
+    {
+        public const long KestrelDefault = 30_000_000;
+        private long? _max = KestrelDefault;
+        public bool IsReadOnly { get; } = isReadOnly;
+        public long? MaxRequestBodySize
+        {
+            get => _max;
+            set => _max = IsReadOnly
+                ? throw new InvalidOperationException("MaxRequestBodySize is read-only.")
+                : value;
+        }
+    }
+
+    private sealed class ThrowingStream(Func<Exception> error) : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override int Read(byte[] buffer, int offset, int count) => throw error();
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) => throw error();
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) => throw error();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }

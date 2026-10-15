@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using CustomSync.Api.Auth;
 using CustomSync.Api.Endpoints;
+using CustomSync.Api.Logging;
 using CustomSync.Api.Realtime;
 using CustomSync.Data;
 using CustomSync.Services;
@@ -28,8 +29,7 @@ var tmpConfig = new ConfigurationBuilder()
     .Build();
 
 Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Override("Microsoft.AspNetCore.Hosting", Serilog.Events.LogEventLevel.Warning)
-    .MinimumLevel.Override("Microsoft.AspNetCore.Routing", Serilog.Events.LogEventLevel.Warning)
+    .ApplyLevels()
     .WriteTo.Console()
     .WriteTo.File(
         tmpConfig["Serilog:File:Path"] ?? "logs/customsync-.log",
