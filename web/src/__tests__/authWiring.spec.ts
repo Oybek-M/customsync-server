@@ -68,7 +68,7 @@ describe('auth wiring in the real app', () => {
 
     const controller = new AbortController()
     controller.abort()
-    const error = await api('/api/v1/search', { signal: controller.signal }).catch((e: unknown) => e as Error)
+    const error = (await api('/api/v1/search', { signal: controller.signal }).catch((e: unknown) => e)) as Error
     expect(error).not.toBeInstanceOf(ApiError)
     expect(error.name).toBe('AbortError')
   })
