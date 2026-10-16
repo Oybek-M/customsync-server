@@ -17,6 +17,7 @@ const error = ref<string | null>(null)
 // Revoke dialog
 const deviceToRevoke = ref<Device | null>(null)
 const revoking = ref(false)
+const revokeError = ref<string | null>(null)
 
 // New code modal
 const showCodeModal = ref(false)
@@ -58,6 +59,7 @@ onUnmounted(() => {
 })
 
 function openRevokeConfirm(device: Device) {
+  revokeError.value = null
   deviceToRevoke.value = device
 }
 
@@ -69,6 +71,7 @@ async function confirmRevoke() {
   if (!deviceToRevoke.value) return
   const target = deviceToRevoke.value
   revoking.value = true
+  revokeError.value = null
 
   try {
     await revokeDevice(target.device_id)
@@ -83,7 +86,8 @@ async function confirmRevoke() {
     target.revoked_at = new Date().toISOString()
     closeRevokeConfirm()
   } catch {
-    // Revoke error
+    // Jim qolmaydi: aks holda qurilma bekor qilindi deb o'ylanardi.
+    revokeError.value = "Bekor qilib bo'lmadi. Qurilma hali faol — qayta urinib ko'ring."
   } finally {
     revoking.value = false
   }
@@ -215,6 +219,7 @@ function formatCountdown(sec: number): string {
         <div v-if="authStore.deviceId === deviceToRevoke.device_id" class="cs-own-device-warning">
           Diqqat: Bu joriy sessiyangiz ishlatayotgan qurilma! Bekor qilgandan so'ng qayta ulanishingiz kerak bo'ladi.
         </div>
+        <div v-if="revokeError" class="cs-error-msg">{{ revokeError }}</div>
         <div class="cs-modal-actions">
           <button class="cs-btn cs-btn-cancel" :disabled="revoking" @click="closeRevokeConfirm">
             Bekor qilish

@@ -39,6 +39,8 @@ async function loadMore() {
     nextBefore.value = page.next_before
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === 'AbortError') return
+    // Jim qolmaydi: aks holda jurnal shu yerda tugaydi deb o'ylanardi.
+    error.value = "Keyingi sahifani yuklab bo'lmadi. Qayta urinib ko'ring."
   } finally {
     loadingMore.value = false
   }
