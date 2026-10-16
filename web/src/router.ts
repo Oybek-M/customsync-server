@@ -6,11 +6,15 @@ import {
 } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 
+import EnrollView from './views/EnrollView.vue'
+import { getActiveRouter, setActiveRouter, setDefaultRouter } from './router-instance'
+export { getActiveRouter, setActiveRouter }
+
 export const routes: RouteRecordRaw[] = [
   {
     path: '/enroll',
     name: 'enroll',
-    component: () => import('./views/EnrollView.vue'),
+    component: EnrollView,
     meta: { title: 'Ulanish' },
   },
   {
@@ -68,16 +72,6 @@ export const routes: RouteRecordRaw[] = [
   },
 ]
 
-let activeRouterInstance: Router | null = null
-
-export function getActiveRouter(): Router | null {
-  return activeRouterInstance ?? router
-}
-
-export function setActiveRouter(r: Router | null): void {
-  activeRouterInstance = r
-}
-
 export function setupAuthGuard(r: Router): void {
   setActiveRouter(r)
   r.beforeEach((to) => {
@@ -96,4 +90,5 @@ export const router = createRouter({
   routes,
 })
 
+setDefaultRouter(router)
 setupAuthGuard(router)

@@ -8,7 +8,7 @@ import {
   enroll as clientEnroll,
   onAuthChange,
 } from '../api/client'
-import { getActiveRouter } from '../router'
+import { getActiveRouter } from '../router-instance'
 
 export const useAuthStore = defineStore('auth', () => {
   const deviceId = ref<string | null>(getStoredDeviceId())

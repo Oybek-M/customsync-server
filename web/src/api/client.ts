@@ -216,7 +216,10 @@ export async function api<T>(
   options: RequestInit & { signal?: AbortSignal } = {},
   isRetry = false
 ): Promise<T> {
-  const token = await ensureToken()
+  const token =
+    accessToken && Date.now() < expiresAt - 30_000
+      ? accessToken
+      : await refreshTokenRequest()
 
   const headers = new Headers(options.headers)
   headers.set('Authorization', `Bearer ${token}`)
