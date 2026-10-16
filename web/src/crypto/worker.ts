@@ -27,12 +27,16 @@ export interface DecryptedIndexedRecord {
   occurred_at: number
   seq: number
   json: any
+  device_id?: string
+  account_hash?: string
+  observed_at?: number
 }
 
 export interface WorkerIndexState {
   recordsById: Map<string, DecryptedIndexedRecord>
   sortedRecords: DecryptedIndexedRecord[]
   corruptCount: number
+  maxSeq: number
 }
 
 export function createInitialIndexState(): WorkerIndexState {
@@ -40,6 +44,7 @@ export function createInitialIndexState(): WorkerIndexState {
     recordsById: new Map(),
     sortedRecords: [],
     corruptCount: 0,
+    maxSeq: 0,
   }
 }
 
@@ -61,11 +66,59 @@ export function createInitialWorkerState(): WorkerState {
   }
 }
 
-function compareNewestFirst(a: DecryptedIndexedRecord, b: DecryptedIndexedRecord): number {
+export function compareNewestFirst(a: DecryptedIndexedRecord, b: DecryptedIndexedRecord): number {
   if (b.occurred_at !== a.occurred_at) {
     return b.occurred_at - a.occurred_at
   }
   return b.seq - a.seq
+}
+
+export function compareKeyDesc(
+  occA: number,
+  seqA: number,
+  occB: number,
+  seqB: number
+): number {
+  if (occB !== occA) {
+    return occB - occA
+  }
+  return seqB - seqA
+}
+
+export function findFirstOlderDesc(
+  records: DecryptedIndexedRecord[],
+  occ: number,
+  seq: number
+): number {
+  let low = 0
+  let high = records.length
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    if (compareKeyDesc(records[mid].occurred_at, records[mid].seq, occ, seq) > 0) {
+      high = mid
+    } else {
+      low = mid + 1
+    }
+  }
+  return low
+}
+
+export function findFirstNotNewerDesc(
+  records: DecryptedIndexedRecord[],
+  occ: number,
+  seq: number
+): number {
+  let low = 0
+  let high = records.length
+  while (low < high) {
+    const mid = (low + high) >>> 1
+    if (compareKeyDesc(records[mid].occurred_at, records[mid].seq, occ, seq) >= 0) {
+      high = mid
+    } else {
+      low = mid + 1
+    }
+  }
+  return low
 }
 
 function parseBytesInput(val: Uint8Array | string): Uint8Array {
@@ -316,8 +369,14 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
             msg_id: r.msg_id,
             occurred_at: r.occurred_at,
             seq: r.seq,
+            device_id: r.device_id,
+            account_hash: r.account_hash,
+            observed_at: r.observed_at,
             json,
           })
+          if (typeof r.seq === 'number' && r.seq > state.index.maxSeq) {
+            state.index.maxSeq = r.seq
+          }
           added++
         } catch {
           state.index.corruptCount++
@@ -333,43 +392,65 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
       if (state.locked || !state.keys) {
         return { id, ok: false, error: 'locked' }
       }
-      if (!state.index) {
+      if (!state.index || state.index.sortedRecords.length === 0) {
         return { id, ok: true, rows: [] }
       }
 
-      const { kind, peer_hash, before, limit = 50 } = req as {
+      const {
+        kind,
+        peer_hash,
+        order = 'desc',
+        after,
+        before,
+        max_seq,
+        limit = 50,
+      } = req as {
         kind?: string
         peer_hash?: string
+        order?: 'desc' | 'asc'
+        after?: [number, number]
         before?: [number, number]
+        max_seq?: number
         limit?: number
       }
 
+      const isAsc = order === 'asc'
+      // before is an alias for after in desc order
+      const effectiveAfter = after ?? (!isAsc ? before : undefined)
       const rows: DecryptedIndexedRecord[] = []
-      const [beforeOccurredAt, beforeSeq] = Array.isArray(before) ? before : [null, null]
+      const records = state.index.sortedRecords
 
-      for (const rec of state.index.sortedRecords) {
-        if (rows.length >= limit) {
-          break
+      if (!isAsc) {
+        // desc: walk forwards from binary search start position
+        let startIdx = 0
+        if (effectiveAfter && Array.isArray(effectiveAfter) && effectiveAfter.length === 2) {
+          startIdx = findFirstOlderDesc(records, effectiveAfter[0], effectiveAfter[1])
         }
 
-        if (beforeOccurredAt !== null && beforeSeq !== null) {
-          const isOlder =
-            rec.occurred_at < beforeOccurredAt ||
-            (rec.occurred_at === beforeOccurredAt && rec.seq < beforeSeq)
-          if (!isOlder) {
-            continue
-          }
+        for (let i = startIdx; i < records.length; i++) {
+          if (rows.length >= limit) break
+          const rec = records[i]
+          if (max_seq !== undefined && rec.seq > max_seq) continue
+          if (kind && rec.kind !== kind) continue
+          if (peer_hash && !rec.peer_hash.startsWith(peer_hash)) continue
+          rows.push(rec)
+        }
+      } else {
+        // asc: walk backwards from binary search start position
+        let startIdx = records.length - 1
+        if (effectiveAfter && Array.isArray(effectiveAfter) && effectiveAfter.length === 2) {
+          const k = findFirstNotNewerDesc(records, effectiveAfter[0], effectiveAfter[1])
+          startIdx = k - 1
         }
 
-        if (kind && rec.kind !== kind) {
-          continue
+        for (let i = startIdx; i >= 0; i--) {
+          if (rows.length >= limit) break
+          const rec = records[i]
+          if (max_seq !== undefined && rec.seq > max_seq) continue
+          if (kind && rec.kind !== kind) continue
+          if (peer_hash && !rec.peer_hash.startsWith(peer_hash)) continue
+          rows.push(rec)
         }
-
-        if (peer_hash && rec.peer_hash !== peer_hash) {
-          continue
-        }
-
-        rows.push(rec)
       }
 
       return { id, ok: true, rows }
@@ -381,7 +462,19 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
       }
       const count = state.index ? state.index.recordsById.size : 0
       const corrupt = state.index ? state.index.corruptCount : 0
-      return { id, ok: true, count, corrupt }
+      const max_seq = state.index ? state.index.maxSeq : 0
+      let newer = 0
+
+      if (state.index && typeof req.since_seq === 'number') {
+        const since = req.since_seq
+        for (const rec of state.index.recordsById.values()) {
+          if (rec.seq > since) {
+            newer++
+          }
+        }
+      }
+
+      return { id, ok: true, count, corrupt, max_seq, newer }
     }
 
     default:

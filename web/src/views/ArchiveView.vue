@@ -4,16 +4,25 @@ import { useVaultStore } from '../stores/vault'
 import { getRecordsCount } from '../db/schema'
 import { syncArchive } from '../db/sync'
 import { loadIndexFromDatabase, cancelIndexLoading, isIndexLoading } from '../db/indexLoader'
-import type { DecryptedIndexedRecord } from '../crypto/worker-api'
+import { useArchiveQuery } from '../composables/useArchiveQuery'
+import RecordTable from '../components/RecordTable.vue'
+import { getDevices } from '../api/devices'
+import { groupMediaIndexRecords, type GroupedMediaFile } from '../utils/mediaGrouping'
+import { formatBytes } from '../utils/format'
 
 const vaultStore = useVaultStore()
+const query = useArchiveQuery({ limit: 50 })
 
 const cachedCount = ref(0)
 const syncRunning = ref(false)
 const syncStatusText = ref('')
 const indexStatusText = ref('')
 const indexLoading = ref(false)
-const firstPageRows = ref<DecryptedIndexedRecord[]>([])
+const activeTab = ref<'records' | 'media'>('records')
+
+const deviceMap = ref<Record<string, string>>({})
+const mediaFiles = ref<GroupedMediaFile[]>([])
+const mediaLoading = ref(false)
 
 async function updateCachedCount() {
   try {
@@ -23,16 +32,35 @@ async function updateCachedCount() {
   }
 }
 
-async function refreshFirstPage() {
+async function loadDevices() {
+  try {
+    const list = await getDevices()
+    const map: Record<string, string> = {}
+    for (const d of list) {
+      if (d.device_id && d.name) {
+        map[d.device_id] = d.name
+      }
+    }
+    deviceMap.value = map
+  } catch {
+    // Ignore network error in test / offline
+  }
+}
+
+async function loadMediaFiles() {
   if (vaultStore.locked) {
-    firstPageRows.value = []
+    mediaFiles.value = []
     return
   }
+  mediaLoading.value = true
   try {
     const worker = vaultStore.getWorker()
-    firstPageRows.value = await worker.indexQuery({ limit: 50 })
+    const mediaRecords = await worker.indexQuery({ kind: 'media_index', limit: 1000 })
+    mediaFiles.value = groupMediaIndexRecords(mediaRecords)
   } catch {
-    firstPageRows.value = []
+    mediaFiles.value = []
+  } finally {
+    mediaLoading.value = false
   }
 }
 
@@ -44,10 +72,13 @@ async function startLoadingIndex() {
     await loadIndexFromDatabase({
       onProgress: (p) => {
         indexStatusText.value = p.text
-        refreshFirstPage()
+        query.reset()
       },
     })
-    await refreshFirstPage()
+    await query.reset()
+    if (activeTab.value === 'media') {
+      await loadMediaFiles()
+    }
   } finally {
     indexLoading.value = isIndexLoading()
   }
@@ -65,7 +96,10 @@ async function triggerSync() {
     syncStatusText.value = "Sinxronizatsiya yakunlandi"
     await updateCachedCount()
     if (!vaultStore.locked) {
-      await refreshFirstPage()
+      await query.checkNewer()
+      if (activeTab.value === 'media') {
+        await loadMediaFiles()
+      }
     }
   } catch {
     syncStatusText.value = "Sinxronizatsiyada xatolik yuz berdi"
@@ -79,19 +113,41 @@ function handleCancelIndex() {
   indexLoading.value = false
 }
 
-function formatDate(seconds: number): string {
-  try {
-    return new Date(seconds * 1000).toLocaleString()
-  } catch {
-    return String(seconds)
+function handleTabChange(tab: 'records' | 'media') {
+  activeTab.value = tab
+  if (tab === 'media') {
+    loadMediaFiles()
+  } else {
+    query.reset()
   }
 }
 
-function formatJsonSnippet(json: any): string {
-  if (!json) return '-'
-  if (typeof json === 'string') return json
-  if (json.text) return String(json.text)
-  return JSON.stringify(json)
+function handleOrderToggle() {
+  query.order.value = query.order.value === 'desc' ? 'asc' : 'desc'
+  query.reset()
+}
+
+function handleKindChange(event: Event) {
+  const target = event.target as HTMLSelectElement
+  query.kind.value = target.value
+  query.reset()
+}
+
+function handlePeerInput(event: Event) {
+  const target = event.target as HTMLInputElement
+  query.peerHash.value = target.value.trim()
+  query.reset()
+}
+
+async function handleRefreshBanner() {
+  await query.reset()
+}
+
+function formatDevice(deviceId: string): string {
+  if (deviceMap.value[deviceId]) {
+    return deviceMap.value[deviceId]
+  }
+  return deviceId.slice(0, 8)
 }
 
 watch(
@@ -99,9 +155,11 @@ watch(
   async (locked) => {
     await updateCachedCount()
     if (!locked) {
+      await loadDevices()
       await startLoadingIndex()
     } else {
-      firstPageRows.value = []
+      query.clear()
+      mediaFiles.value = []
       indexStatusText.value = ''
     }
   }
@@ -110,6 +168,7 @@ watch(
 onMounted(async () => {
   await updateCachedCount()
   if (!vaultStore.locked) {
+    await loadDevices()
     await startLoadingIndex()
   }
 })
@@ -123,6 +182,24 @@ onMounted(async () => {
         <p class="cs-subtitle">Telegram xabarlari va media arxivi.</p>
       </div>
       <div class="cs-actions">
+        <!-- Rejim tanlash tabi -->
+        <div v-if="!vaultStore.locked" class="cs-tabs">
+          <button
+            class="cs-btn cs-tab-btn"
+            :class="{ 'is-active': activeTab === 'records' }"
+            @click="handleTabChange('records')"
+          >
+            Barcha yozuvlar
+          </button>
+          <button
+            class="cs-btn cs-tab-btn"
+            :class="{ 'is-active': activeTab === 'media' }"
+            @click="handleTabChange('media')"
+          >
+            Media indeksi
+          </button>
+        </div>
+
         <button
           class="cs-btn cs-btn-primary cs-btn-sync"
           :disabled="syncRunning"
@@ -182,42 +259,116 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- Birinchi sahifa yozuvlar ro'yxati -->
-      <div class="cs-table-wrap">
-        <table class="cs-table">
-          <thead>
-            <tr>
-              <th>ID / Seq</th>
-              <th>Turi</th>
-              <th>Muxbir (peer)</th>
-              <th>Sana</th>
-              <th>Xabar / Ma'lumot</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="firstPageRows.length === 0">
-              <td colspan="5" class="cs-empty-row">
-                {{ indexLoading ? 'Yozuvlar indekslanmoqda...' : 'Yozuvlar topilmadi' }}
-              </td>
-            </tr>
-            <tr v-for="row in firstPageRows" :key="row.record_id">
-              <td>
-                <code>{{ row.record_id }}</code>
-                <span class="cs-seq-badge">#{{ row.seq }}</span>
-              </td>
-              <td>
-                <span class="cs-badge">{{ row.kind }}</span>
-              </td>
-              <td>
-                <code class="cs-peer-hash">{{ row.peer_hash.slice(0, 8) }}…</code>
-              </td>
-              <td>{{ formatDate(row.occurred_at) }}</td>
-              <td class="cs-json-snippet">
-                {{ formatJsonSnippet(row.json) }}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Yangi yozuvlar banneri -->
+      <div
+        v-if="query.newerCount.value > 0"
+        class="cs-banner-newer"
+        @click="handleRefreshBanner"
+      >
+        <i class="pi pi-arrow-up"></i>
+        <span>{{ query.newerCount.value }} ta yangi yozuv — yangilash</span>
+      </div>
+
+      <!-- TAB 1: Barcha yozuvlar -->
+      <div v-if="activeTab === 'records'" class="cs-records-view">
+        <!-- Boshqaruv va filterlar paneli -->
+        <div class="cs-controls-bar">
+          <div class="cs-control-group">
+            <button
+              class="cs-btn cs-btn-secondary cs-order-btn"
+              @click="handleOrderToggle"
+              :title="query.order.value === 'desc' ? 'Hozir: Eng yangi oldin' : 'Hozir: Eng eski oldin'"
+            >
+              <i :class="query.order.value === 'desc' ? 'pi pi-sort-amount-down' : 'pi pi-sort-amount-up-alt'"></i>
+              <span>{{ query.order.value === 'desc' ? 'Yangi oldin' : 'Eski oldin' }}</span>
+            </button>
+          </div>
+
+          <div class="cs-control-group">
+            <label class="cs-label">Turi:</label>
+            <select class="cs-select" :value="query.kind.value" @change="handleKindChange">
+              <option value="">Barchasi</option>
+              <option value="deleted">deleted</option>
+              <option value="edited">edited</option>
+              <option value="activity">activity</option>
+              <option value="media_index">media_index</option>
+            </select>
+          </div>
+
+          <div class="cs-control-group cs-search-group">
+            <label class="cs-label">Muxbir:</label>
+            <input
+              type="text"
+              class="cs-input"
+              placeholder="Peer hash prefiksi..."
+              :value="query.peerHash.value"
+              @input="handlePeerInput"
+            />
+          </div>
+        </div>
+
+        <!-- Virtual scroll jadvali -->
+        <RecordTable
+          :rows="query.rows.value"
+          :loading="query.loading.value"
+          :device-names="deviceMap"
+          @lazy-load="query.loadMore"
+        />
+      </div>
+
+      <!-- TAB 2: Media indeksi -->
+      <div v-else class="cs-media-view">
+        <div class="cs-media-header">
+          <p class="cs-text-muted">
+            Fayllarning qurilmalardagi holati (LWW — eng so'nggi holat bo'yicha).
+          </p>
+        </div>
+
+        <div class="cs-table-wrap">
+          <table class="cs-table">
+            <thead>
+              <tr>
+                <th>Fayl nomi</th>
+                <th>Hajmi</th>
+                <th>Qurilmalardagi holati</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="mediaFiles.length === 0">
+                <td colspan="3" class="cs-empty-row">
+                  {{ mediaLoading ? 'Media indeksi yuklanmoqda...' : 'Media yozuvlari topilmadi' }}
+                </td>
+              </tr>
+              <tr
+                v-for="file in mediaFiles"
+                :key="file.fileKey"
+                :class="{ 'cs-row-conflict': file.hasConflict }"
+              >
+                <td>
+                  <span class="cs-file-name">{{ file.fileName }}</span>
+                  <div v-if="file.sha256" class="cs-file-hash">
+                    <code>{{ file.sha256.slice(0, 12) }}…</code>
+                  </div>
+                </td>
+                <td>{{ formatBytes(file.size) }}</td>
+                <td>
+                  <div class="cs-device-statuses">
+                    <span
+                      v-for="dev in file.devices"
+                      :key="dev.device_id"
+                      class="cs-device-status-badge"
+                      :class="dev.status === 'present' ? 'cs-status-present' : 'cs-status-pending'"
+                    >
+                      <i :class="dev.status === 'present' ? 'pi pi-check-circle' : 'pi pi-clock'"></i>
+                      <span>{{ formatDevice(dev.device_id) }}</span>
+                      <span v-if="dev.reason" class="cs-reason">({{ dev.reason }})</span>
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
@@ -235,6 +386,37 @@ onMounted(async () => {
   color: var(--text-color-secondary, #6b7280);
   font-size: 0.8125rem;
   margin-top: 0.25rem;
+}
+
+.cs-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cs-tabs {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--surface-ground, #f3f4f6);
+  padding: 0.125rem;
+  border-radius: 4px;
+}
+
+.cs-tab-btn {
+  border: none;
+  background: transparent;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  border-radius: 3px;
+  color: var(--text-color-secondary, #6b7280);
+}
+
+.cs-tab-btn.is-active {
+  background: var(--surface-card, #ffffff);
+  color: var(--text-color, #111827);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .cs-alert {
@@ -292,30 +474,120 @@ onMounted(async () => {
   gap: 0.5rem;
 }
 
-.cs-badge {
-  display: inline-block;
-  padding: 0.125rem 0.375rem;
-  border-radius: 3px;
-  background: var(--surface-ground, #f3f4f6);
-  font-size: 0.75rem;
-  font-family: monospace;
+.cs-banner-newer {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 120ms;
 }
 
-.cs-seq-badge {
-  margin-left: 0.375rem;
+.cs-banner-newer:hover {
+  background: #dbeafe;
+}
+
+.cs-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface-ground, #f9fafb);
+  border: 1px solid var(--surface-border, #e5e7eb);
+  border-radius: 4px;
+}
+
+.cs-control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cs-label {
+  font-size: 0.8125rem;
+  color: var(--text-color-secondary, #6b7280);
+}
+
+.cs-select,
+.cs-input {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--surface-border, #e5e7eb);
+  border-radius: 3px;
+  font-size: 0.8125rem;
+  background: var(--surface-card, #ffffff);
+}
+
+.cs-search-group {
+  flex: 1;
+}
+
+.cs-search-group .cs-input {
+  width: 100%;
+}
+
+.cs-order-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+}
+
+.cs-media-header {
+  margin-bottom: 0.5rem;
+}
+
+.cs-file-name {
+  font-weight: 500;
+  font-size: 0.8125rem;
+}
+
+.cs-file-hash {
   font-size: 0.75rem;
   color: var(--text-color-secondary, #6b7280);
 }
 
-.cs-peer-hash {
+.cs-device-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cs-device-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
   font-size: 0.75rem;
 }
 
-.cs-json-snippet {
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.cs-status-present {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.cs-status-pending {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.cs-row-conflict {
+  background: #fffdf5;
+}
+
+.cs-reason {
+  opacity: 0.8;
+  margin-left: 0.125rem;
 }
 
 .cs-empty-row {

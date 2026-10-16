@@ -33,7 +33,10 @@ export interface CreateWrapResult {
 export interface IndexQueryParams {
   kind?: string
   peer_hash?: string
+  order?: 'desc' | 'asc'
+  after?: [number, number]
   before?: [number, number]
+  max_seq?: number
   limit?: number
 }
 
@@ -195,16 +198,31 @@ export class CryptoWorkerClient {
     return res.rows || []
   }
 
-  async indexStats(timeoutMs = 5000): Promise<{ count: number; corrupt: number }> {
-    const res = await this.send<{ ok: boolean; count?: number; corrupt?: number; error?: string }>(
+  async indexStats(
+    options: { since_seq?: number } = {},
+    timeoutMs = 5000
+  ): Promise<{ count: number; corrupt: number; max_seq: number; newer: number }> {
+    const res = await this.send<{
+      ok: boolean
+      count?: number
+      corrupt?: number
+      max_seq?: number
+      newer?: number
+      error?: string
+    }>(
       'indexStats',
-      {},
+      options,
       timeoutMs
     )
     if (!res.ok) {
       throw new Error(res.error || 'Failed to get index stats')
     }
-    return { count: res.count ?? 0, corrupt: res.corrupt ?? 0 }
+    return {
+      count: res.count ?? 0,
+      corrupt: res.corrupt ?? 0,
+      max_seq: res.max_seq ?? 0,
+      newer: res.newer ?? 0,
+    }
   }
 
   terminate(): void {

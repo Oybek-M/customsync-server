@@ -12,6 +12,27 @@ import { CryptoWorkerClient } from '../crypto/worker-api'
 import { handleMessage, createInitialWorkerState } from '../crypto/worker'
 import { loadTestVectors } from './testVectorsHelper'
 
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as any
+}
+
+Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, value: 600 })
+Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
+Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 600 })
+Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 800 })
+Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 })
+Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, value: 800 })
+Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+  configurable: true,
+  get() {
+    return document.body
+  },
+})
+
 function createDirectWorkerClient() {
   const state = createInitialWorkerState()
   let pendingPromise: Promise<void> = Promise.resolve()
