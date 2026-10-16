@@ -200,7 +200,12 @@ public class TdClient : ITdClient
         }
 
         _transport.Dispose();
-        _stopCts.Dispose();
+        // Oqim 2 soniyada tugamagan bo'lsa (band mashina, sekin logger) CTS'ni
+        // yo'q qilmaymiz: oqim xato yo'lida hali `_stopCts.Token` ni o'qiydi va
+        // fon oqimidagi ObjectDisposedException butun jarayonni qulatardi.
+        // Yo'q qilinmagan CTS'ni GC yig'ib oladi.
+        if (!_receiveThread.IsAlive)
+            _stopCts.Dispose();
         GC.SuppressFinalize(this);
     }
 }
