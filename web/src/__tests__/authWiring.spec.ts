@@ -46,12 +46,34 @@ describe('auth wiring in the real app', () => {
   it('enroll keeps the code case and dashes as typed (server normalises)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(JSON.stringify({
-        deviceId: 'web-1', refreshToken: 'r', accessToken: 'a',
-        expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+        device_id: 'web-1', refresh_token: 'r', access_token: 'a',
+        expires_at: new Date(Date.now() + 3600_000).toISOString(),
       }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
 
     await enroll('  abc-12 x  ')
     expect(JSON.parse(fetchSpy.mock.calls[0][1]?.body as string).code).toBe('abc-12 x')
+  })
+
+  // Server JSON'ni snake_case'da o'qiydi va yozadi (Program.cs SnakeCaseLower).
+  it('refresh sends snake_case body and reads snake_case response', async () => {
+    useAuthStore().setCredentials('web-1', 'refresh-1')
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/refresh')) {
+        return new Response(JSON.stringify({
+          refresh_token: 'refresh-2', access_token: 'access-2',
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+
+    await api('/api/v1/devices')
+
+    const refreshCall = fetchSpy.mock.calls.find(([u]) => String(u).endsWith('/refresh'))!
+    expect(JSON.parse(refreshCall[1]?.body as string)).toEqual({ device_id: 'web-1', refresh_token: 'refresh-1' })
+    const apiCall = fetchSpy.mock.calls.find(([u]) => String(u) === '/api/v1/devices')!
+    expect(new Headers(apiCall[1]?.headers).get('Authorization')).toBe('Bearer access-2')
+    expect(localStorage.getItem('cs.refreshToken')).toBe('refresh-2')
   })
 
   it('an aborted request rejects as AbortError, not as a network failure', async () => {
@@ -59,8 +81,8 @@ describe('auth wiring in the real app', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       if (String(input).endsWith('/refresh')) {
         return new Response(JSON.stringify({
-          refreshToken: 'refresh-2', accessToken: 'a',
-          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          refresh_token: 'refresh-2', access_token: 'a',
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
         }), { status: 200, headers: { 'Content-Type': 'application/json' } })
       }
       throw new DOMException('aborted', 'AbortError')

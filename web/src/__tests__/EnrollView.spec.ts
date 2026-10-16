@@ -70,10 +70,10 @@ describe('EnrollView.vue', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          deviceId: 'dev-web-1',
-          refreshToken: 'ref-token-1',
-          accessToken: 'acc-token-1',
-          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          device_id: 'dev-web-1',
+          refresh_token: 'ref-token-1',
+          access_token: 'acc-token-1',
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )

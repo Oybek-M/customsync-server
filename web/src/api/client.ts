@@ -10,6 +10,17 @@
  *  - Hech qanday token xato xabariga yoki konsolga chiqmaydi
  */
 
+// Server JSON'ni snake_case'da yozadi va o'qiydi (Program.cs: SnakeCaseLower).
+interface RefreshResponse {
+  refresh_token: string
+  access_token: string
+  expires_at: string
+}
+
+interface EnrollResponse extends RefreshResponse {
+  device_id: string
+}
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
@@ -151,7 +162,7 @@ async function doRefresh(): Promise<string> {
     response = await fetch('/api/v1/devices/refresh', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId, refreshToken }),
+      body: JSON.stringify({ device_id: deviceId, refresh_token: refreshToken }),
     })
   } catch (err) {
     if (err instanceof ApiError) throw err
@@ -168,11 +179,11 @@ async function doRefresh(): Promise<string> {
     throw new ApiError(response.status, code)
   }
 
-  const data = await response.json()
-  memoryRefreshToken = data.refreshToken
-  storage.set('cs.refreshToken', data.refreshToken)
-  accessToken = data.accessToken
-  expiresAt = Date.parse(data.expiresAt)
+  const data = (await response.json()) as RefreshResponse
+  memoryRefreshToken = data.refresh_token
+  storage.set('cs.refreshToken', data.refresh_token)
+  accessToken = data.access_token
+  expiresAt = Date.parse(data.expires_at)
 
   return accessToken!
 }
@@ -271,8 +282,8 @@ export async function enroll(code: string, name = 'Web panel'): Promise<void> {
     throw new ApiError(response.status, errCode)
   }
 
-  const data = await response.json()
-  setCredentials(data.deviceId, data.refreshToken)
-  accessToken = data.accessToken
-  expiresAt = Date.parse(data.expiresAt)
+  const data = (await response.json()) as EnrollResponse
+  setCredentials(data.device_id, data.refresh_token)
+  accessToken = data.access_token
+  expiresAt = Date.parse(data.expires_at)
 }

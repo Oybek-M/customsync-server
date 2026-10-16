@@ -27,10 +27,10 @@ describe('api/client.ts', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          deviceId: 'dev-123',
-          refreshToken: 'ref-token-secret-111',
-          accessToken: 'acc-token-secret-222',
-          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          device_id: 'dev-123',
+          refresh_token: 'ref-token-secret-111',
+          access_token: 'acc-token-secret-222',
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
@@ -141,9 +141,9 @@ describe('api/client.ts', () => {
         await new Promise((r) => setTimeout(r, 20))
         return new Response(
           JSON.stringify({
-            refreshToken: 'refresh-token-rotated-2',
-            accessToken: 'new-access-token-jwt',
-            expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+            refresh_token: 'refresh-token-rotated-2',
+            access_token: 'new-access-token-jwt',
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
@@ -185,9 +185,9 @@ describe('api/client.ts', () => {
         refreshCount++
         return new Response(
           JSON.stringify({
-            refreshToken: 'refresh-token-rotated-2',
-            accessToken: 'access-token-fresh',
-            expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+            refresh_token: 'refresh-token-rotated-2',
+            access_token: 'access-token-fresh',
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
@@ -224,9 +224,9 @@ describe('api/client.ts', () => {
       if (u === '/api/v1/devices/refresh') {
         return new Response(
           JSON.stringify({
-            refreshToken: 'refresh-token-rotated-3',
-            accessToken: 'access-token-fresh-2',
-            expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+            refresh_token: 'refresh-token-rotated-3',
+            access_token: 'access-token-fresh-2',
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
@@ -265,10 +265,10 @@ describe('api/client.ts', () => {
       if (u === '/api/v1/devices/enroll') {
         return new Response(
           JSON.stringify({
-            deviceId: 'mem-dev-1',
-            refreshToken: 'mem-refresh-1',
-            accessToken: 'mem-access-1',
-            expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+            device_id: 'mem-dev-1',
+            refresh_token: 'mem-refresh-1',
+            access_token: 'mem-access-1',
+            expires_at: new Date(Date.now() + 3600_000).toISOString(),
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         )
@@ -300,9 +300,9 @@ describe('api/client.ts', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          refreshToken: 'token-v2-rotated',
-          accessToken: 'new-acc',
-          expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+          refresh_token: 'token-v2-rotated',
+          access_token: 'new-acc',
+          expires_at: new Date(Date.now() + 3600_000).toISOString(),
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
