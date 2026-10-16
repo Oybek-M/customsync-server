@@ -7,6 +7,7 @@ import {
 import { useAuthStore } from './stores/auth'
 
 import EnrollView from './views/EnrollView.vue'
+import DashboardView from './views/DashboardView.vue'
 import { getActiveRouter, setActiveRouter, setDefaultRouter } from './router-instance'
 export { getActiveRouter, setActiveRouter }
 
@@ -20,7 +21,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'dashboard',
-    component: () => import('./views/DashboardView.vue'),
+    component: DashboardView,
     meta: { title: 'Boshqaruv paneli' },
   },
   {
