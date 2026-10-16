@@ -62,8 +62,14 @@ public static class DeviceEndpoints
             });
         });
 
+        // Entity emas, aniq maydonlar: refresh hash'lari va grace shifrmatni
+        // admin'ga ham kerak emas, ular serverdan chiqmaydi.
         group.MapGet("/", async (DeviceService devices) =>
-            Results.Ok(await devices.ListAsync()))
+            Results.Ok((await devices.ListAsync()).Select(d => new
+            {
+                d.DeviceId, d.Name, d.Platform, d.Role,
+                d.EnrolledAt, d.LastSeenAt, d.LastCursor, d.RevokedAt
+            })))
             .RequireAuthorization("admin");
 
         // Rol ixtiyoriy: berilmasa oddiy qurilma kodi chiqadi. Admin

@@ -37,6 +37,10 @@ public static class SettingsEndpoints
 
                 return Results.NoContent();
             }
+            catch (ArgumentException)
+            {
+                return Results.BadRequest(new { error = "invalid_value", key });
+            }
             catch (KeyNotFoundException)
             {
                 return Results.NotFound(new { error = "unknown_setting", key });

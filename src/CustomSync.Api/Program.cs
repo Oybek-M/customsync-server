@@ -212,6 +212,7 @@ app.MapMediaEndpoints();
 app.MapKeyEndpoints();
 app.MapRecordEndpoints();
 app.MapStatsEndpoints();
+app.MapAuditEndpoints();
 app.MapInterchangeEndpoints();
 app.MapReleaseEndpoints();
 

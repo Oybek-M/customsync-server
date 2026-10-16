@@ -130,8 +130,14 @@ public class SettingsService(SyncDbContext db)
     public async Task ReloadCacheAsync(CancellationToken ct = default)
     {
         var all = await db.ServerSettings.AsNoTracking().ToListAsync(ct);
-        Cache.Clear();
-        foreach (var s in all) Cache[s.Key] = s.Value;
+        // Clear() + qayta to'ldirish oralig'ida parallel o'quvchi kalitni
+        // topmay KeyNotFoundException olardi. Avval yozamiz, keyin ortiqchasini
+        // olib tashlaymiz -- kesh hech qachon bo'sh bo'lmaydi.
+        var cache = Cache;
+        foreach (var s in all) cache[s.Key] = s.Value;
+        var live = all.Select(s => s.Key).ToHashSet();
+        foreach (var key in cache.Keys)
+            if (!live.Contains(key)) cache.TryRemove(key, out _);
     }
 
     public async Task SetAsync(string key, string value, CancellationToken ct = default)
@@ -139,10 +145,33 @@ public class SettingsService(SyncDbContext db)
         var entity = await db.ServerSettings.FirstOrDefaultAsync(s => s.Key == key, ct)
             ?? throw new KeyNotFoundException($"Noma'lum sozlama: {key}");
 
+        // Buzuq qiymat saqlansa, keyingi GetIntAsync yiqiladi: masalan
+        // auth.refresh_grace_seconds = "abc" barcha refresh'larni 500 qilardi.
+        if (!IsValidValue(entity.ValueType, value))
+            throw new ArgumentException(
+                $"'{key}' uchun {entity.ValueType} qiymat kutilgan", nameof(value));
+
         entity.Value = value;
         entity.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         Cache[key] = value;
+    }
+
+    /// Noma'lum tip ham rad etiladi: tekshira olmagan qiymatni saqlamaymiz.
+    public static bool IsValidValue(string valueType, string value)
+    {
+        switch (valueType)
+        {
+            case "int":
+                return int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
+            case "bool":
+                return value is "true" or "false";
+            case "json":
+                try { using var _ = System.Text.Json.JsonDocument.Parse(value); return true; }
+                catch (System.Text.Json.JsonException) { return false; }
+            default:
+                return false;
+        }
     }
 
     public Task<string> GetStringAsync(string key, CancellationToken ct = default)

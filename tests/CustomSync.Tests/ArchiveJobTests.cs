@@ -972,8 +972,8 @@ public class ArchiveJobTests : IClassFixture<DatabaseFixture>, IDisposable
         await settings.EnsureDefaultsAsync();
         await settings.SetAsync("storage.jobs_enabled", "true");
         await settings.SetAsync("storage.jobs_dry_run", "false");
-        await settings.SetAsync("storage.warn_percent", "eighty");
-        await settings.SetAsync("storage.jobs_max_batches", "ko'p");
+        await CorruptSetting.WriteAsync(scope.ServiceProvider, "storage.warn_percent", "eighty");
+        await CorruptSetting.WriteAsync(scope.ServiceProvider, "storage.jobs_max_batches", "ko'p");
         await settings.SetAsync("retention.activity_days", "30");
 
         var runner = scope.ServiceProvider.GetRequiredService<ArchiveJobRunner>();

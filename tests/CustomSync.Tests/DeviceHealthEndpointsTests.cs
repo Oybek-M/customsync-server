@@ -415,7 +415,7 @@ public class DeviceHealthEndpointsTests : IClassFixture<CustomSyncWebApplication
     {
         var (admin, _) = await EnrollAsync("admin", $"adm-{Guid.NewGuid().ToString("N")[..8]}", "web");
         using (var scope = _factory.Services.CreateScope())
-            await scope.ServiceProvider.GetRequiredService<SettingsService>().SetAsync("health.stale_after_seconds", "not-a-number");
+            await CorruptSetting.WriteAsync(scope.ServiceProvider, "health.stale_after_seconds", "not-a-number");
 
         try
         {

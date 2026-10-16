@@ -38,6 +38,15 @@ public class AuditService(SyncDbContext db)
         await db.SaveChangesAsync(ct);
     }
 
+    /// Keyset: `before` dan kichik id'lar, yangisi birinchi (K3 -- offset yo'q).
+    public async Task<IReadOnlyList<AuditLogEntity>> PageAsync(
+        long? before, int limit, CancellationToken ct = default)
+        => await db.AuditLogs.AsNoTracking()
+            .Where(a => before == null || a.Id < before)
+            .OrderByDescending(a => a.Id)
+            .Take(limit)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<AuditLogEntity>> RecentAsync(
         int limit, CancellationToken ct = default)
         => await db.AuditLogs.AsNoTracking()
