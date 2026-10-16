@@ -70,3 +70,35 @@ export interface PeerStat {
   total_bytes: number
   last_occurred_at: number
 }
+
+export interface KeyWrapSummary {
+  wrap_id: string
+  wrap_type: string
+  label: string
+  created_at: string
+  last_used_at: string | null
+}
+
+export interface KeyWrapDetail {
+  wrap_id: string
+  wrap_type: string
+  label: string
+  salt: string
+  nonce: string
+  wrapped_key: string
+  iterations: number
+}
+
+export interface CreateWrapRequest {
+  wrap_type: string
+  label: string
+  salt: string
+  nonce: string
+  wrapped_key: string
+  iterations: number
+}
+
+export interface CreateWrapResponse {
+  wrap_id: string
+}
+

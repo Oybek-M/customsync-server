@@ -3,11 +3,22 @@ import { useRoute } from 'vue-router'
 import { useVaultStore } from '../stores/vault'
 import { useUiStore } from '../stores/ui'
 import { useServerHealth } from '../composables/useServerHealth'
+import { useAutoLock } from '../composables/useAutoLock'
+import UnlockDialog from './UnlockDialog.vue'
 
 const route = useRoute()
 const vaultStore = useVaultStore()
 const uiStore = useUiStore()
 const health = useServerHealth()
+useAutoLock()
+
+function handleVaultIndicatorClick() {
+  if (vaultStore.locked) {
+    vaultStore.openUnlockDialog()
+  } else {
+    vaultStore.lock()
+  }
+}
 
 const navItems = [
   { path: '/', label: 'Boshqaruv paneli' },
@@ -74,7 +85,14 @@ const navItems = [
         </div>
 
         <div class="cs-topbar-right">
-          <span class="cs-vault-indicator">
+          <span
+            class="cs-vault-indicator"
+            role="button"
+            tabindex="0"
+            :title="vaultStore.locked ? 'Omborni ochish' : 'Qulflash'"
+            style="cursor: pointer;"
+            @click="handleVaultIndicatorClick"
+          >
             <i :class="vaultStore.locked ? 'pi pi-lock' : 'pi pi-lock-open'"></i>
             <span>{{ vaultStore.locked ? 'Qulflangan' : 'Ochiq' }}</span>
           </span>
@@ -93,5 +111,6 @@ const navItems = [
         <router-view />
       </main>
     </div>
+    <UnlockDialog />
   </div>
 </template>

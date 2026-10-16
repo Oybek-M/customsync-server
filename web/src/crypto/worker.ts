@@ -1,10 +1,13 @@
 import {
   hkdf,
   openGcm,
+  sealGcm,
+  pbkdf2,
   peerHash,
   fingerprint,
   unwrapPassphrase,
   base64ToBytes,
+  bytesToBase64,
   hexToBytes,
   type KeyWrapData,
 } from './primitives'
@@ -18,6 +21,7 @@ export interface DerivedKeys {
 
 export interface WorkerState {
   locked: boolean
+  masterKey: Uint8Array | null
   keys: DerivedKeys | null
   fingerprint: string | null
 }
@@ -25,6 +29,7 @@ export interface WorkerState {
 export function createInitialWorkerState(): WorkerState {
   return {
     locked: true,
+    masterKey: null,
     keys: null,
     fingerprint: null,
   }
@@ -75,10 +80,10 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
           hkdf(master, 'customsync-account-v1'),
         ])
 
-        // Master kalit xotiradan zudlik bilan o'chiriladi
-        master.fill(0)
-
-        // Eski kalitlar bo'lsa ularni ham tozalaymiz
+        // Eski master yoki kalitlar bo'lsa tozalaymiz
+        if (state.masterKey) {
+          state.masterKey.fill(0)
+        }
         if (state.keys) {
           state.keys.contentKey.fill(0)
           state.keys.mediaKey.fill(0)
@@ -87,6 +92,7 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
         }
 
         state.locked = false
+        state.masterKey = master // ochiq turganda worker ichida saqlanadi
         state.keys = { contentKey, mediaKey, peerKey, accountKey }
         state.fingerprint = fp
 
@@ -98,6 +104,10 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
     }
 
     case 'lock': {
+      if (state.masterKey) {
+        state.masterKey.fill(0)
+        state.masterKey = null
+      }
       if (state.keys) {
         state.keys.contentKey.fill(0)
         state.keys.mediaKey.fill(0)
@@ -156,6 +166,64 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
       const peerId = String(req.peer_id ?? '')
       const hash = await peerHash(state.keys.peerKey, peerId)
       return { id, ok: true, peer_hash: hash }
+    }
+
+    case 'createWrap': {
+      if (state.locked || !state.masterKey) {
+        return { id, ok: false, error: 'locked' }
+      }
+
+      const passphrase = req.passphrase
+      if (!passphrase || typeof passphrase !== 'string') {
+        return { id, ok: false, error: 'invalid_passphrase' }
+      }
+
+      try {
+        const salt = crypto.getRandomValues(new Uint8Array(16))
+        const nonce = crypto.getRandomValues(new Uint8Array(12))
+        const iterations = 600000
+
+        const kek = await pbkdf2(passphrase, salt, iterations, 32)
+        const wrappedKeyBytes = await sealGcm(kek, nonce, state.masterKey)
+        kek.fill(0)
+
+        const saltB64 = bytesToBase64(salt)
+        const nonceB64 = bytesToBase64(nonce)
+        const wrappedKeyB64 = bytesToBase64(wrappedKeyBytes)
+
+        // Qayta ochib barmoq izi mosligini tekshiramiz
+        const reopenedMaster = await unwrapPassphrase(
+          {
+            salt: saltB64,
+            nonce: nonceB64,
+            wrapped_key: wrappedKeyB64,
+            iterations,
+          },
+          passphrase
+        )
+
+        if (!reopenedMaster) {
+          return { id, ok: false, error: 'wrap_verification_failed' }
+        }
+
+        const reopenedFp = await fingerprint(reopenedMaster)
+        reopenedMaster.fill(0)
+
+        if (reopenedFp !== state.fingerprint) {
+          return { id, ok: false, error: 'wrap_fingerprint_mismatch' }
+        }
+
+        return {
+          id,
+          ok: true,
+          salt: saltB64,
+          nonce: nonceB64,
+          wrapped_key: wrappedKeyB64,
+          iterations,
+        }
+      } catch {
+        return { id, ok: false, error: 'create_wrap_failed' }
+      }
     }
 
     default:

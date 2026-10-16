@@ -18,6 +18,15 @@ export interface UnlockResult {
   error?: string
 }
 
+export interface CreateWrapResult {
+  ok: boolean
+  salt?: string
+  nonce?: string
+  wrapped_key?: string
+  iterations?: number
+  error?: string
+}
+
 interface PendingRequest {
   resolve: (value: any) => void
   reject: (reason: any) => void
@@ -125,6 +134,18 @@ export class CryptoWorkerClient {
     }
 
     return res.peer_hash
+  }
+
+  async createWrap(
+    passphrase: string,
+    label?: string,
+    timeoutMs = 60000
+  ): Promise<CreateWrapResult> {
+    return this.send<CreateWrapResult>(
+      'createWrap',
+      { passphrase, label },
+      timeoutMs
+    )
   }
 
   terminate(): void {
