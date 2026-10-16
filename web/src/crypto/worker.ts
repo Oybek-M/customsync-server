@@ -19,11 +19,36 @@ export interface DerivedKeys {
   accountKey: Uint8Array
 }
 
+export interface DecryptedIndexedRecord {
+  record_id: string
+  kind: string
+  peer_hash: string
+  msg_id: number
+  occurred_at: number
+  seq: number
+  json: any
+}
+
+export interface WorkerIndexState {
+  recordsById: Map<string, DecryptedIndexedRecord>
+  sortedRecords: DecryptedIndexedRecord[]
+  corruptCount: number
+}
+
+export function createInitialIndexState(): WorkerIndexState {
+  return {
+    recordsById: new Map(),
+    sortedRecords: [],
+    corruptCount: 0,
+  }
+}
+
 export interface WorkerState {
   locked: boolean
   masterKey: Uint8Array | null
   keys: DerivedKeys | null
   fingerprint: string | null
+  index: WorkerIndexState | null
 }
 
 export function createInitialWorkerState(): WorkerState {
@@ -32,7 +57,15 @@ export function createInitialWorkerState(): WorkerState {
     masterKey: null,
     keys: null,
     fingerprint: null,
+    index: null,
   }
+}
+
+function compareNewestFirst(a: DecryptedIndexedRecord, b: DecryptedIndexedRecord): number {
+  if (b.occurred_at !== a.occurred_at) {
+    return b.occurred_at - a.occurred_at
+  }
+  return b.seq - a.seq
 }
 
 function parseBytesInput(val: Uint8Array | string): Uint8Array {
@@ -117,6 +150,15 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
       state.keys = null
       state.locked = true
       state.fingerprint = null
+
+      // Barcha ochiq matnlar va indeks xotiradan to'liq o'chiriladi
+      if (state.index) {
+        state.index.recordsById.clear()
+        state.index.sortedRecords = []
+        state.index.corruptCount = 0
+        state.index = null
+      }
+
       return { id, ok: true }
     }
 
@@ -224,6 +266,122 @@ export async function handleMessage(state: WorkerState, req: any): Promise<any> 
       } catch {
         return { id, ok: false, error: 'create_wrap_failed' }
       }
+    }
+
+    case 'indexBegin': {
+      if (state.locked || !state.keys) {
+        return { id, ok: false, error: 'locked' }
+      }
+      state.index = createInitialIndexState()
+      return { id, ok: true }
+    }
+
+    case 'indexAdd': {
+      if (state.locked || !state.keys) {
+        return { id, ok: false, error: 'locked' }
+      }
+      if (!state.index) {
+        state.index = createInitialIndexState()
+      }
+
+      const records = req.records as any[]
+      if (!Array.isArray(records)) {
+        return { id, ok: true, added: 0 }
+      }
+
+      let added = 0
+      for (const r of records) {
+        if (r.target_record_id) {
+          state.index.recordsById.delete(r.target_record_id)
+        }
+        if (r.kind === 'tombstone') {
+          continue
+        }
+
+        try {
+          const nonceBytes = parseBytesInput(r.nonce)
+          const payloadBytes = parseBytesInput(r.payload)
+          const plaintext = await openGcm(state.keys.contentKey, nonceBytes, payloadBytes)
+
+          if (!plaintext) {
+            state.index.corruptCount++
+            continue
+          }
+
+          const json = JSON.parse(new TextDecoder().decode(plaintext))
+          state.index.recordsById.set(r.record_id, {
+            record_id: r.record_id,
+            kind: r.kind,
+            peer_hash: r.peer_hash,
+            msg_id: r.msg_id,
+            occurred_at: r.occurred_at,
+            seq: r.seq,
+            json,
+          })
+          added++
+        } catch {
+          state.index.corruptCount++
+        }
+      }
+
+      state.index.sortedRecords = Array.from(state.index.recordsById.values()).sort(compareNewestFirst)
+
+      return { id, ok: true, added, corrupt: state.index.corruptCount }
+    }
+
+    case 'indexQuery': {
+      if (state.locked || !state.keys) {
+        return { id, ok: false, error: 'locked' }
+      }
+      if (!state.index) {
+        return { id, ok: true, rows: [] }
+      }
+
+      const { kind, peer_hash, before, limit = 50 } = req as {
+        kind?: string
+        peer_hash?: string
+        before?: [number, number]
+        limit?: number
+      }
+
+      const rows: DecryptedIndexedRecord[] = []
+      const [beforeOccurredAt, beforeSeq] = Array.isArray(before) ? before : [null, null]
+
+      for (const rec of state.index.sortedRecords) {
+        if (rows.length >= limit) {
+          break
+        }
+
+        if (beforeOccurredAt !== null && beforeSeq !== null) {
+          const isOlder =
+            rec.occurred_at < beforeOccurredAt ||
+            (rec.occurred_at === beforeOccurredAt && rec.seq < beforeSeq)
+          if (!isOlder) {
+            continue
+          }
+        }
+
+        if (kind && rec.kind !== kind) {
+          continue
+        }
+
+        if (peer_hash && rec.peer_hash !== peer_hash) {
+          continue
+        }
+
+        rows.push(rec)
+      }
+
+      return { id, ok: true, rows }
+    }
+
+    case 'indexStats': {
+      if (state.locked || !state.keys) {
+        return { id, ok: false, error: 'locked' }
+      }
+      const count = state.index ? state.index.recordsById.size : 0
+      const corrupt = state.index ? state.index.corruptCount : 0
+      return { id, ok: true, count, corrupt }
     }
 
     default:

@@ -1,4 +1,7 @@
 import type { KeyWrapData } from './primitives'
+import type { DecryptedIndexedRecord } from './worker'
+
+export type { DecryptedIndexedRecord }
 
 export interface OpenRecordInput {
   record_id: string
@@ -25,6 +28,13 @@ export interface CreateWrapResult {
   wrapped_key?: string
   iterations?: number
   error?: string
+}
+
+export interface IndexQueryParams {
+  kind?: string
+  peer_hash?: string
+  before?: [number, number]
+  limit?: number
 }
 
 interface PendingRequest {
@@ -146,6 +156,55 @@ export class CryptoWorkerClient {
       { passphrase, label },
       timeoutMs
     )
+  }
+
+  async indexBegin(timeoutMs = 5000): Promise<void> {
+    const res = await this.send<{ ok: boolean; error?: string }>('indexBegin', {}, timeoutMs)
+    if (!res.ok) {
+      throw new Error(res.error || 'Failed to begin index')
+    }
+  }
+
+  async indexAdd(
+    records: any[],
+    timeoutMs = 60000
+  ): Promise<{ added: number; corrupt: number }> {
+    const res = await this.send<{ ok: boolean; added?: number; corrupt?: number; error?: string }>(
+      'indexAdd',
+      { records },
+      timeoutMs
+    )
+    if (!res.ok) {
+      throw new Error(res.error || 'Failed to add records to index')
+    }
+    return { added: res.added ?? 0, corrupt: res.corrupt ?? 0 }
+  }
+
+  async indexQuery(
+    params: IndexQueryParams = {},
+    timeoutMs = 10000
+  ): Promise<DecryptedIndexedRecord[]> {
+    const res = await this.send<{ ok: boolean; rows?: DecryptedIndexedRecord[]; error?: string }>(
+      'indexQuery',
+      params,
+      timeoutMs
+    )
+    if (!res.ok) {
+      throw new Error(res.error || 'Failed to query index')
+    }
+    return res.rows || []
+  }
+
+  async indexStats(timeoutMs = 5000): Promise<{ count: number; corrupt: number }> {
+    const res = await this.send<{ ok: boolean; count?: number; corrupt?: number; error?: string }>(
+      'indexStats',
+      {},
+      timeoutMs
+    )
+    if (!res.ok) {
+      throw new Error(res.error || 'Failed to get index stats')
+    }
+    return { count: res.count ?? 0, corrupt: res.corrupt ?? 0 }
   }
 
   terminate(): void {
