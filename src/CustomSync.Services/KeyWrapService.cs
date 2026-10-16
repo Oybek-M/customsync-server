@@ -58,12 +58,25 @@ public class KeyWrapService(SyncDbContext db, AuditService audit)
         return wrapId;
     }
 
-    public async Task DeleteAsync(string wrapId, string actorDeviceId, CancellationToken ct = default)
+    /// Oxirgi o'ram o'chirilmaydi: usiz yangi qurilma va web panel arxivni
+    /// hech qachon ocholmaydi. Buni UI emas, server hal qiladi.
+    public async Task<WrapDeleteResult> DeleteAsync(string wrapId, string actorDeviceId, CancellationToken ct = default)
     {
-        var removed = await db.KeyWraps
-            .Where(w => w.WrapId == wrapId)
-            .ExecuteDeleteAsync(ct);
-        if (removed > 0)
-            await audit.WriteAsync("keywrap.deleted", actorDeviceId: actorDeviceId, detail: new { wrapId }, ct: ct);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Parallel o'chirishlar navbat bilan: aks holda ikkalasi ham
+        // "2 ta bor" deb ko'rib, oxirgi ikkala o'ramni o'chirib yuborardi.
+        await db.Database.ExecuteSqlRawAsync("LOCK TABLE key_wraps IN SHARE ROW EXCLUSIVE MODE", ct);
+
+        if (!await db.KeyWraps.AnyAsync(w => w.WrapId == wrapId, ct))
+            return WrapDeleteResult.NotFound;
+        if (await db.KeyWraps.CountAsync(ct) <= 1)
+            return WrapDeleteResult.LastWrap;
+
+        await db.KeyWraps.Where(w => w.WrapId == wrapId).ExecuteDeleteAsync(ct);
+        await tx.CommitAsync(ct);
+        await audit.WriteAsync("keywrap.deleted", actorDeviceId: actorDeviceId, detail: new { wrapId }, ct: ct);
+        return WrapDeleteResult.Deleted;
     }
 }
+
+public enum WrapDeleteResult { Deleted, NotFound, LastWrap }

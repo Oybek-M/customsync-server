@@ -65,8 +65,11 @@ public static class KeyEndpoints
             KeyWrapService keys) =>
         {
             var deviceId = user.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            await keys.DeleteAsync(wrapId, deviceId);
-            return Results.NoContent();
+            var result = await keys.DeleteAsync(wrapId, deviceId);
+            // Yo'q o'ram -- 204 (idempotent), oxirgisi -- 409.
+            return result == WrapDeleteResult.LastWrap
+                ? Results.Conflict(new { error = "last_wrap" })
+                : Results.NoContent();
         })
         .RequireAuthorization("admin");
     }

@@ -44,6 +44,7 @@ public class SettingsService(SyncDbContext db)
         New("sync.push_max_bytes",        "5242880", "int",   "sync",    "Bitta push so'rovining maksimal hajmi (bayt)"),
         New("sync.pull_batch_size",       "500",  "int",      "sync",    "Bitta pull javobidagi maksimal yozuvlar soni"),
         New("sync.client_poll_seconds",   "30",   "int",      "sync",    "Klientlar necha soniyada bir pull qilishi"),
+        New("web.autolock_minutes",       "15",   "int",      "web",     "Web panel harakatsizlikdan necha daqiqa keyin qulflanadi (master kalit worker xotirasidan o'chiriladi)"),
         New("api.default_page_size",      "50",   "int",      "api",     "Ro'yxatlar uchun standart sahifa hajmi"),
         New("api.max_page_size",          "200",  "int",      "api",     "So'ralishi mumkin bo'lgan maksimal sahifa hajmi"),
         New("auth.jwt_lifetime_minutes",  "15",   "int",      "auth",    "JWT amal qilish muddati"),
