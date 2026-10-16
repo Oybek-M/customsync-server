@@ -125,6 +125,28 @@ describe('Worker in-memory decrypted index', () => {
     expect(page3.rows.length).toBe(0)
   })
 
+  it('lock drops the decrypted index, so a later unlock starts empty', async () => {
+    const state = createInitialWorkerState()
+    await unlockWorker(state)
+    await handleMessage(state, { id: 2, type: 'indexBegin' })
+    const rec = await createEncryptedRecord(contentKey, {
+      seq: 1,
+      record_id: 'rec-secret',
+      occurred_at: 100,
+      json: { text: 'secret text' },
+    })
+    await handleMessage(state, { id: 3, type: 'indexAdd', records: [rec] })
+
+    expect((await handleMessage(state, { id: 4, type: 'lock' })).ok).toBe(true)
+    expect(JSON.stringify(state.index ?? null)).not.toContain('secret text')
+
+    await unlockWorker(state)
+    const stats = await handleMessage(state, { id: 5, type: 'indexStats' })
+    expect(stats).toEqual({ id: 5, ok: true, count: 0, corrupt: 0 })
+    const rows = await handleMessage(state, { id: 6, type: 'indexQuery', limit: 10 })
+    expect(rows.rows).toEqual([])
+  })
+
   it('filters by kind and peer_hash', async () => {
     const state = createInitialWorkerState()
     await unlockWorker(state)

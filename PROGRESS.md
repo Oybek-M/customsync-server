@@ -2260,6 +2260,9 @@ Bular plan matnida yo'q — ataylab qilingan, orqaga qaytarmang.
 
 ---
 
+69. **Plan 03 Task 6 — shifrlangan IDB kesh + inkremental sync + worker indeksi (Gemini; TeamLead tekshirdi, 2026-10-16)** — `1447288`, prompt `docs/plan03-task6-prompt.md`. **Qabul qilindi.** npm ci, type-check, build, 108 test yashil. Mutatsiyalar: 9/11 ushlandi (tombstone IDB/indeks, kursor tranzaksiyada, kursor yozuvdan oldin, qurilma o'zgarsa wipe, abort). 1 ta bo'shliq: `lock` indeksni tozalamasa test yiqilmasdi -> `indexWorker.spec.ts` ga test qo'shildi. 2 ta ekvivalent (index=null o'rniga bo'sh obyekt; abort ikki joyda tekshiriladi). Eslatma: hisobotdagi "tombstone saqlanadi" noto'g'ri — saqlanmaydi; target keyin kelsa tirilib qoladi, lekin server ham shunday ishlaydi (SyncService), shuning uchun mos.
+70. **Redeploy 73e20a4 (TeamLead + egasi, 2026-10-16 22:30)** — p3 kit: health 200, versiya `1.0.0+73e20a4`, NRestarts=0; capture qayta ishga tushirildi; eski versiyalar `/root/p3-backups/20261016-223004`. Capture TDLib holati p7 diag bilan tekshirilishi kerak.
+
 ## 9. Protokol o'zgarishlari (tdesktop repo'sida)
 
 Implement paytida ikkita protokol kamchiligi topildi va spec'ga yozildi.
