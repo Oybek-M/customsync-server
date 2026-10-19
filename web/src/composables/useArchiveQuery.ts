@@ -27,6 +27,11 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
   const loading = ref<boolean>(false)
   const exhausted = ref<boolean>(false)
   const generation = ref<number>(0)
+  const error = ref<string>('')
+
+  function errorText(e: unknown): string {
+    return e instanceof Error && e.message ? e.message : String(e)
+  }
   const newerCount = ref<number>(0)
 
   async function reset() {
@@ -34,6 +39,7 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
     rows.value = []
     afterKey.value = null
     exhausted.value = false
+    error.value = ''
     loading.value = true
 
     try {
@@ -63,10 +69,11 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
         afterKey.value = null
       }
       exhausted.value = page.length < limit
-    } catch {
+    } catch (e) {
       if (generation.value === currentGen) {
         rows.value = []
         exhausted.value = true
+        error.value = errorText(e)
       }
     } finally {
       if (generation.value === currentGen) {
@@ -82,6 +89,7 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
     }
 
     loading.value = true
+    error.value = ''
     const currentGen = generation.value
 
     try {
@@ -106,9 +114,10 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
         afterKey.value = [last.occurred_at, last.seq]
       }
       exhausted.value = page.length < limit
-    } catch {
+    } catch (e) {
       if (generation.value === currentGen) {
         exhausted.value = true
+        error.value = errorText(e)
       }
     } finally {
       if (generation.value === currentGen) {
@@ -137,6 +146,7 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
     loading.value = false
     exhausted.value = false
     newerCount.value = 0
+    error.value = ''
   }
 
   // Ombor qulflanganda ochiq matnlar xotiradan darhol tashlanadi
@@ -160,6 +170,7 @@ export function useArchiveQuery(options: ArchiveQueryOptions = {}) {
     loading,
     exhausted,
     generation,
+    error,
     newerCount,
     loadMore,
     reset,

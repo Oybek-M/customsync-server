@@ -144,6 +144,33 @@ describe('ArchiveView.vue', () => {
     expect(wrapper.find('.cs-btn-cancel-index').exists()).toBe(true)
   })
 
+  it('shows a query failure instead of an empty table', async () => {
+    const direct = createDirectWorkerClient()
+    const vaultStore = useVaultStore()
+    vaultStore.setWorkerClient(direct.client)
+    await direct.client.unlock(wrapCase.passphrase, wrapCase)
+    await direct.waitForWorker()
+    vaultStore.locked = false
+    vi.spyOn(direct.client, 'indexQuery').mockRejectedValue(new Error('worker timeout'))
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ records: [], next_since: 0, has_more: false }),
+    } as any)
+
+    const wrapper = mount(ArchiveView)
+    for (let i = 0; i < 20; i++) {
+      await flushPromises()
+      await direct.waitForWorker()
+      await new Promise((r) => setTimeout(r, 10))
+    }
+
+    const err = wrapper.find('[data-testid="archive-query-error"]')
+    expect(err.exists()).toBe(true)
+    expect(err.text()).toContain('worker timeout')
+  })
+
   it('Yangilash button triggers sync', async () => {
     let syncCalled = false
     globalThis.fetch = vi.fn().mockImplementation(async (url: string) => {

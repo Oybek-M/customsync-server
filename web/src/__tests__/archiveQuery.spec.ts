@@ -87,6 +87,53 @@ describe('useArchiveQuery composable', () => {
     expect(query.rows.value.map((r) => r.record_id)).toEqual(['rec-fresh-gen2'])
   })
 
+  it('a loadMore page that resolves after a reset is dropped', async () => {
+    const late = createDeferredPromise<DecryptedIndexedRecord[]>()
+    let call = 0
+    const mockWorker = {
+      indexStats: vi.fn().mockResolvedValue({ count: 3, corrupt: 0, max_seq: 3, newer: 0 }),
+      indexQuery: vi.fn().mockImplementation(() => {
+        call++
+        if (call === 1) return Promise.resolve([createMockRecord('first', 1)])
+        if (call === 2) return late.promise
+        return Promise.resolve([createMockRecord('after-reset', 3)])
+      }),
+    } as unknown as CryptoWorkerClient
+    const query = useArchiveQuery({ getWorker: () => mockWorker, limit: 1 })
+
+    await query.reset()
+    const more = query.loadMore()
+    await Promise.resolve()
+    await query.reset()
+    late.resolve([createMockRecord('stale-more', 2)])
+    await more
+
+    expect(query.rows.value.map((r) => r.record_id)).toEqual(['after-reset'])
+  })
+
+  it('a failed query is reported instead of looking like an empty archive', async () => {
+    let fail = true
+    const mockWorker = {
+      indexStats: vi.fn().mockResolvedValue({ count: 3, corrupt: 0, max_seq: 3, newer: 0 }),
+      indexQuery: vi.fn().mockImplementation(() =>
+        fail ? Promise.reject(new Error('worker timeout')) : Promise.resolve([createMockRecord('ok', 1)])
+      ),
+    } as unknown as CryptoWorkerClient
+    const query = useArchiveQuery({ getWorker: () => mockWorker, limit: 1 })
+
+    await query.reset()
+    expect(query.error.value).toContain('worker timeout')
+
+    fail = false
+    await query.reset()
+    expect(query.error.value).toBe('')
+
+    fail = true
+    await query.loadMore()
+    expect(query.error.value).toContain('worker timeout')
+    expect(query.rows.value.map((r) => r.record_id)).toEqual(['ok'])
+  })
+
   it('loadMore while loading is a no-op and exhausted stops further calls', async () => {
     const deferred = createDeferredPromise<DecryptedIndexedRecord[]>()
     const queryCalls: any[] = []

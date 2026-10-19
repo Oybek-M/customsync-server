@@ -460,6 +460,40 @@ describe('Worker in-memory decrypted index', () => {
     expect(page2.rows.map((r: any) => r.record_id)).toEqual(['rec-3', 'rec-2', 'rec-1'])
   })
 
+  it('snapshot hides a late record whose occurred_at is older than the cursor', async () => {
+    const state = createInitialWorkerState()
+    await unlockWorker(state)
+    await handleMessage(state, { id: 2, type: 'indexBegin' })
+    const initial = await Promise.all(
+      [1, 2, 3, 4].map((n) =>
+        createEncryptedRecord(contentKey, { seq: n, record_id: `rec-${n}`, occurred_at: n * 100 })
+      )
+    )
+    await handleMessage(state, { id: 3, type: 'indexAdd', records: initial })
+    const snapshotSeq = (await handleMessage(state, { id: 4, type: 'indexStats' })).max_seq
+
+    for (const order of ['desc', 'asc'] as const) {
+      const page1 = await handleMessage(state, {
+        id: 5, type: 'indexQuery', order, max_seq: snapshotSeq, limit: 2,
+      })
+      // A deleted message captured late: new seq, old occurred_at, lands inside the unread part
+      if (order === 'desc') {
+        const late = await createEncryptedRecord(contentKey, {
+          seq: 9, record_id: 'rec-late', occurred_at: 150,
+        })
+        await handleMessage(state, { id: 6, type: 'indexAdd', records: [late] })
+      }
+      const last = page1.rows[page1.rows.length - 1]
+      const page2 = await handleMessage(state, {
+        id: 7, type: 'indexQuery', order, after: [last.occurred_at, last.seq],
+        max_seq: snapshotSeq, limit: 10,
+      })
+      const ids = [...page1.rows, ...page2.rows].map((r: any) => r.record_id)
+      expect(ids).not.toContain('rec-late')
+      expect(ids.length).toBe(4)
+    }
+  })
+
   it('before alias still behaves like Task 6', async () => {
     const state = createInitialWorkerState()
     await unlockWorker(state)

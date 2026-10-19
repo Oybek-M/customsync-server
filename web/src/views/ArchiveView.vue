@@ -307,6 +307,10 @@ onMounted(async () => {
           </div>
         </div>
 
+        <div v-if="query.error.value" class="cs-error-msg" data-testid="archive-query-error">
+          Arxivni o'qib bo'lmadi: {{ query.error.value }}
+        </div>
+
         <!-- Virtual scroll jadvali -->
         <RecordTable
           :rows="query.rows.value"
